@@ -199,12 +199,12 @@ export function Engagements() {
 
   const columns: Column<EngagementListItem>[] = [
     { key: "engagement_name", label: "Name", sortable: true, render: (r) => r.engagement_name || r.engagement_code || "—" },
-    { key: "engagement_code", label: "Code", sortable: true },
-    { key: "organization_id", label: "Organisation", sortable: true, render: (r) => getOrgName(r.organization_id ?? 0) },
-    { key: "engagement_type", label: "Type", sortable: true },
-    { key: "city", label: "City", sortable: true },
-    { key: "start_date", label: "Start", sortable: true },
-    { key: "end_date", label: "End", sortable: true },
+    { key: "engagement_code", label: "Code", sortable: true, hideOnTablet: true },
+    { key: "organization_id", label: "Organisation", sortable: true, render: (r) => getOrgName(r.organization_id ?? 0), hideOnMobile: true },
+    { key: "engagement_type", label: "Type", sortable: true, hideOnTablet: true },
+    { key: "city", label: "City", sortable: true, hideOnTablet: true },
+    { key: "start_date", label: "Start", sortable: true, hideOnMobile: true },
+    { key: "end_date", label: "End", sortable: true, hideOnTablet: true },
     { key: "status", label: "Status", sortable: true },
   ];
 

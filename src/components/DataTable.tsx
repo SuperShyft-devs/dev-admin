@@ -14,6 +14,10 @@ export interface Column<T> {
   sortable?: boolean;
   render?: (row: T) => React.ReactNode;
   className?: string;
+  /** Hide this column on mobile (< sm, i.e. < 640px) */
+  hideOnMobile?: boolean;
+  /** Hide this column on mobile + tablet (< md, i.e. < 768px) */
+  hideOnTablet?: boolean;
 }
 
 interface DataTableProps<T> {
@@ -55,9 +59,16 @@ export function DataTable<T extends object>(
   const firstKey = columns[0]?.key;
   const hasActions = onView || onEdit || onDelete;
 
+  // Build a helper that returns the visibility class for a column
+  const visibilityClass = (col: Column<T>) => {
+    if (col.hideOnTablet) return "hidden md:table-cell";
+    if (col.hideOnMobile) return "hidden sm:table-cell";
+    return "";
+  };
+
   return (
     <div className="overflow-x-auto -mx-px">
-      <table className="w-full text-sm min-w-[480px]">
+      <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-zinc-200">
             {columns.map((col) => (
@@ -65,7 +76,8 @@ export function DataTable<T extends object>(
                 key={col.key}
                 className={
                   "px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 " +
-                  (col.className || "") +
+                  visibilityClass(col) +
+                  " " + (col.className || "") +
                   (col.sortable ? " cursor-pointer select-none hover:text-zinc-900" : "")
                 }
                 onClick={() => col.sortable && onSort?.(col.key)}
@@ -121,7 +133,8 @@ export function DataTable<T extends object>(
                       key={col.key}
                       className={
                         "px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-700 " +
-                        (col.className || "") +
+                        visibilityClass(col) +
+                        " " + (col.className || "") +
                         (clickable
                           ? " cursor-pointer hover:text-zinc-900 hover:underline"
                           : "")

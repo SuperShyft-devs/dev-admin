@@ -228,9 +228,9 @@ export function Organisations() {
 
   const columns: Column<OrganizationListItem>[] = [
     { key: "name", label: "Name", sortable: true },
-    { key: "organization_type", label: "Type", sortable: true },
-    { key: "city", label: "City", sortable: true },
-    { key: "country", label: "Country", sortable: true },
+    { key: "organization_type", label: "Type", sortable: true, hideOnMobile: true },
+    { key: "city", label: "City", sortable: true, hideOnMobile: true },
+    { key: "country", label: "Country", sortable: true, hideOnTablet: true },
     {
       key: "status",
       label: "Status",
