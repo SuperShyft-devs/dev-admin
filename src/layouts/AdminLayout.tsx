@@ -34,9 +34,16 @@ export function AdminLayout() {
       >
         <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-200">
           {!sidebarCollapsed && (
-            <span className="font-semibold text-zinc-900 tracking-tight">
-              Admin
-            </span>
+            <div className="flex items-center gap-2">
+              <img
+                src="/super-shyft.png"
+                alt="Super Shyft"
+                className="h-7 w-7 rounded-sm object-contain"
+              />
+              <span className="font-semibold text-zinc-900 tracking-tight">
+                Admin
+              </span>
+            </div>
           )}
           <button
             onClick={() => setSidebarCollapsed((c) => !c)}
