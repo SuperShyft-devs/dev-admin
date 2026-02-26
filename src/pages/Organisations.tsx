@@ -23,6 +23,10 @@ export function Organisations() {
   const [limit] = useState(10);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [cityFilter, setCityFilter] = useState<string>("");
+  const [countryFilter, setCountryFilter] = useState<string>("");
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
+  const [countryOptions, setCountryOptions] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
@@ -63,6 +67,17 @@ export function Organisations() {
         status: statusFilter || undefined,
       });
       let items = res.data.data;
+      const citySet = new Set<string>();
+      const countrySet = new Set<string>();
+      items.forEach((item) => {
+        const city = (item.city ?? "").trim();
+        const country = (item.country ?? "").trim();
+        if (city) citySet.add(city);
+        if (country) countrySet.add(country);
+      });
+      setCityOptions(Array.from(citySet).sort((a, b) => a.localeCompare(b)));
+      setCountryOptions(Array.from(countrySet).sort((a, b) => a.localeCompare(b)));
+
       if (search) {
         const q = search.toLowerCase();
         items = items.filter(
@@ -72,6 +87,15 @@ export function Organisations() {
             (o.country ?? "").toLowerCase().includes(q)
         );
       }
+      if (cityFilter) {
+        const city = cityFilter.toLowerCase();
+        items = items.filter((o) => (o.city ?? "").toLowerCase() === city);
+      }
+      if (countryFilter) {
+        const country = countryFilter.toLowerCase();
+        items = items.filter((o) => (o.country ?? "").toLowerCase() === country);
+      }
+
       const sorted = [...items].sort((a, b) => {
         const aVal = String(a[sortKey as keyof OrganizationListItem] ?? "");
         const bVal = String(b[sortKey as keyof OrganizationListItem] ?? "");
@@ -85,7 +109,7 @@ export function Organisations() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, sortKey, sortDir]);
+  }, [page, limit, statusFilter, search, cityFilter, countryFilter, sortKey, sortDir]);
 
   const fetchEmployees = useCallback(async () => {
     setEmployeeLoading(true);
@@ -192,7 +216,7 @@ export function Organisations() {
     if (!deleteConfirm || deleteConfirm.organization_id !== row.organization_id) return;
     setSubmitting(true);
     try {
-      await organizationsApi.updateStatus(row.organization_id, "inactive");
+      await organizationsApi.updateStatus(row.organization_id, "archived");
       setDeleteConfirm(null);
       fetchList();
     } catch (err) {
@@ -207,7 +231,38 @@ export function Organisations() {
     { key: "organization_type", label: "Type", sortable: true },
     { key: "city", label: "City", sortable: true },
     { key: "country", label: "Country", sortable: true },
-    { key: "status", label: "Status", sortable: true },
+    {
+      key: "status",
+      label: "Status",
+      sortable: true,
+      render: (row) => {
+        const isActive = (row.status ?? "").toLowerCase() === "active";
+        return (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              const nextStatus = isActive ? "inactive" : "active";
+              organizationsApi
+                .updateStatus(row.organization_id, nextStatus)
+                .then(() => fetchList())
+                .catch((err) => setError(getApiError(err)));
+            }}
+            className={`inline-flex items-center w-12 h-6 rounded-full transition ${
+              isActive ? "bg-emerald-500" : "bg-zinc-300"
+            }`}
+            aria-pressed={isActive}
+            aria-label={`Set ${row.name ?? "organization"} ${isActive ? "inactive" : "active"}`}
+          >
+            <span
+              className={`h-5 w-5 bg-white rounded-full shadow transform transition translate-x-0.5 ${
+                isActive ? "translate-x-6" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        );
+      },
+    },
   ];
 
   const handleSort = (key: string) => {
@@ -234,8 +289,8 @@ export function Organisations() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="mb-4 flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
@@ -245,6 +300,30 @@ export function Organisations() {
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
+        <select
+          value={cityFilter}
+          onChange={(e) => setCityFilter(e.target.value)}
+          className="px-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+        >
+          <option value="">All cities</option>
+          {cityOptions.map((city) => (
+            <option key={city} value={city}>
+              {city}
+            </option>
+          ))}
+        </select>
+        <select
+          value={countryFilter}
+          onChange={(e) => setCountryFilter(e.target.value)}
+          className="px-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+        >
+          <option value="">All countries</option>
+          {countryOptions.map((country) => (
+            <option key={country} value={country}>
+              {country}
+            </option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -295,14 +374,15 @@ export function Organisations() {
             ? "Edit Organisation"
             : "View Organisation"
         }
+        maxWidthClassName={modalMode === "view" ? "max-w-xl" : "max-w-3xl"}
       >
         {modalMode === "view" && selected ? (
-          <div className="space-y-3 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div><span className="text-zinc-500">Name:</span> {selected.name}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
             <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
             <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
-            <div><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
+            <div className="md:col-span-2"><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
             <div><span className="text-zinc-500">Pin Code:</span> {selected.pin_code ?? "—"}</div>
             <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
             <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
@@ -320,57 +400,57 @@ export function Organisations() {
               e.preventDefault();
               handleSubmit();
             }}
-            className="space-y-4"
+            className="space-y-6"
           >
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Name *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Type</label>
-              <input
-                type="text"
-                value={formData.organization_type ?? ""}
-                onChange={(e) => setFormData({ ...formData, organization_type: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Logo URL</label>
-              <input
-                type="url"
-                value={formData.logo ?? ""}
-                onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                placeholder="https://"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Website</label>
-              <input
-                type="url"
-                value={formData.website_url ?? ""}
-                onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                placeholder="https://"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
-              <input
-                type="text"
-                value={formData.address ?? ""}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Type</label>
+                <input
+                  type="text"
+                  value={formData.organization_type ?? ""}
+                  onChange={(e) => setFormData({ ...formData, organization_type: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Logo URL</label>
+                <input
+                  type="url"
+                  value={formData.logo ?? ""}
+                  onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder="https://"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Website</label>
+                <input
+                  type="url"
+                  value={formData.website_url ?? ""}
+                  onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder="https://"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={formData.address ?? ""}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Pin Code</label>
                 <input
@@ -389,8 +469,6 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">State</label>
                 <input
@@ -409,73 +487,73 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Name</label>
+                <input
+                  type="text"
+                  value={formData.contact_name ?? ""}
+                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Designation</label>
+                <input
+                  type="text"
+                  value={formData.contact_designation ?? ""}
+                  onChange={(e) => setFormData({ ...formData, contact_designation: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Email</label>
+                <input
+                  type="email"
+                  value={formData.contact_email ?? ""}
+                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Phone</label>
+                <input
+                  type="text"
+                  value={formData.contact_phone ?? ""}
+                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">BD Employee</label>
+                <select
+                  value={formData.bd_employee_id ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setFormData({
+                      ...formData,
+                      bd_employee_id: raw ? Number(raw) : undefined,
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  disabled={employeeLoading}
+                >
+                  <option value="">Unassigned</option>
+                  {employees.map((employee) => {
+                    const user = usersById[employee.user_id];
+                    const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
+                    return (
+                      <option key={employee.employee_id} value={employee.employee_id}>
+                        {name || `User ${employee.user_id}`} (#{employee.employee_id}){employee.role ? ` • ${employee.role}` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+                {employeeLoading && (
+                  <p className="mt-1 text-xs text-zinc-500">Loading employees...</p>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Name</label>
-              <input
-                type="text"
-                value={formData.contact_name ?? ""}
-                onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Designation</label>
-              <input
-                type="text"
-                value={formData.contact_designation ?? ""}
-                onChange={(e) => setFormData({ ...formData, contact_designation: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Email</label>
-              <input
-                type="email"
-                value={formData.contact_email ?? ""}
-                onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Phone</label>
-              <input
-                type="text"
-                value={formData.contact_phone ?? ""}
-                onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">BD Employee</label>
-              <select
-                value={formData.bd_employee_id ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  setFormData({
-                    ...formData,
-                    bd_employee_id: raw ? Number(raw) : undefined,
-                  });
-                }}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                disabled={employeeLoading}
-              >
-                <option value="">Unassigned</option>
-                {employees.map((employee) => {
-                  const user = usersById[employee.user_id];
-                  const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
-                  return (
-                    <option key={employee.employee_id} value={employee.employee_id}>
-                      {name || `User ${employee.user_id}`} (#{employee.employee_id}){employee.role ? ` • ${employee.role}` : ""}
-                    </option>
-                  );
-                })}
-              </select>
-              {employeeLoading && (
-                <p className="mt-1 text-xs text-zinc-500">Loading employees...</p>
-              )}
-            </div>
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 type="submit"
                 disabled={submitting}
@@ -499,10 +577,10 @@ export function Organisations() {
         <Modal
           open={!!deleteConfirm}
           onClose={() => setDeleteConfirm(null)}
-          title="Confirm Deactivate"
+          title="Confirm Archive"
         >
           <p className="text-zinc-600 text-sm mb-4">
-            Deactivate organisation &quot;{deleteConfirm.name}&quot;? This will set status to inactive.
+            Archive organisation &quot;{deleteConfirm.name}&quot;? This will set status to archived.
           </p>
           <div className="flex gap-3">
             <button
@@ -510,7 +588,7 @@ export function Organisations() {
               disabled={submitting}
               className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
             >
-              {submitting ? "Deactivating..." : "Deactivate"}
+              {submitting ? "Archiving..." : "Archive"}
             </button>
             <button
               onClick={() => setDeleteConfirm(null)}

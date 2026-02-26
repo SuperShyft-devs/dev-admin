@@ -6,9 +6,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  maxWidthClassName?: string;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, maxWidthClassName }: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -33,7 +34,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         aria-hidden
       />
       <div
-        className="relative w-full max-w-lg max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden"
+        className={`relative w-full ${maxWidthClassName ?? "max-w-lg"} max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
