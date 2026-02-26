@@ -56,8 +56,8 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="w-full max-w-sm p-8 bg-white rounded-xl shadow-sm border border-zinc-200">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4 sm:p-6">
+      <div className="w-full max-w-sm p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-zinc-200">
         <div className="text-center mb-8">
           <img
             src="/super-shyft.png"

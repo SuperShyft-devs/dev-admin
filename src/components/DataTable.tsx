@@ -57,7 +57,7 @@ export function DataTable<T extends object>(
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[640px]">
         <thead>
           <tr className="border-b border-zinc-200">
             {columns.map((col) => (
@@ -175,13 +175,13 @@ export function DataTable<T extends object>(
       </table>
 
       {pagination && pagination.total > pagination.limit && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-200">
-          <span className="text-sm text-zinc-600">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-zinc-200">
+          <span className="text-sm text-zinc-600 order-2 sm:order-1 text-center sm:text-left">
             Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
             {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
             {pagination.total}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2 order-1 sm:order-2">
             <button
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}

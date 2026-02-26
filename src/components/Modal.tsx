@@ -27,19 +27,19 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className={`relative w-full ${maxWidthClassName ?? "max-w-lg"} max-h-[90vh] bg-white rounded-xl shadow-xl flex flex-col overflow-hidden`}
+        className={`relative w-full sm:max-w-[calc(100%-2rem)] ${maxWidthClassName ?? "max-w-lg"} max-h-[90dvh] sm:max-h-[90vh] bg-white rounded-t-xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-zinc-200">
           <h2 id="modal-title" className="text-lg font-semibold text-zinc-900">
             {title}
           </h2>
@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-[env(safe-area-inset-bottom)]">{children}</div>
       </div>
     </div>
   );

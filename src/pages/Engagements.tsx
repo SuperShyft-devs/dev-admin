@@ -216,12 +216,12 @@ export function Engagements() {
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <h1 className="text-xl font-semibold text-zinc-900">Engagements</h1>
+        <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <button
           onClick={openAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 w-full sm:w-auto"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 shrink-0" />
           Add Engagement
         </button>
       </div>
@@ -233,7 +233,7 @@ export function Engagements() {
       )}
 
       <div className="mb-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
@@ -246,7 +246,7 @@ export function Engagements() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          className="w-full sm:w-auto min-w-0 px-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
@@ -394,7 +394,7 @@ export function Engagements() {
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Start date *</label>
                 <input
@@ -416,18 +416,18 @@ export function Engagements() {
                 />
               </div>
             </div>
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
               >
                 {submitting ? "Saving..." : modalMode === "add" ? "Create" : "Update"}
               </button>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
-                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
               >
                 Cancel
               </button>
@@ -445,17 +445,17 @@ export function Engagements() {
           <p className="text-zinc-600 text-sm mb-4">
             Deactivate engagement &quot;{deleteConfirm.engagement_name || deleteConfirm.engagement_code}&quot;? This will set status to inactive.
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
             <button
               onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
               disabled={submitting}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
             >
               {submitting ? "Deactivating..." : "Deactivate"}
             </button>
             <button
               onClick={() => setDeleteConfirm(null)}
-              className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
             >
               Cancel
             </button>
