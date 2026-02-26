@@ -59,11 +59,16 @@ export function Login() {
     <div className="min-h-screen flex items-center justify-center bg-zinc-50">
       <div className="w-full max-w-sm p-8 bg-white rounded-xl shadow-sm border border-zinc-200">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-zinc-900 tracking-tight">
-            Admin Panel
+          <img
+            src="/super-shyft.png"
+            alt="Supershyft"
+            className="mx-auto h-12 w-auto"
+          />
+          <h1 className="mt-4 text-2xl font-semibold text-zinc-900 tracking-tight">
+            Supershyft
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Sign in with your phone number
+            Use your phone number to continue
           </p>
         </div>
 
