@@ -6,11 +6,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { authApi } from "../lib/api";
+import { authApi, usersApi, type UserProfile } from "../lib/api";
 
 interface AuthState {
   isAuthenticated: boolean;
   userId: number | null;
+  userProfile: UserProfile | null;
   isLoading: boolean;
 }
 
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     isAuthenticated: !!localStorage.getItem("access_token"),
     userId: null,
+    userProfile: null,
     isLoading: true,
   });
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { user_id, tokens } = res.data.data;
     localStorage.setItem("access_token", tokens.access_token);
     localStorage.setItem("refresh_token", tokens.refresh_token);
+    const profileRes = await usersApi.me();
     setState({
       isAuthenticated: true,
       userId: user_id,
+      userProfile: profileRes.data.data,
       isLoading: false,
     });
   }, []);
@@ -64,16 +68,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
-    setState({ isAuthenticated: false, userId: null, isLoading: false });
+    setState({ isAuthenticated: false, userId: null, userProfile: null, isLoading: false });
   }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
-    setState((s) => ({
-      ...s,
-      isAuthenticated: !!token,
-      isLoading: false,
-    }));
+    if (!token) {
+      setState((s) => ({
+        ...s,
+        isAuthenticated: false,
+        userProfile: null,
+        isLoading: false,
+      }));
+      return;
+    }
+
+    const loadProfile = async () => {
+      try {
+        const profileRes = await usersApi.me();
+        setState((s) => ({
+          ...s,
+          isAuthenticated: true,
+          userId: profileRes.data.data.user_id,
+          userProfile: profileRes.data.data,
+          isLoading: false,
+        }));
+      } catch {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        setState((s) => ({
+          ...s,
+          isAuthenticated: false,
+          userId: null,
+          userProfile: null,
+          isLoading: false,
+        }));
+      }
+    };
+
+    loadProfile();
   }, []);
 
   const value: AuthContextValue = {

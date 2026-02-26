@@ -32,6 +32,15 @@ export interface ApiError {
   message?: string;
 }
 
+// Users
+export interface UserProfile {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone: string;
+  email?: string | null;
+}
+
 export function getApiError(err: unknown): string {
   if (axios.isAxiosError(err) && err.response?.data) {
     const d = err.response.data as { message?: string };
@@ -61,6 +70,10 @@ export const authApi = {
     }),
   logout: (refreshToken: string) =>
     api.post("/auth/logout", { refresh_token: refreshToken }),
+};
+
+export const usersApi = {
+  me: () => api.get<{ data: UserProfile }>("/users/me"),
 };
 
 // Organizations

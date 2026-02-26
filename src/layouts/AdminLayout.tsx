@@ -17,7 +17,7 @@ const navItems = [
 
 export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { logout, userId } = useAuth();
+  const { logout, userProfile, userId } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -79,7 +79,9 @@ export function AdminLayout() {
           <div />
           <div className="flex items-center gap-4">
             <span className="text-sm text-zinc-600">
-              User ID: {userId ?? "—"}
+              {userProfile?.first_name || userProfile?.last_name
+                ? `${userProfile?.first_name ?? ""} ${userProfile?.last_name ?? ""}`.trim()
+                : userId ?? "—"}
             </span>
             <button
               onClick={handleLogout}
