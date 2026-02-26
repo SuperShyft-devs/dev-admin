@@ -289,8 +289,8 @@ export function Organisations() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-col gap-3">
-        <div className="relative">
+      <div className="mb-4 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
@@ -300,11 +300,11 @@ export function Organisations() {
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
-        <div className="grid grid-cols-2 sm:flex sm:flex-row gap-3">
+        <div className="flex flex-row gap-3 flex-wrap sm:flex-nowrap">
           <select
             value={cityFilter}
             onChange={(e) => setCityFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
           >
             <option value="">All cities</option>
             {cityOptions.map((city) => (
@@ -316,7 +316,7 @@ export function Organisations() {
           <select
             value={countryFilter}
             onChange={(e) => setCountryFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
           >
             <option value="">All countries</option>
             {countryOptions.map((country) => (
@@ -328,7 +328,7 @@ export function Organisations() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full sm:w-auto col-span-2 sm:col-span-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
           >
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((s) => (
