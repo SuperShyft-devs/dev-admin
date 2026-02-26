@@ -34,7 +34,7 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
         aria-hidden
       />
       <div
-        className={`relative w-full sm:max-w-[calc(100%-2rem)] ${maxWidthClassName ?? "max-w-lg"} max-h-[90dvh] sm:max-h-[90vh] bg-white rounded-t-xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden`}
+        className={`relative w-full sm:max-w-[calc(100%-2rem)] ${maxWidthClassName ?? "max-w-lg"} max-h-[92dvh] sm:max-h-[90vh] bg-white rounded-t-2xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-[env(safe-area-inset-bottom)]">{children}</div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div>
       </div>
     </div>
   );

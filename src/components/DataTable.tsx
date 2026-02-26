@@ -56,15 +56,15 @@ export function DataTable<T extends object>(
   const hasActions = onView || onEdit || onDelete;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[640px]">
+    <div className="overflow-x-auto -mx-px">
+      <table className="w-full text-sm min-w-[480px]">
         <thead>
           <tr className="border-b border-zinc-200">
             {columns.map((col) => (
               <th
                 key={col.key}
                 className={
-                  "px-4 py-3 text-left font-medium text-zinc-600 " +
+                  "px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 " +
                   (col.className || "") +
                   (col.sortable ? " cursor-pointer select-none hover:text-zinc-900" : "")
                 }
@@ -82,7 +82,7 @@ export function DataTable<T extends object>(
               </th>
             ))}
             {hasActions && (
-              <th className="px-4 py-3 text-right font-medium text-zinc-600 w-28">
+              <th className="px-3 sm:px-4 py-3 text-right font-medium text-zinc-600 w-24 sm:w-28">
                 Actions
               </th>
             )}
@@ -93,7 +93,7 @@ export function DataTable<T extends object>(
             <tr>
               <td
                 colSpan={columns.length + (hasActions ? 1 : 0)}
-                className="px-4 py-12 text-center text-zinc-500"
+                className="px-4 py-10 text-center text-zinc-500"
               >
                 No records found
               </td>
@@ -120,7 +120,7 @@ export function DataTable<T extends object>(
                     <td
                       key={col.key}
                       className={
-                        "px-4 py-3 text-zinc-700 " +
+                        "px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-700 " +
                         (col.className || "") +
                         (clickable
                           ? " cursor-pointer hover:text-zinc-900 hover:underline"
@@ -133,12 +133,12 @@ export function DataTable<T extends object>(
                   );
                 })}
                 {hasActions && (
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className="px-2 sm:px-4 py-2.5 sm:py-3">
+                    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
                       {onView && (
                         <button
                           onClick={() => onView(row)}
-                          className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
                           title="View"
                           aria-label="View"
                         >
@@ -148,7 +148,7 @@ export function DataTable<T extends object>(
                       {onEdit && (
                         <button
                           onClick={() => onEdit(row)}
-                          className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
                           title="Edit"
                           aria-label="Edit"
                         >
@@ -158,7 +158,7 @@ export function DataTable<T extends object>(
                       {onDelete && (
                         <button
                           onClick={() => onDelete(row)}
-                          className="p-2 rounded-lg text-zinc-500 hover:bg-red-100 hover:text-red-600"
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-red-100 hover:text-red-600"
                           title="Delete"
                           aria-label="Delete"
                         >
@@ -175,9 +175,9 @@ export function DataTable<T extends object>(
       </table>
 
       {pagination && pagination.total > pagination.limit && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-zinc-200">
-          <span className="text-sm text-zinc-600 order-2 sm:order-1 text-center sm:text-left">
-            Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-zinc-200">
+          <span className="text-xs sm:text-sm text-zinc-600 order-2 sm:order-1 text-center sm:text-left">
+            Showing {(pagination.page - 1) * pagination.limit + 1}–
             {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
             {pagination.total}
           </span>
@@ -185,12 +185,12 @@ export function DataTable<T extends object>(
             <button
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
-              className="p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 sm:p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Previous page"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm text-zinc-600">
+            <span className="text-xs sm:text-sm text-zinc-600">
               Page {pagination.page} of{" "}
               {Math.ceil(pagination.total / pagination.limit)}
             </span>
@@ -199,7 +199,7 @@ export function DataTable<T extends object>(
               disabled={
                 pagination.page >= Math.ceil(pagination.total / pagination.limit)
               }
-              className="p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1.5 sm:p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Next page"
             >
               <ChevronRight className="w-4 h-4" />
