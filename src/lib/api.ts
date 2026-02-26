@@ -41,6 +41,15 @@ export interface UserProfile {
   email?: string | null;
 }
 
+export interface UserListItem {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status?: string | null;
+}
+
 export function getApiError(err: unknown): string {
   if (axios.isAxiosError(err) && err.response?.data) {
     const d = err.response.data as { message?: string };
@@ -74,6 +83,32 @@ export const authApi = {
 
 export const usersApi = {
   me: () => api.get<{ data: UserProfile }>("/users/me"),
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    is_participant?: boolean;
+  }) =>
+    api.get<{ data: UserListItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/users",
+      { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
+};
+
+// Employees
+export interface EmployeeListItem {
+  employee_id: number;
+  user_id: number;
+  role?: string | null;
+  status?: string | null;
+}
+
+export const employeesApi = {
+  list: (params?: { page?: number; limit?: number; status?: string; role?: string }) =>
+    api.get<{ data: EmployeeListItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/employees",
+      { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
 };
 
 // Organizations

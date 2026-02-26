@@ -4,6 +4,10 @@ import { DataTable, type Column } from "../components/DataTable";
 import { Modal } from "../components/Modal";
 import {
   organizationsApi,
+  employeesApi,
+  usersApi,
+  type EmployeeListItem,
+  type UserListItem,
   type OrganizationListItem,
   type Organization,
   type OrganizationCreate,
@@ -43,6 +47,9 @@ export function Organisations() {
     contact_designation: "",
     bd_employee_id: undefined,
   });
+  const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
+  const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
+  const [employeeLoading, setEmployeeLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<OrganizationListItem | null>(null);
 
@@ -80,6 +87,28 @@ export function Organisations() {
     }
   }, [page, limit, statusFilter, search, sortKey, sortDir]);
 
+  const fetchEmployees = useCallback(async () => {
+    setEmployeeLoading(true);
+    setError(null);
+    try {
+      const [employeeRes, usersRes] = await Promise.all([
+        employeesApi.list({ status: "active" }),
+        usersApi.list({ status: "active" }),
+      ]);
+      const list = employeeRes.data.data;
+      setEmployees(list);
+      const usersIndex = usersRes.data.data.reduce<Record<number, UserListItem>>((acc, user) => {
+        acc[user.user_id] = user;
+        return acc;
+      }, {});
+      setUsersById(usersIndex);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setEmployeeLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchList();
   }, [fetchList]);
@@ -112,6 +141,7 @@ export function Organisations() {
     });
     setModalMode("add");
     setModalOpen(true);
+    fetchEmployees();
   };
 
   const openEdit = (row: OrganizationListItem) => {
@@ -136,6 +166,7 @@ export function Organisations() {
       });
       setModalMode("edit");
       setModalOpen(true);
+      fetchEmployees();
     }).catch((err) => setError(getApiError(err)));
   };
 
@@ -269,13 +300,18 @@ export function Organisations() {
           <div className="space-y-3 text-sm">
             <div><span className="text-zinc-500">Name:</span> {selected.name}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
+            <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
+            <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
             <div><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
+            <div><span className="text-zinc-500">Pin Code:</span> {selected.pin_code ?? "—"}</div>
             <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
             <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
             <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
             <div><span className="text-zinc-500">Contact:</span> {selected.contact_name ?? "—"}</div>
+            <div><span className="text-zinc-500">Designation:</span> {selected.contact_designation ?? "—"}</div>
             <div><span className="text-zinc-500">Email:</span> {selected.contact_email ?? "—"}</div>
             <div><span className="text-zinc-500">Phone:</span> {selected.contact_phone ?? "—"}</div>
+            <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
             <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
           </div>
         ) : (
@@ -306,6 +342,26 @@ export function Organisations() {
               />
             </div>
             <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Logo URL</label>
+              <input
+                type="url"
+                value={formData.logo ?? ""}
+                onChange={(e) => setFormData({ ...formData, logo: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Website</label>
+              <input
+                type="url"
+                value={formData.website_url ?? ""}
+                onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="https://"
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
               <input
                 type="text"
@@ -316,6 +372,15 @@ export function Organisations() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Pin Code</label>
+                <input
+                  type="text"
+                  value={formData.pin_code ?? ""}
+                  onChange={(e) => setFormData({ ...formData, pin_code: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
                 <input
                   type="text"
@@ -324,6 +389,8 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">State</label>
                 <input
@@ -333,15 +400,15 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Country</label>
-              <input
-                type="text"
-                value={formData.country ?? ""}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Country</label>
+                <input
+                  type="text"
+                  value={formData.country ?? ""}
+                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Name</label>
@@ -349,6 +416,15 @@ export function Organisations() {
                 type="text"
                 value={formData.contact_name ?? ""}
                 onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Designation</label>
+              <input
+                type="text"
+                value={formData.contact_designation ?? ""}
+                onChange={(e) => setFormData({ ...formData, contact_designation: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
@@ -369,6 +445,35 @@ export function Organisations() {
                 onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">BD Employee</label>
+              <select
+                value={formData.bd_employee_id ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setFormData({
+                    ...formData,
+                    bd_employee_id: raw ? Number(raw) : undefined,
+                  });
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                disabled={employeeLoading}
+              >
+                <option value="">Unassigned</option>
+                {employees.map((employee) => {
+                  const user = usersById[employee.user_id];
+                  const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
+                  return (
+                    <option key={employee.employee_id} value={employee.employee_id}>
+                      {name || `User ${employee.user_id}`} (#{employee.employee_id}){employee.role ? ` • ${employee.role}` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {employeeLoading && (
+                <p className="mt-1 text-xs text-zinc-500">Loading employees...</p>
+              )}
             </div>
             <div className="flex gap-3 pt-2">
               <button
