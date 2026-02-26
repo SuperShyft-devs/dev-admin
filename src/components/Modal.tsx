@@ -34,7 +34,7 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
         aria-hidden
       />
       <div
-        className={`relative w-full sm:max-w-[calc(100%-2rem)] ${maxWidthClassName ?? "max-w-lg"} max-h-[92dvh] sm:max-h-[90vh] bg-white rounded-t-2xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden`}
+        className={`relative w-full ${maxWidthClassName ?? "max-w-lg"} max-h-[92dvh] sm:max-h-[90vh] bg-white rounded-t-2xl sm:rounded-xl shadow-xl flex flex-col overflow-hidden`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
