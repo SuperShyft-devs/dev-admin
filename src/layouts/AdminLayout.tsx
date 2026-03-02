@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Building2,
   CalendarCheck,
+  Users,
   Menu,
   LogOut,
   X,
@@ -14,6 +15,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
+  { to: "/employees", icon: Users, label: "Employees" },
 ];
 
 export function AdminLayout() {

@@ -103,11 +103,31 @@ export interface EmployeeListItem {
   status?: string | null;
 }
 
+export interface EmployeeCreate {
+  user_id: number;
+  role: string;
+  status?: string | null;
+}
+
+export interface EmployeeUpdate {
+  user_id: number;
+  role: string;
+}
+
 export const employeesApi = {
   list: (params?: { page?: number; limit?: number; status?: string; role?: string }) =>
     api.get<{ data: EmployeeListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/employees",
       { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
+  create: (payload: EmployeeCreate) =>
+    api.post<{ data: { employee_id: number } }>("/employees", payload),
+  update: (id: number, payload: EmployeeUpdate) =>
+    api.put<{ data: { employee_id: number } }>(`/employees/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { employee_id: number; status: string } }>(
+      `/employees/${id}/status`,
+      { status }
     ),
 };
 

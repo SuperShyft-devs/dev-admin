@@ -5,6 +5,7 @@ import { Login } from "./pages/Login";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { Organisations } from "./features/organisations/Organisations";
 import { Engagements } from "./features/engagements/Engagements";
+import { Employees } from "./features/employees/Employees";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="organisations" element={<Organisations />} />
         <Route path="engagements" element={<Engagements />} />
+        <Route path="employees" element={<Employees />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
