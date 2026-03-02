@@ -2,9 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { Login } from "./pages/Login";
-import { Dashboard } from "./pages/Dashboard";
-import { Organisations } from "./pages/Organisations";
-import { Engagements } from "./pages/Engagements";
+import { Dashboard } from "./features/dashboard/Dashboard";
+import { Organisations } from "./features/organisations/Organisations";
+import { Engagements } from "./features/engagements/Engagements";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();

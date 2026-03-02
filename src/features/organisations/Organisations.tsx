@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Search, Plus, Loader2 } from "lucide-react";
-import { DataTable, type Column } from "../components/DataTable";
-import { Modal } from "../components/Modal";
+import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { Modal } from "../../shared/ui/Modal";
 import {
   organizationsApi,
   employeesApi,
@@ -12,7 +12,7 @@ import {
   type Organization,
   type OrganizationCreate,
   getApiError,
-} from "../lib/api";
+} from "../../lib/api";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
