@@ -9,6 +9,7 @@ import {
   ListChecks,
   Users,
   UserCog,
+  CalendarClock,
 } from "lucide-react";
 
 export interface Column<T> {
@@ -36,6 +37,7 @@ interface DataTableProps<T> {
   onQuestions?: (row: T) => void;
   onParticipants?: (row: T) => void;
   onAssistants?: (row: T) => void;
+  onOccupiedSlots?: (row: T) => void;
   firstColumnClickableView?: boolean;
   pagination?: {
     page: number;
@@ -61,12 +63,13 @@ export function DataTable<T extends object>(
     onQuestions,
     onParticipants,
     onAssistants,
+    onOccupiedSlots,
     firstColumnClickableView = true,
     pagination,
   } = props;
 
   const firstKey = columns[0]?.key;
-  const hasActions = onView || onEdit || onDelete || onQuestions || onParticipants || onAssistants;
+  const hasActions = onView || onEdit || onDelete || onQuestions || onParticipants || onAssistants || onOccupiedSlots;
 
   // Build a helper that returns the visibility class for a column
   const visibilityClass = (col: Column<T>) => {
@@ -195,6 +198,16 @@ export function DataTable<T extends object>(
                           aria-label="Manage Onboarding Assistants"
                         >
                           <UserCog className="w-4 h-4" />
+                        </button>
+                      )}
+                      {onOccupiedSlots && (
+                        <button
+                          onClick={() => onOccupiedSlots(row)}
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                          title="View Occupied Slots"
+                          aria-label="View Occupied Slots"
+                        >
+                          <CalendarClock className="w-4 h-4" />
                         </button>
                       )}
                       {onQuestions && (

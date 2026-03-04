@@ -3,6 +3,7 @@ import { Search, Plus, Loader2, Users, UserCog, Trash2, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
+import { OccupiedSlotsModal } from "../../shared/ui/OccupiedSlotsModal";
 import {
   engagementsApi,
   organizationsApi,
@@ -55,6 +56,12 @@ export function Engagements() {
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
 
   const [participantsSource, setParticipantsSource] = useState<
+    | { kind: "engagement-code"; code: string; name?: string }
+    | { kind: "public" }
+    | null
+  >(null);
+
+  const [occupiedSlotsSource, setOccupiedSlotsSource] = useState<
     | { kind: "engagement-code"; code: string; name?: string }
     | { kind: "public" }
     | null
@@ -335,6 +342,18 @@ export function Engagements() {
     }
   };
 
+  const openOccupiedSlots = (row: EngagementListItem) => {
+    if (row.engagement_code) {
+      setOccupiedSlotsSource({
+        kind: "engagement-code",
+        code: row.engagement_code,
+        name: row.engagement_name ?? row.engagement_code,
+      });
+    } else {
+      setOccupiedSlotsSource({ kind: "public" });
+    }
+  };
+
   const columns: Column<EngagementListItem>[] = [
     { key: "engagement_name", label: "Name", sortable: true, render: (r) => r.engagement_name || r.engagement_code || "—" },
     { key: "engagement_code", label: "Code", sortable: true, hideOnTablet: true },
@@ -411,6 +430,7 @@ export function Engagements() {
             onView={openView}
             onEdit={openEdit}
             onParticipants={openParticipants}
+            onOccupiedSlots={openOccupiedSlots}
             onAssistants={openAssistantsModal}
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
@@ -630,6 +650,14 @@ export function Engagements() {
           open={!!participantsSource}
           onClose={() => setParticipantsSource(null)}
           source={participantsSource}
+        />
+      )}
+
+      {occupiedSlotsSource && (
+        <OccupiedSlotsModal
+          open={!!occupiedSlotsSource}
+          onClose={() => setOccupiedSlotsSource(null)}
+          source={occupiedSlotsSource}
         />
       )}
 

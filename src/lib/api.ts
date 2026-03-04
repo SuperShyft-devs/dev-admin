@@ -447,6 +447,22 @@ export interface OnboardingAssistant {
   status?: string | null;
 }
 
+// Occupied Slots
+export interface OccupiedSlots {
+  occupied_slots: Record<string, string[]>;
+}
+
+export const occupiedSlotsApi = {
+  // B2B: occupied slots for a specific engagement by code (public, no auth)
+  byEngagementCode: (code: string) =>
+    api.get<{ data: OccupiedSlots }>(
+      `/engagements/code/${encodeURIComponent(code)}/occupied-slots`
+    ),
+  // B2C: occupied slots for all active public engagements (public, no auth)
+  public: () =>
+    api.get<{ data: OccupiedSlots }>("/engagements/public/occupied-slots"),
+};
+
 export const onboardingAssistantsApi = {
   list: (engagementId: number) =>
     api.get<{ data: OnboardingAssistant[] }>(
