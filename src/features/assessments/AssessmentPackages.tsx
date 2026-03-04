@@ -504,28 +504,74 @@ export function AssessmentPackages() {
   const pkgColumns: Column<AssessmentPackage>[] = [
     { key: "display_name", label: "Name", sortable: true, render: (r) => <span className="font-medium text-zinc-900">{r.display_name || r.package_code || "—"}</span> },
     { key: "package_code", label: "Code", sortable: true, hideOnMobile: true, render: (r) => <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{r.package_code ?? "—"}</span> },
-    { key: "status", label: "Status", sortable: true, hideOnTablet: true, render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "status", label: "Status", sortable: true,
+      render: (r) => {
+        const isActive = r.status === "active";
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = isActive ? "inactive" : "active";
+              assessmentPackagesApi.updateStatus(r.package_id, next)
+                .then(() => fetchPkgs())
+                .catch((err) => setPkgError(getApiError(err)));
+            }}
+            className={`inline-flex items-center w-12 h-6 rounded-full transition-colors ${isActive ? "bg-emerald-500" : "bg-zinc-300"}`}
+            aria-pressed={isActive}
+            aria-label={`Set ${r.display_name ?? "package"} ${isActive ? "inactive" : "active"}`}
+          >
+            <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${isActive ? "translate-x-6" : "translate-x-0.5"}`} />
+          </button>
+        );
+      },
+    },
   ];
 
   const qColumns: Column<QuestionnaireQuestion>[] = [
     { key: "question_text", label: "Question", sortable: true, render: (r) => <span className="font-medium text-zinc-900 line-clamp-2">{r.question_text || "—"}</span> },
     { key: "question_type", label: "Type", sortable: true, hideOnMobile: true, render: (r) => <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{r.question_type ?? "—"}</span> },
-    { key: "status", label: "Status", sortable: true, hideOnTablet: true, render: (r) => <StatusBadge status={r.status} /> },
+    {
+      key: "status", label: "Status", sortable: true,
+      render: (r) => {
+        const isActive = r.status === "active";
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = isActive ? "inactive" : "active";
+              questionnaireQuestionsApi.updateStatus(r.question_id, next)
+                .then(() => fetchQuestions())
+                .catch((err) => setQError(getApiError(err)));
+            }}
+            className={`inline-flex items-center w-12 h-6 rounded-full transition-colors ${isActive ? "bg-emerald-500" : "bg-zinc-300"}`}
+            aria-pressed={isActive}
+            aria-label={`Set question ${isActive ? "inactive" : "active"}`}
+          >
+            <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${isActive ? "translate-x-6" : "translate-x-0.5"}`} />
+          </button>
+        );
+      },
+    },
   ];
 
   // ── Render ───────────────────────────────────────────────────
   return (
     <div>
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      {/* Page header — always one row: title left, icon-only button right */}
+      <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Assessments</h1>
         {activeTab === "packages" ? (
-          <button onClick={openAddPkg} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0">
-            <Plus className="w-4 h-4" /> Add Package
+          <button onClick={openAddPkg} className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0">
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Add Package</span>
           </button>
         ) : (
-          <button onClick={openAddQ} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0">
-            <Plus className="w-4 h-4" /> Add Question
+          <button onClick={openAddQ} className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0">
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Add Question</span>
           </button>
         )}
       </div>
@@ -556,14 +602,16 @@ export function AssessmentPackages() {
               <button onClick={() => setPkgError(null)} className="shrink-0 text-red-400 hover:text-red-600">✕</button>
             </div>
           )}
-          <div className="mb-4 flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-              <input type="search" placeholder="Search by name or code…" value={pkgSearch} onChange={(e) => setPkgSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900" />
-            </div>
+          {/* Search row */}
+          <div className="mb-3 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+            <input type="search" placeholder="Search by name or code…" value={pkgSearch} onChange={(e) => setPkgSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900" />
+          </div>
+          {/* Filter row — always horizontal */}
+          <div className="mb-4 flex flex-row gap-2">
             <select value={pkgStatusFilter} onChange={(e) => setPkgStatusFilter(e.target.value)}
-              className="sm:w-40 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
+              className="flex-1 sm:flex-none sm:w-40 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
               <option value="">All statuses</option>
               {PKG_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
             </select>
@@ -594,19 +642,21 @@ export function AssessmentPackages() {
               <button onClick={() => setQError(null)} className="shrink-0 text-red-400 hover:text-red-600">✕</button>
             </div>
           )}
-          <div className="mb-4 flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-              <input type="search" placeholder="Search questions…" value={qSearch} onChange={(e) => setQSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900" />
-            </div>
+          {/* Search row */}
+          <div className="mb-3 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+            <input type="search" placeholder="Search questions…" value={qSearch} onChange={(e) => setQSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900" />
+          </div>
+          {/* Filter row — always horizontal, wraps gracefully on very small screens */}
+          <div className="mb-4 flex flex-row flex-wrap gap-2">
             <select value={qStatusFilter} onChange={(e) => setQStatusFilter(e.target.value)}
-              className="sm:w-36 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
+              className="flex-1 min-w-[120px] sm:flex-none sm:w-36 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
               <option value="">All statuses</option>
               {Q_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
             </select>
             <select value={qTypeFilter} onChange={(e) => setQTypeFilter(e.target.value)}
-              className="sm:w-44 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
+              className="flex-1 min-w-[140px] sm:flex-none sm:w-44 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white">
               <option value="">All types</option>
               {QUESTION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>

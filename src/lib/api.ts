@@ -322,6 +322,8 @@ export const assessmentPackagesApi = {
     api.post<{ data: { package_id: number } }>("/assessment-packages", payload),
   update: (id: number, payload: AssessmentPackageUpdate) =>
     api.put<{ data: { package_id: number } }>(`/assessment-packages/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { package_id: number; status: string } }>(`/assessment-packages/${id}/status`, { status }),
   listQuestions: (packageId: number) =>
     api.get<{ data: PackageQuestion[] }>(`/assessment-packages/${packageId}/questions`),
   addQuestions: (packageId: number, question_ids: number[]) =>
