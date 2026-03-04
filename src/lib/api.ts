@@ -407,6 +407,38 @@ export interface QuestionnaireQuestionUpdate {
   options?: string[] | null;
 }
 
+// Participants
+export interface Participant {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status?: string | null;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+  engagement_type?: string | null;
+  city?: string | null;
+}
+
+export const participantsApi = {
+  // B2B: participants for a specific engagement by code
+  byEngagementCode: (code: string) =>
+    api.get<{ data: Participant[]; meta?: { total: number } }>(
+      `/engagements/code/${encodeURIComponent(code)}/participants`
+    ),
+  // B2C: participants for public/open engagements
+  public: () =>
+    api.get<{ data: Participant[]; meta?: { total: number } }>(
+      "/engagements/public/participants"
+    ),
+  // All participants across all engagements for an org
+  byOrganization: (orgId: number) =>
+    api.get<{ data: Participant[]; meta?: { total: number } }>(
+      `/organizations/${orgId}/participants`
+    ),
+};
+
 export const questionnaireQuestionsApi = {
   list: (params?: { page?: number; limit?: number; status?: string; question_type?: string }) =>
     api.get<{ data: QuestionnaireQuestion[]; meta: { page: number; limit: number; total: number } }>(

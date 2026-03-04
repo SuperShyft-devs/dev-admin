@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Loader2 } from "lucide-react";
+import { Search, Plus, Loader2, Users } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import {
   engagementsApi,
   organizationsApi,
@@ -48,6 +49,12 @@ export function Engagements() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
+
+  const [participantsSource, setParticipantsSource] = useState<
+    | { kind: "engagement-code"; code: string; name?: string }
+    | { kind: "public" }
+    | null
+  >(null);
 
   const fetchOrgs = useCallback(() => {
     organizationsApi.list({ limit: 500 }).then((r) => setOrganizations(r.data.data));
@@ -197,6 +204,18 @@ export function Engagements() {
 
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
 
+  const openParticipants = (row: EngagementListItem) => {
+    if (row.engagement_type === "b2b" && row.engagement_code) {
+      setParticipantsSource({
+        kind: "engagement-code",
+        code: row.engagement_code,
+        name: row.engagement_name ?? row.engagement_code,
+      });
+    } else {
+      setParticipantsSource({ kind: "public" });
+    }
+  };
+
   const columns: Column<EngagementListItem>[] = [
     { key: "engagement_name", label: "Name", sortable: true, render: (r) => r.engagement_name || r.engagement_code || "—" },
     { key: "engagement_code", label: "Code", sortable: true, hideOnTablet: true },
@@ -272,6 +291,7 @@ export function Engagements() {
             onSort={handleSort}
             onView={openView}
             onEdit={openEdit}
+            onParticipants={openParticipants}
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
               page,
@@ -298,13 +318,35 @@ export function Engagements() {
           <div className="space-y-3 text-sm">
             <div><span className="text-zinc-500">Name:</span> {selected.engagement_name ?? "—"}</div>
             <div><span className="text-zinc-500">Code:</span> {selected.engagement_code ?? "—"}</div>
-            <div><span className="text-zinc-500">Organisation ID:</span> {selected.organization_id ?? "—"}</div>
+            <div><span className="text-zinc-500">Organisation:</span> {getOrgName(selected.organization_id ?? 0)}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.engagement_type ?? "—"}</div>
             <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
             <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
             <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
             <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
-            <div><span className="text-zinc-500">Participants:</span> {selected.participant_count ?? 0}</div>
+            <div className="flex items-center gap-3">
+              <span className="text-zinc-500">Participants:</span>
+              <span>{selected.participant_count ?? 0}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  if (selected.engagement_type === "b2b" && selected.engagement_code) {
+                    setParticipantsSource({
+                      kind: "engagement-code",
+                      code: selected.engagement_code,
+                      name: selected.engagement_name ?? selected.engagement_code,
+                    });
+                  } else {
+                    setParticipantsSource({ kind: "public" });
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
+              >
+                <Users className="w-3.5 h-3.5" />
+                View Participants
+              </button>
+            </div>
           </div>
         ) : (
           <form
@@ -461,6 +503,14 @@ export function Engagements() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {participantsSource && (
+        <ParticipantsModal
+          open={!!participantsSource}
+          onClose={() => setParticipantsSource(null)}
+          source={participantsSource}
+        />
       )}
     </div>
   );

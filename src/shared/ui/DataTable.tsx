@@ -7,6 +7,7 @@ import {
   Pencil,
   Trash2,
   ListChecks,
+  Users,
 } from "lucide-react";
 
 export interface Column<T> {
@@ -32,6 +33,7 @@ interface DataTableProps<T> {
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
   onQuestions?: (row: T) => void;
+  onParticipants?: (row: T) => void;
   firstColumnClickableView?: boolean;
   pagination?: {
     page: number;
@@ -55,12 +57,13 @@ export function DataTable<T extends object>(
     onEdit,
     onDelete,
     onQuestions,
+    onParticipants,
     firstColumnClickableView = true,
     pagination,
   } = props;
 
   const firstKey = columns[0]?.key;
-  const hasActions = onView || onEdit || onDelete || onQuestions;
+  const hasActions = onView || onEdit || onDelete || onQuestions || onParticipants;
 
   // Build a helper that returns the visibility class for a column
   const visibilityClass = (col: Column<T>) => {
@@ -169,6 +172,16 @@ export function DataTable<T extends object>(
                           aria-label="Edit"
                         >
                           <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      {onParticipants && (
+                        <button
+                          onClick={() => onParticipants(row)}
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                          title="View Participants"
+                          aria-label="View Participants"
+                        >
+                          <Users className="w-4 h-4" />
                         </button>
                       )}
                       {onQuestions && (

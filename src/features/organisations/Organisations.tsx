@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Loader2 } from "lucide-react";
+import { Search, Plus, Loader2, Users } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import {
   organizationsApi,
   employeesApi,
@@ -56,6 +57,11 @@ export function Organisations() {
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<OrganizationListItem | null>(null);
+
+  const [participantsOrg, setParticipantsOrg] = useState<{
+    orgId: number;
+    orgName?: string;
+  } | null>(null);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -355,6 +361,9 @@ export function Organisations() {
             onSort={handleSort}
             onView={openView}
             onEdit={openEdit}
+            onParticipants={(r) =>
+              setParticipantsOrg({ orgId: r.organization_id, orgName: r.name ?? undefined })
+            }
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
               page,
@@ -379,22 +388,40 @@ export function Organisations() {
         maxWidthClassName={modalMode === "view" ? "max-w-xl" : "max-w-3xl"}
       >
         {modalMode === "view" && selected ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div><span className="text-zinc-500">Name:</span> {selected.name}</div>
-            <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
-            <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
-            <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
-            <div className="md:col-span-2"><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
-            <div><span className="text-zinc-500">Pin Code:</span> {selected.pin_code ?? "—"}</div>
-            <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
-            <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
-            <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
-            <div><span className="text-zinc-500">Contact:</span> {selected.contact_name ?? "—"}</div>
-            <div><span className="text-zinc-500">Designation:</span> {selected.contact_designation ?? "—"}</div>
-            <div><span className="text-zinc-500">Email:</span> {selected.contact_email ?? "—"}</div>
-            <div><span className="text-zinc-500">Phone:</span> {selected.contact_phone ?? "—"}</div>
-            <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
-            <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div><span className="text-zinc-500">Name:</span> {selected.name}</div>
+              <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
+              <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
+              <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
+              <div className="md:col-span-2"><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
+              <div><span className="text-zinc-500">Pin Code:</span> {selected.pin_code ?? "—"}</div>
+              <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
+              <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
+              <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
+              <div><span className="text-zinc-500">Contact:</span> {selected.contact_name ?? "—"}</div>
+              <div><span className="text-zinc-500">Designation:</span> {selected.contact_designation ?? "—"}</div>
+              <div><span className="text-zinc-500">Email:</span> {selected.contact_email ?? "—"}</div>
+              <div><span className="text-zinc-500">Phone:</span> {selected.contact_phone ?? "—"}</div>
+              <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
+              <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
+            </div>
+            <div className="pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  setParticipantsOrg({
+                    orgId: selected.organization_id,
+                    orgName: selected.name ?? undefined,
+                  });
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-medium"
+              >
+                <Users className="w-4 h-4" />
+                View Participants
+              </button>
+            </div>
           </div>
         ) : (
           <form
@@ -574,6 +601,18 @@ export function Organisations() {
           </form>
         )}
       </Modal>
+
+      {participantsOrg && (
+        <ParticipantsModal
+          open={!!participantsOrg}
+          onClose={() => setParticipantsOrg(null)}
+          source={{
+            kind: "organization",
+            orgId: participantsOrg.orgId,
+            orgName: participantsOrg.orgName,
+          }}
+        />
+      )}
 
       {deleteConfirm && (
         <Modal
