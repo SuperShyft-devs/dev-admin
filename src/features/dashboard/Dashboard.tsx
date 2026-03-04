@@ -161,11 +161,11 @@ export function Dashboard() {
   ];
 
   const quickLinks = [
+    { label: "Users", icon: UserRound, to: "/users" },
     { label: "Organisations", icon: Building2, to: "/organisations" },
     { label: "Engagements", icon: CalendarCheck, to: "/engagements" },
-    { label: "Employees", icon: Users, to: "/employees" },
-    { label: "Users", icon: UserRound, to: "/users" },
     { label: "Assessments", icon: ClipboardList, to: "/assessment-packages" },
+    { label: "Employees", icon: Users, to: "/employees" },
   ];
 
   return (

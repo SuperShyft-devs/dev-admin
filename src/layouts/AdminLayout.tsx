@@ -15,11 +15,11 @@ import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/users", icon: UserRound, label: "Users" },
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
-  { to: "/employees", icon: Users, label: "Employees" },
-  { to: "/users", icon: UserRound, label: "Users" },
   { to: "/assessment-packages", icon: ClipboardList, label: "Assessments" },
+  { to: "/employees", icon: Users, label: "Employees" },
 ];
 
 export function AdminLayout() {
