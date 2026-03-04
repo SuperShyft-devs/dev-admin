@@ -6,6 +6,7 @@ import { Dashboard } from "./features/dashboard/Dashboard";
 import { Organisations } from "./features/organisations/Organisations";
 import { Engagements } from "./features/engagements/Engagements";
 import { Employees } from "./features/employees/Employees";
+import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -38,6 +39,7 @@ function AppRoutes() {
         <Route path="organisations" element={<Organisations />} />
         <Route path="engagements" element={<Engagements />} />
         <Route path="employees" element={<Employees />} />
+        <Route path="assessment-packages" element={<AssessmentPackages />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

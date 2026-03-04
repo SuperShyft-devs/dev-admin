@@ -6,6 +6,7 @@ import {
   Eye,
   Pencil,
   Trash2,
+  ListChecks,
 } from "lucide-react";
 
 export interface Column<T> {
@@ -30,6 +31,7 @@ interface DataTableProps<T> {
   onView?: (row: T) => void;
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
+  onQuestions?: (row: T) => void;
   firstColumnClickableView?: boolean;
   pagination?: {
     page: number;
@@ -52,12 +54,13 @@ export function DataTable<T extends object>(
     onView,
     onEdit,
     onDelete,
+    onQuestions,
     firstColumnClickableView = true,
     pagination,
   } = props;
 
   const firstKey = columns[0]?.key;
-  const hasActions = onView || onEdit || onDelete;
+  const hasActions = onView || onEdit || onDelete || onQuestions;
 
   // Build a helper that returns the visibility class for a column
   const visibilityClass = (col: Column<T>) => {
@@ -166,6 +169,16 @@ export function DataTable<T extends object>(
                           aria-label="Edit"
                         >
                           <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      {onQuestions && (
+                        <button
+                          onClick={() => onQuestions(row)}
+                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                          title="Manage Questions"
+                          aria-label="Manage Questions"
+                        >
+                          <ListChecks className="w-4 h-4" />
                         </button>
                       )}
                       {onDelete && (

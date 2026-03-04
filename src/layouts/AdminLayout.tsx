@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarCheck,
   Users,
+  ClipboardList,
   Menu,
   LogOut,
   X,
@@ -16,6 +17,7 @@ const navItems = [
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/employees", icon: Users, label: "Employees" },
+  { to: "/assessment-packages", icon: ClipboardList, label: "Assessments" },
 ];
 
 export function AdminLayout() {

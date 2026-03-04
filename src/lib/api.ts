@@ -282,11 +282,31 @@ export const engagementsApi = {
     ),
 };
 
-// Assessment packages (for engagement form dropdown)
+// Assessment packages
 export interface AssessmentPackage {
   package_id: number;
   package_code?: string | null;
   display_name?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface AssessmentPackageCreate {
+  package_code: string;
+  display_name: string;
+  status?: string;
+}
+
+export interface AssessmentPackageUpdate {
+  package_code?: string;
+  display_name?: string;
+}
+
+export interface PackageQuestion {
+  question_id: number;
+  question_text?: string | null;
+  question_type?: string | null;
   status?: string | null;
 }
 
@@ -295,5 +315,59 @@ export const assessmentPackagesApi = {
     api.get<{ data: AssessmentPackage[]; meta: { page: number; limit: number; total: number } }>(
       "/assessment-packages",
       { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
+  get: (id: number) =>
+    api.get<{ data: AssessmentPackage }>(`/assessment-packages/${id}`),
+  create: (payload: AssessmentPackageCreate) =>
+    api.post<{ data: { package_id: number } }>("/assessment-packages", payload),
+  update: (id: number, payload: AssessmentPackageUpdate) =>
+    api.put<{ data: { package_id: number } }>(`/assessment-packages/${id}`, payload),
+  listQuestions: (packageId: number) =>
+    api.get<{ data: PackageQuestion[] }>(`/assessment-packages/${packageId}/questions`),
+  addQuestions: (packageId: number, question_ids: number[]) =>
+    api.post(`/assessment-packages/${packageId}/questions`, { question_ids }),
+  removeQuestion: (packageId: number, questionId: number) =>
+    api.delete(`/assessment-packages/${packageId}/questions/${questionId}`),
+};
+
+// Questionnaire questions
+export interface QuestionnaireQuestion {
+  question_id: number;
+  question_text?: string | null;
+  question_type?: string | null;
+  options?: string[] | null;
+  status?: string | null;
+  created_at?: string | null;
+}
+
+export interface QuestionnaireQuestionCreate {
+  question_text: string;
+  question_type: string;
+  options?: string[] | null;
+  status?: string;
+}
+
+export interface QuestionnaireQuestionUpdate {
+  question_text: string;
+  question_type: string;
+  options?: string[] | null;
+}
+
+export const questionnaireQuestionsApi = {
+  list: (params?: { page?: number; limit?: number; status?: string; question_type?: string }) =>
+    api.get<{ data: QuestionnaireQuestion[]; meta: { page: number; limit: number; total: number } }>(
+      "/questionnaire/questions",
+      { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
+  get: (id: number) =>
+    api.get<{ data: QuestionnaireQuestion }>(`/questionnaire/questions/${id}`),
+  create: (payload: QuestionnaireQuestionCreate) =>
+    api.post<{ data: { question_id: number } }>("/questionnaire/questions", payload),
+  update: (id: number, payload: QuestionnaireQuestionUpdate) =>
+    api.put<{ data: { question_id: number } }>(`/questionnaire/questions/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { question_id: number; status: string } }>(
+      `/questionnaire/questions/${id}/status`,
+      { status }
     ),
 };
