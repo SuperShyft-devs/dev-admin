@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   Users,
   ClipboardList,
+  UserRound,
   Menu,
   LogOut,
   X,
@@ -17,6 +18,7 @@ const navItems = [
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/employees", icon: Users, label: "Employees" },
+  { to: "/users", icon: UserRound, label: "Users" },
   { to: "/assessment-packages", icon: ClipboardList, label: "Assessments" },
 ];
 

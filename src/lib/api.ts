@@ -81,6 +81,48 @@ export const authApi = {
     api.post("/auth/logout", { refresh_token: refreshToken }),
 };
 
+// Full user detail (employee view)
+export interface UserDetail {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone: string;
+  email?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  pin_code?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  referred_by?: string | null;
+  is_participant?: boolean | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UserCreate {
+  first_name?: string | null;
+  last_name?: string | null;
+  phone: string;
+  email?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  pin_code?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  referred_by?: string | null;
+  is_participant?: boolean | null;
+  status?: string | null;
+}
+
+export interface UserUpdate extends UserCreate {
+  // phone is required for update too
+}
+
 export const usersApi = {
   me: () => api.get<{ data: UserProfile }>("/users/me"),
   list: (params?: {
@@ -88,11 +130,21 @@ export const usersApi = {
     limit?: number;
     status?: string;
     is_participant?: boolean;
+    phone?: string;
+    email?: string;
   }) =>
     api.get<{ data: UserListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/users",
       { params: { ...params, limit: params?.limit ?? 100 } }
     ),
+  get: (id: number) =>
+    api.get<{ data: UserDetail }>(`/users/${id}`),
+  create: (payload: UserCreate) =>
+    api.post<{ data: { user_id: number } }>("/users", payload),
+  update: (id: number, payload: UserUpdate) =>
+    api.put<{ data: { user_id: number; status: string } }>(`/users/${id}`, payload),
+  deactivate: (id: number) =>
+    api.patch<{ data: { user_id: number; status: string } }>(`/users/${id}/deactivate`),
 };
 
 // Employees
