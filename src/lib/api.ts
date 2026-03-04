@@ -439,6 +439,28 @@ export const participantsApi = {
     ),
 };
 
+// Onboarding Assistants
+export interface OnboardingAssistant {
+  employee_id: number;
+  user_id: number;
+  role?: string | null;
+  status?: string | null;
+}
+
+export const onboardingAssistantsApi = {
+  list: (engagementId: number) =>
+    api.get<{ data: OnboardingAssistant[] }>(
+      `/engagements/${engagementId}/onboarding-assistants`
+    ),
+  assign: (engagementId: number, employee_ids: number[]) =>
+    api.post<{ data: { engagement_id: number; added_employee_ids: number[]; skipped_employee_ids: number[] } }>(
+      `/engagements/${engagementId}/onboarding-assistants`,
+      { employee_ids }
+    ),
+  remove: (engagementId: number, employeeId: number) =>
+    api.delete(`/engagements/${engagementId}/onboarding-assistants/${employeeId}`),
+};
+
 export const questionnaireQuestionsApi = {
   list: (params?: { page?: number; limit?: number; status?: string; question_type?: string }) =>
     api.get<{ data: QuestionnaireQuestion[]; meta: { page: number; limit: number; total: number } }>(

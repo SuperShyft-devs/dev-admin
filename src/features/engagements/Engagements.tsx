@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Loader2, Users } from "lucide-react";
+import { Search, Plus, Loader2, Users, UserCog, Trash2, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -7,11 +7,15 @@ import {
   engagementsApi,
   organizationsApi,
   assessmentPackagesApi,
+  employeesApi,
+  onboardingAssistantsApi,
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
   type OrganizationListItem,
   type AssessmentPackage,
+  type EmployeeListItem,
+  type OnboardingAssistant,
   getApiError,
 } from "../../lib/api";
 
@@ -55,6 +59,22 @@ export function Engagements() {
     | { kind: "public" }
     | null
   >(null);
+
+  // ── Onboarding Assistants state ──────────────────────────────
+  const [assistantsEngagement, setAssistantsEngagement] = useState<EngagementListItem | null>(null);
+  const [assistantsModalOpen, setAssistantsModalOpen] = useState(false);
+  const [assistants, setAssistants] = useState<OnboardingAssistant[]>([]);
+  const [assistantsLoading, setAssistantsLoading] = useState(false);
+  const [assistantsError, setAssistantsError] = useState<string | null>(null);
+  const [removingAssistantId, setRemovingAssistantId] = useState<number | null>(null);
+
+  // Add-assistants sub-panel state
+  const [addAssistantsOpen, setAddAssistantsOpen] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([]);
+  const [allEmployeesLoading, setAllEmployeesLoading] = useState(false);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
+  const [assigningAssistants, setAssigningAssistants] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
 
   const fetchOrgs = useCallback(() => {
     organizationsApi.list({ limit: 500 }).then((r) => setOrganizations(r.data.data));
@@ -204,6 +224,105 @@ export function Engagements() {
 
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
 
+  // ── Onboarding Assistants handlers ───────────────────────────
+  const fetchAssistants = useCallback(async (engagementId: number) => {
+    setAssistantsLoading(true);
+    setAssistantsError(null);
+    try {
+      const res = await onboardingAssistantsApi.list(engagementId);
+      setAssistants(res.data.data);
+    } catch (err) {
+      setAssistantsError(getApiError(err));
+    } finally {
+      setAssistantsLoading(false);
+    }
+  }, []);
+
+  const openAssistantsModal = (row: EngagementListItem) => {
+    setAssistantsEngagement(row);
+    setAssistants([]);
+    setAssistantsError(null);
+    setAddAssistantsOpen(false);
+    setSelectedEmployeeIds(new Set());
+    setEmployeeSearch("");
+    setAssistantsModalOpen(true);
+    fetchAssistants(row.engagement_id);
+  };
+
+  const closeAssistantsModal = () => {
+    setAssistantsModalOpen(false);
+    setAssistantsEngagement(null);
+    setAddAssistantsOpen(false);
+    setSelectedEmployeeIds(new Set());
+    setEmployeeSearch("");
+  };
+
+  const handleRemoveAssistant = async (employeeId: number) => {
+    if (!assistantsEngagement) return;
+    setRemovingAssistantId(employeeId);
+    setAssistantsError(null);
+    try {
+      await onboardingAssistantsApi.remove(assistantsEngagement.engagement_id, employeeId);
+      await fetchAssistants(assistantsEngagement.engagement_id);
+    } catch (err) {
+      setAssistantsError(getApiError(err));
+    } finally {
+      setRemovingAssistantId(null);
+    }
+  };
+
+  const openAddAssistants = async () => {
+    setAddAssistantsOpen(true);
+    setSelectedEmployeeIds(new Set());
+    setEmployeeSearch("");
+    setAllEmployeesLoading(true);
+    try {
+      const res = await employeesApi.list({ status: "active", limit: 100 });
+      setAllEmployees(res.data.data);
+    } catch (err) {
+      setAssistantsError(getApiError(err));
+    } finally {
+      setAllEmployeesLoading(false);
+    }
+  };
+
+  const toggleEmployeeSelection = (id: number) => {
+    setSelectedEmployeeIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleAssignAssistants = async () => {
+    if (!assistantsEngagement || selectedEmployeeIds.size === 0) return;
+    setAssigningAssistants(true);
+    setAssistantsError(null);
+    try {
+      await onboardingAssistantsApi.assign(
+        assistantsEngagement.engagement_id,
+        Array.from(selectedEmployeeIds)
+      );
+      setAddAssistantsOpen(false);
+      setSelectedEmployeeIds(new Set());
+      await fetchAssistants(assistantsEngagement.engagement_id);
+    } catch (err) {
+      setAssistantsError(getApiError(err));
+    } finally {
+      setAssigningAssistants(false);
+    }
+  };
+
+  // Employees not yet assigned as assistants for this engagement
+  const assignedIds = new Set(assistants.map((a) => a.employee_id));
+  const availableEmployees = allEmployees.filter((e) => !assignedIds.has(e.employee_id));
+  const filteredEmployees = employeeSearch.trim()
+    ? availableEmployees.filter((e) =>
+        String(e.employee_id).includes(employeeSearch.trim()) ||
+        (e.role ?? "").toLowerCase().includes(employeeSearch.trim().toLowerCase())
+      )
+    : availableEmployees;
+
   const openParticipants = (row: EngagementListItem) => {
     if (row.engagement_type === "b2b" && row.engagement_code) {
       setParticipantsSource({
@@ -292,6 +411,7 @@ export function Engagements() {
             onView={openView}
             onEdit={openEdit}
             onParticipants={openParticipants}
+            onAssistants={openAssistantsModal}
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
               page,
@@ -512,6 +632,205 @@ export function Engagements() {
           source={participantsSource}
         />
       )}
+
+      {/* ── Onboarding Assistants Modal ─────────────────────── */}
+      <Modal
+        open={assistantsModalOpen}
+        onClose={closeAssistantsModal}
+        title={
+          assistantsEngagement
+            ? `Onboarding Assistants — ${assistantsEngagement.engagement_name || assistantsEngagement.engagement_code || "Engagement"}`
+            : "Onboarding Assistants"
+        }
+        maxWidthClassName="max-w-xl"
+      >
+        <div className="space-y-4">
+          {assistantsError && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {assistantsError}
+            </div>
+          )}
+
+          {/* Assigned assistants list */}
+          {!addAssistantsOpen && (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-700">
+                  Assigned ({assistants.length})
+                </p>
+                <button
+                  type="button"
+                  onClick={openAddAssistants}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Assistants
+                </button>
+              </div>
+
+              {assistantsLoading ? (
+                <div className="py-8 flex justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                </div>
+              ) : assistants.length === 0 ? (
+                <div className="py-8 text-center text-sm text-zinc-500">
+                  No onboarding assistants assigned yet.
+                </div>
+              ) : (
+                <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden">
+                  {assistants.map((a) => (
+                    <li
+                      key={a.employee_id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 bg-white hover:bg-zinc-50"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
+                          <UserCog className="w-4 h-4 text-zinc-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-900 truncate">
+                            Employee #{a.employee_id}
+                          </p>
+                          <p className="text-xs text-zinc-500 truncate">
+                            {a.role ? `Role: ${a.role}` : "No role"}{" "}
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ml-1 ${
+                                a.status === "active"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-zinc-100 text-zinc-500"
+                              }`}
+                            >
+                              {a.status ?? "—"}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAssistant(a.employee_id)}
+                        disabled={removingAssistantId === a.employee_id}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0"
+                        title="Remove assistant"
+                        aria-label="Remove assistant"
+                      >
+                        {removingAssistantId === a.employee_id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+
+          {/* Add assistants sub-panel */}
+          {addAssistantsOpen && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-700">
+                  Select employees to assign
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddAssistantsOpen(false);
+                    setSelectedEmployeeIds(new Set());
+                    setEmployeeSearch("");
+                  }}
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <input
+                  type="search"
+                  placeholder="Search by role or ID…"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
+                />
+              </div>
+
+              {/* Employee list */}
+              {allEmployeesLoading ? (
+                <div className="py-8 flex justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+                </div>
+              ) : filteredEmployees.length === 0 ? (
+                <div className="py-6 text-center text-sm text-zinc-500">
+                  {availableEmployees.length === 0
+                    ? "All active employees are already assigned."
+                    : "No employees match your search."}
+                </div>
+              ) : (
+                <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                  {filteredEmployees.map((e) => {
+                    const checked = selectedEmployeeIds.has(e.employee_id);
+                    return (
+                      <li
+                        key={e.employee_id}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
+                          checked ? "bg-zinc-50" : "bg-white"
+                        }`}
+                        onClick={() => toggleEmployeeSelection(e.employee_id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleEmployeeSelection(e.employee_id)}
+                          onClick={(ev) => ev.stopPropagation()}
+                          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-900 truncate">
+                            Employee #{e.employee_id}
+                          </p>
+                          <p className="text-xs text-zinc-500 truncate">
+                            {e.role ? `Role: ${e.role}` : "No role"}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {/* Assign button */}
+              <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleAssignAssistants}
+                  disabled={selectedEmployeeIds.size === 0 || assigningAssistants}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {assigningAssistants
+                    ? "Assigning…"
+                    : `Assign${selectedEmployeeIds.size > 0 ? ` (${selectedEmployeeIds.size})` : ""}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddAssistantsOpen(false);
+                    setSelectedEmployeeIds(new Set());
+                    setEmployeeSearch("");
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
