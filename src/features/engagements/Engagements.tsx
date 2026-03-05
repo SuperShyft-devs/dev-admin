@@ -29,6 +29,10 @@ export function Engagements() {
   const [limit] = useState(10);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [cityFilter, setCityFilter] = useState<string>("");
+  const [typeOptions, setTypeOptions] = useState<string[]>([]);
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<string>("engagement_name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
@@ -100,6 +104,17 @@ export function Engagements() {
         status: statusFilter || undefined,
       });
       let items = res.data.data;
+      const typeSet = new Set<string>();
+      const citySet = new Set<string>();
+      items.forEach((item) => {
+        const type = (item.engagement_type ?? "").trim();
+        const city = (item.city ?? "").trim();
+        if (type) typeSet.add(type);
+        if (city) citySet.add(city);
+      });
+      setTypeOptions(Array.from(typeSet).sort((a, b) => a.localeCompare(b)));
+      setCityOptions(Array.from(citySet).sort((a, b) => a.localeCompare(b)));
+
       if (search) {
         const q = search.toLowerCase();
         items = items.filter(
@@ -108,6 +123,14 @@ export function Engagements() {
             (e.engagement_code ?? "").toLowerCase().includes(q) ||
             (e.city ?? "").toLowerCase().includes(q)
         );
+      }
+      if (typeFilter) {
+        const type = typeFilter.toLowerCase();
+        items = items.filter((e) => (e.engagement_type ?? "").toLowerCase() === type);
+      }
+      if (cityFilter) {
+        const city = cityFilter.toLowerCase();
+        items = items.filter((e) => (e.city ?? "").toLowerCase() === city);
       }
       const sorted = [...items].sort((a, b) => {
         const aVal = String(a[sortKey as keyof EngagementListItem] ?? "");
@@ -122,7 +145,7 @@ export function Engagements() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, sortKey, sortDir]);
+  }, [page, limit, statusFilter, search, typeFilter, cityFilter, sortKey, sortDir]);
 
   useEffect(() => {
     fetchOrgs();
@@ -400,18 +423,44 @@ export function Engagements() {
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-        >
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-row gap-3 flex-wrap sm:flex-nowrap">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">All types</option>
+            {typeOptions.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">All cities</option>
+            {cityOptions.map((city) => (
+              <option key={city} value={city}>
+                {city}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
