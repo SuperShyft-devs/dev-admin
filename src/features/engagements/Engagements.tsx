@@ -87,8 +87,13 @@ export function Engagements() {
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
 
-  const fetchOrgs = useCallback(() => {
-    organizationsApi.list({ limit: 500 }).then((r) => setOrganizations(r.data.data));
+  const fetchOrgs = useCallback(async () => {
+    try {
+      const r = await organizationsApi.list({ page: 1, limit: 100 });
+      setOrganizations(r.data.data);
+    } catch (err) {
+      setError(getApiError(err));
+    }
   }, []);
   const fetchPackages = useCallback(() => {
     assessmentPackagesApi.list().then((r) => setAssessmentPackages(r.data.data));
@@ -543,89 +548,89 @@ export function Engagements() {
               e.preventDefault();
               handleSubmit();
             }}
-            className="space-y-4"
+            className="space-y-6"
           >
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Name</label>
-              <input
-                type="text"
-                value={formData.engagement_name ?? ""}
-                onChange={(e) => setFormData({ ...formData, engagement_name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Organisation *</label>
-              <select
-                value={formData.organization_id}
-                onChange={(e) => setFormData({ ...formData, organization_id: Number(e.target.value) })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                required
-              >
-                <option value={0}>Select organisation</option>
-                {organizations.map((o) => (
-                  <option key={o.organization_id} value={o.organization_id}>
-                    {o.name ?? o.organization_id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Code</label>
-              <input
-                type="text"
-                value={formData.engagement_code ?? ""}
-                onChange={(e) => setFormData({ ...formData, engagement_code: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
-              <input
-                type="text"
-                value={formData.engagement_type}
-                onChange={(e) => setFormData({ ...formData, engagement_type: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment Package *</label>
-              <select
-                value={formData.assessment_package_id}
-                onChange={(e) => setFormData({ ...formData, assessment_package_id: Number(e.target.value) })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                required
-              >
-                <option value={0}>Select package</option>
-                {assessmentPackages.map((p) => (
-                  <option key={p.package_id} value={p.package_id}>
-                    {p.display_name ?? p.package_code ?? p.package_id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
-              <input
-                type="text"
-                value={formData.city ?? ""}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
-              <input
-                type="number"
-                min={1}
-                max={480}
-                value={formData.slot_duration}
-                onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={formData.engagement_name ?? ""}
+                  onChange={(e) => setFormData({ ...formData, engagement_name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Organisation *</label>
+                <select
+                  value={formData.organization_id}
+                  onChange={(e) => setFormData({ ...formData, organization_id: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  required
+                >
+                  <option value={0}>Select organisation</option>
+                  {organizations.map((o) => (
+                    <option key={o.organization_id} value={o.organization_id}>
+                      {o.name ?? o.organization_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Code</label>
+                <input
+                  type="text"
+                  value={formData.engagement_code ?? ""}
+                  onChange={(e) => setFormData({ ...formData, engagement_code: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
+                <input
+                  type="text"
+                  value={formData.engagement_type}
+                  onChange={(e) => setFormData({ ...formData, engagement_type: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment Package *</label>
+                <select
+                  value={formData.assessment_package_id}
+                  onChange={(e) => setFormData({ ...formData, assessment_package_id: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  required
+                >
+                  <option value={0}>Select package</option>
+                  {assessmentPackages.map((p) => (
+                    <option key={p.package_id} value={p.package_id}>
+                      {p.display_name ?? p.package_code ?? p.package_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
+                <input
+                  type="text"
+                  value={formData.city ?? ""}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={480}
+                  value={formData.slot_duration}
+                  onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Start date *</label>
                 <input
