@@ -3,6 +3,7 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
   Eye,
   Pencil,
   Trash2,
@@ -11,6 +12,7 @@ import {
   UserCog,
   CalendarClock,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export interface Column<T> {
   key: string;
@@ -70,6 +72,27 @@ export function DataTable<T extends object>(
 
   const firstKey = columns[0]?.key;
   const hasActions = onView || onEdit || onDelete || onQuestions || onParticipants || onAssistants || onOccupiedSlots;
+  const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!actionsMenuRef.current) return;
+      if (!actionsMenuRef.current.contains(event.target as Node)) {
+        setOpenActionsRow(null);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenActionsRow(null);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, []);
 
   // Build a helper that returns the visibility class for a column
   const visibilityClass = (col: Column<T>) => {
@@ -106,7 +129,7 @@ export function DataTable<T extends object>(
               </th>
             ))}
             {hasActions && (
-              <th className="px-3 sm:px-4 py-3 text-right font-medium text-zinc-600 w-24 sm:w-28">
+              <th className="px-3 sm:px-4 py-3 text-right font-medium text-zinc-600 w-14 sm:w-16">
                 Actions
               </th>
             )}
@@ -123,9 +146,11 @@ export function DataTable<T extends object>(
               </td>
             </tr>
           ) : (
-            data.map((row) => (
+            data.map((row) => {
+              const rowKey = keyExtractor(row);
+              return (
               <tr
-                key={String(keyExtractor(row))}
+                key={String(rowKey)}
                 className="border-b border-zinc-100 hover:bg-zinc-50"
               >
                 {columns.map((col, idx) => {
@@ -159,82 +184,115 @@ export function DataTable<T extends object>(
                 })}
                 {hasActions && (
                   <td className="px-2 sm:px-4 py-2.5 sm:py-3">
-                    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
-                      {onView && (
-                        <button
-                          onClick={() => onView(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="View"
-                          aria-label="View"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onEdit && (
-                        <button
-                          onClick={() => onEdit(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="Edit"
-                          aria-label="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onParticipants && (
-                        <button
-                          onClick={() => onParticipants(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="View Participants"
-                          aria-label="View Participants"
-                        >
-                          <Users className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onAssistants && (
-                        <button
-                          onClick={() => onAssistants(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="Manage Onboarding Assistants"
-                          aria-label="Manage Onboarding Assistants"
-                        >
-                          <UserCog className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onOccupiedSlots && (
-                        <button
-                          onClick={() => onOccupiedSlots(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="View Occupied Slots"
-                          aria-label="View Occupied Slots"
-                        >
-                          <CalendarClock className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onQuestions && (
-                        <button
-                          onClick={() => onQuestions(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          title="Manage Questions"
-                          aria-label="Manage Questions"
-                        >
-                          <ListChecks className="w-4 h-4" />
-                        </button>
-                      )}
-                      {onDelete && (
-                        <button
-                          onClick={() => onDelete(row)}
-                          className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-red-100 hover:text-red-600"
-                          title="Delete"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                    <div className="relative flex justify-end" ref={openActionsRow === rowKey ? actionsMenuRef : null}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenActionsRow((curr) =>
+                            curr === rowKey ? null : rowKey
+                          )
+                        }
+                        className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                        title="Actions"
+                        aria-label="Actions"
+                        aria-expanded={openActionsRow === rowKey}
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {openActionsRow === rowKey && (
+                        <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden">
+                          {onView && (
+                            <button
+                              onClick={() => {
+                                onView(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View
+                            </button>
+                          )}
+                          {onEdit && (
+                            <button
+                              onClick={() => {
+                                onEdit(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Edit
+                            </button>
+                          )}
+                          {onParticipants && (
+                            <button
+                              onClick={() => {
+                                onParticipants(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <Users className="w-4 h-4" />
+                              View Participants
+                            </button>
+                          )}
+                          {onAssistants && (
+                            <button
+                              onClick={() => {
+                                onAssistants(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <UserCog className="w-4 h-4" />
+                              Manage Onboarding Assistants
+                            </button>
+                          )}
+                          {onOccupiedSlots && (
+                            <button
+                              onClick={() => {
+                                onOccupiedSlots(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <CalendarClock className="w-4 h-4" />
+                              View Occupied Slots
+                            </button>
+                          )}
+                          {onQuestions && (
+                            <button
+                              onClick={() => {
+                                onQuestions(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <ListChecks className="w-4 h-4" />
+                              Manage Questions
+                            </button>
+                          )}
+                          {onDelete && (
+                            <button
+                              onClick={() => {
+                                onDelete(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
                 )}
               </tr>
-            ))
+              );
+            })
           )}
         </tbody>
       </table>
