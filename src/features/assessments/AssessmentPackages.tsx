@@ -229,6 +229,7 @@ export function AssessmentPackages() {
   const [pkgSortDir, setPkgSortDir] = useState<"asc" | "desc">("asc");
   const [pkgLoading, setPkgLoading] = useState(true);
   const [pkgError, setPkgError] = useState<string | null>(null);
+  const [pkgQuestionCounts, setPkgQuestionCounts] = useState<Record<number, number>>({});
 
   // ── Package modal state ──────────────────────────────────────
   const [pkgModalOpen, setPkgModalOpen] = useState(false);
@@ -301,6 +302,17 @@ export function AssessmentPackages() {
       });
       setPkgData(sorted);
       setPkgTotal(res.data.meta.total);
+      const countEntries = await Promise.all(
+        sorted.map(async (pkg) => {
+          try {
+            const qRes = await assessmentPackagesApi.listQuestions(pkg.package_id);
+            return [pkg.package_id, qRes.data.data.length] as const;
+          } catch {
+            return [pkg.package_id, 0] as const;
+          }
+        })
+      );
+      setPkgQuestionCounts(Object.fromEntries(countEntries));
     } catch (err) { setPkgError(getApiError(err)); }
     finally { setPkgLoading(false); }
   }, [pkgPage, pkgLimit, pkgStatusFilter, pkgSearch, pkgSortKey, pkgSortDir]);
@@ -503,7 +515,14 @@ export function AssessmentPackages() {
   // ── Table columns ────────────────────────────────────────────
   const pkgColumns: Column<AssessmentPackage>[] = [
     { key: "display_name", label: "Name", sortable: true, render: (r) => <span className="font-medium text-zinc-900">{r.display_name || r.package_code || "—"}</span> },
-    { key: "package_code", label: "Code", sortable: true, hideOnMobile: true, render: (r) => <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{r.package_code ?? "—"}</span> },
+    {
+      key: "question_count",
+      label: "Questions",
+      render: (r) => {
+        const count = pkgQuestionCounts[r.package_id];
+        return <span className="text-zinc-700">{count ?? "—"}</span>;
+      },
+    },
     {
       key: "status", label: "Status", sortable: true,
       render: (r) => {
