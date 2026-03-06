@@ -13,6 +13,7 @@ import {
 } from "../../lib/api";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
+const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 
 type ModalMode = "add" | "edit";
 
@@ -190,23 +191,32 @@ export function Employees() {
       label: "Status",
       sortable: true,
       render: (row) => {
-        const isActive = (row.status ?? "").toLowerCase() === "active";
+        const isProtectedEmployee = row.employee_id === ALWAYS_ACTIVE_EMPLOYEE_ID;
+        const isActive = isProtectedEmployee || (row.status ?? "").toLowerCase() === "active";
         return (
           <button
             type="button"
+            disabled={isProtectedEmployee}
             onClick={(event) => {
               event.stopPropagation();
+              if (isProtectedEmployee) {
+                return;
+              }
               const nextStatus = isActive ? "inactive" : "active";
               employeesApi
                 .updateStatus(row.employee_id, nextStatus)
                 .then(() => fetchList())
                 .catch((err) => setError(getApiError(err)));
             }}
-            className={`inline-flex items-center w-12 h-6 rounded-full transition ${
+            className={`inline-flex items-center w-12 h-6 rounded-full transition disabled:cursor-not-allowed disabled:opacity-80 ${
               isActive ? "bg-emerald-500" : "bg-zinc-300"
             }`}
             aria-pressed={isActive}
-            aria-label={`Set ${getUserName(row.user_id)} ${isActive ? "inactive" : "active"}`}
+            aria-label={
+              isProtectedEmployee
+                ? `${getUserName(row.user_id)} is always active`
+                : `Set ${getUserName(row.user_id)} ${isActive ? "inactive" : "active"}`
+            }
           >
             <span
               className={`h-5 w-5 bg-white rounded-full shadow transform transition translate-x-0.5 ${
