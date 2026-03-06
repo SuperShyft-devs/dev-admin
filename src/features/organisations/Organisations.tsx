@@ -3,6 +3,7 @@ import { Search, Plus, Loader2, Users } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
+import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
 import {
   organizationsApi,
   employeesApi,
@@ -59,6 +60,10 @@ export function Organisations() {
   const [deleteConfirm, setDeleteConfirm] = useState<OrganizationListItem | null>(null);
 
   const [participantsOrg, setParticipantsOrg] = useState<{
+    orgId: number;
+    orgName?: string;
+  } | null>(null);
+  const [engagementsOrg, setEngagementsOrg] = useState<{
     orgId: number;
     orgName?: string;
   } | null>(null);
@@ -406,7 +411,7 @@ export function Organisations() {
               <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
               <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
             </div>
-            <div className="pt-2 border-t border-zinc-100">
+            <div className="pt-2 border-t border-zinc-100 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -420,6 +425,19 @@ export function Organisations() {
               >
                 <Users className="w-4 h-4" />
                 View Participants
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  setEngagementsOrg({
+                    orgId: selected.organization_id,
+                    orgName: selected.name ?? undefined,
+                  });
+                }}
+                className="inline-flex items-center px-4 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-medium"
+              >
+                View Engagements
               </button>
             </div>
           </div>
@@ -611,6 +629,15 @@ export function Organisations() {
             orgId: participantsOrg.orgId,
             orgName: participantsOrg.orgName,
           }}
+        />
+      )}
+
+      {engagementsOrg && (
+        <OrganizationEngagementsModal
+          open={!!engagementsOrg}
+          onClose={() => setEngagementsOrg(null)}
+          orgId={engagementsOrg.orgId}
+          orgName={engagementsOrg.orgName}
         />
       )}
 
