@@ -173,6 +173,8 @@ export const employeesApi = {
       "/employees",
       { params: { ...params, limit: params?.limit ?? 100 } }
     ),
+  get: (id: number) =>
+    api.get<{ data: EmployeeListItem }>(`/employees/${id}`),
   create: (payload: EmployeeCreate) =>
     api.post<{ data: { employee_id: number } }>("/employees", payload),
   update: (id: number, payload: EmployeeUpdate) =>

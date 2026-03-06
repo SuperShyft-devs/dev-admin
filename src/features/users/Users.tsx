@@ -4,6 +4,7 @@ import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
   usersApi,
+  employeesApi,
   type UserListItem,
   type UserDetail,
   type UserCreate,
@@ -12,6 +13,7 @@ import {
 
 const STATUS_OPTIONS = ["active", "inactive"];
 const GENDER_OPTIONS = ["male", "female", "other"];
+const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 
 type ModalMode = "view" | "add" | "edit";
 
@@ -50,6 +52,7 @@ export function Users() {
   const [formData, setFormData] = useState<UserCreate>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<UserListItem | null>(null);
+  const [alwaysActiveUserId, setAlwaysActiveUserId] = useState<number | null>(null);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -95,6 +98,13 @@ export function Users() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    employeesApi
+      .get(ALWAYS_ACTIVE_EMPLOYEE_ID)
+      .then((res) => setAlwaysActiveUserId(res.data.data.user_id))
+      .catch(() => setAlwaysActiveUserId(null));
+  }, []);
 
   const openView = (row: UserListItem) => {
     usersApi
@@ -229,12 +239,17 @@ export function Users() {
       label: "Status",
       sortable: true,
       render: (row) => {
-        const isActive = (row.status ?? "").toLowerCase() === "active";
+        const isProtectedUser = alwaysActiveUserId === row.user_id;
+        const isActive = isProtectedUser || (row.status ?? "").toLowerCase() === "active";
         return (
           <button
             type="button"
+            disabled={isProtectedUser}
             onClick={(e) => {
               e.stopPropagation();
+              if (isProtectedUser) {
+                return;
+              }
               const phone = row.phone?.trim();
               if (!phone) {
                 setError("Cannot update status: phone number is missing for this user.");
@@ -252,11 +267,15 @@ export function Users() {
                 .then(() => fetchList())
                 .catch((err) => setError(getApiError(err)));
             }}
-            className={`inline-flex items-center w-12 h-6 rounded-full transition ${
+            className={`inline-flex items-center w-12 h-6 rounded-full transition disabled:cursor-not-allowed disabled:opacity-80 ${
               isActive ? "bg-emerald-500" : "bg-zinc-300"
             }`}
             aria-pressed={isActive}
-            aria-label={`Set ${getFullName(row) !== "—" ? getFullName(row) : row.phone} ${isActive ? "inactive" : "active"}`}
+            aria-label={
+              isProtectedUser
+                ? `${getFullName(row) !== "—" ? getFullName(row) : row.phone} is always active`
+                : `Set ${getFullName(row) !== "—" ? getFullName(row) : row.phone} ${isActive ? "inactive" : "active"}`
+            }
           >
             <span
               className={`h-5 w-5 bg-white rounded-full shadow transform transition ${
