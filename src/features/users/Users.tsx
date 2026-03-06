@@ -235,12 +235,17 @@ export function Users() {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              const phone = row.phone?.trim();
+              if (!phone) {
+                setError("Cannot update status: phone number is missing for this user.");
+                return;
+              }
               const nextStatus = isActive ? "inactive" : "active";
               usersApi
                 .update(row.user_id, {
                   first_name: row.first_name ?? null,
                   last_name: row.last_name ?? null,
-                  phone: row.phone,
+                  phone,
                   email: row.email ?? null,
                   status: nextStatus,
                 })

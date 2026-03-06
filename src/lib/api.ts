@@ -47,6 +47,7 @@ export interface UserListItem {
   last_name?: string | null;
   phone?: string | null;
   email?: string | null;
+  is_participant?: boolean | null;
   status?: string | null;
 }
 
