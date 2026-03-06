@@ -22,6 +22,17 @@ import {
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
+function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function Engagements() {
   const [data, setData] = useState<EngagementListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -388,8 +399,8 @@ export function Engagements() {
     { key: "organization_id", label: "Organisation", sortable: true, render: (r) => getOrgName(r.organization_id ?? 0), hideOnMobile: true },
     { key: "engagement_type", label: "Type", sortable: true, hideOnTablet: true },
     { key: "city", label: "City", sortable: true, hideOnTablet: true },
-    { key: "start_date", label: "Start", sortable: true, hideOnMobile: true },
-    { key: "end_date", label: "End", sortable: true, hideOnTablet: true },
+    { key: "start_date", label: "Start", sortable: true, hideOnMobile: true, render: (r) => formatDate(r.start_date) },
+    { key: "end_date", label: "End", sortable: true, hideOnTablet: true, render: (r) => formatDate(r.end_date) },
     {
       key: "status",
       label: "Status",
