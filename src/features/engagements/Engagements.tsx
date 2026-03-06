@@ -390,7 +390,38 @@ export function Engagements() {
     { key: "city", label: "City", sortable: true, hideOnTablet: true },
     { key: "start_date", label: "Start", sortable: true, hideOnMobile: true },
     { key: "end_date", label: "End", sortable: true, hideOnTablet: true },
-    { key: "status", label: "Status", sortable: true },
+    {
+      key: "status",
+      label: "Status",
+      sortable: true,
+      render: (row) => {
+        const isActive = (row.status ?? "").toLowerCase() === "active";
+        return (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              const nextStatus = isActive ? "inactive" : "active";
+              engagementsApi
+                .updateStatus(row.engagement_id, nextStatus)
+                .then(() => fetchList())
+                .catch((err) => setError(getApiError(err)));
+            }}
+            className={`inline-flex items-center w-12 h-6 rounded-full transition ${
+              isActive ? "bg-emerald-500" : "bg-zinc-300"
+            }`}
+            aria-pressed={isActive}
+            aria-label={`Set ${row.engagement_name ?? "engagement"} ${isActive ? "inactive" : "active"}`}
+          >
+            <span
+              className={`h-5 w-5 bg-white rounded-full shadow transform transition ${
+                isActive ? "translate-x-6" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        );
+      },
+    },
   ];
 
   const handleSort = (key: string) => {
