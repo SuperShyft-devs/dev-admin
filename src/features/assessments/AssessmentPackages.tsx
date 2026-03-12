@@ -1079,7 +1079,7 @@ export function AssessmentPackages() {
         )}
       </div>
 
-      <div className="flex gap-1 mb-5 border-b border-zinc-200 overflow-x-auto">
+      <div className="flex gap-1 mb-5 border-b border-zinc-200">
         {(["packages", "categories", "questions"] as const).map((tab) => (
           <button
             key={tab}
@@ -1105,21 +1105,21 @@ export function AssessmentPackages() {
               </button>
             </div>
           )}
-          <div className="mb-3 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-            <input
-              type="search"
-              placeholder="Search by package name or code..."
-              value={pkgSearch}
-              onChange={(e) => setPkgSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            />
-          </div>
-          <div className="mb-4 flex flex-row gap-2">
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="Search by package name or code..."
+                value={pkgSearch}
+                onChange={(e) => setPkgSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
             <select
               value={pkgStatusFilter}
               onChange={(e) => setPkgStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none sm:w-40 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              className="sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
             >
               <option value="">All statuses</option>
               {PKG_STATUS_OPTIONS.map((status) => (
@@ -1167,43 +1167,45 @@ export function AssessmentPackages() {
               </button>
             </div>
           )}
-          <div className="mb-3 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-            <input
-              type="search"
-              placeholder="Search categories..."
-              value={catSearch}
-              onChange={(e) => setCatSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            />
-          </div>
-          <div className="mb-4 flex flex-row flex-wrap gap-2">
-            <select
-              value={catStatusFilter}
-              onChange={(e) => setCatStatusFilter(e.target.value)}
-              className="flex-1 min-w-[120px] sm:flex-none sm:w-40 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            >
-              <option value="">All statuses</option>
-              {CAT_STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {cap(status)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={catSortKey}
-              onChange={(e) => setCatSortKey(e.target.value as "display_name" | "category_key")}
-              className="flex-1 min-w-[120px] sm:flex-none sm:w-44 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            >
-              <option value="display_name">Sort by Name</option>
-              <option value="category_key">Sort by Key</option>
-            </select>
-            <button
-              onClick={() => setCatSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}
-              className="px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
-            >
-              {catSortDir === "asc" ? "Asc" : "Desc"}
-            </button>
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="Search categories..."
+                value={catSearch}
+                onChange={(e) => setCatSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+            <div className="flex flex-row gap-2 flex-wrap sm:flex-nowrap">
+              <select
+                value={catStatusFilter}
+                onChange={(e) => setCatStatusFilter(e.target.value)}
+                className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">All statuses</option>
+                {CAT_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {cap(status)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={catSortKey}
+                onChange={(e) => setCatSortKey(e.target.value as "display_name" | "category_key")}
+                className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="display_name">Sort by Name</option>
+                <option value="category_key">Sort by Key</option>
+              </select>
+              <button
+                onClick={() => setCatSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}
+                className="px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                {catSortDir === "asc" ? "Asc" : "Desc"}
+              </button>
+            </div>
           </div>
 
           {catLoading ? (
@@ -1305,41 +1307,43 @@ export function AssessmentPackages() {
               </button>
             </div>
           )}
-          <div className="mb-3 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
-            <input
-              type="search"
-              placeholder="Search questions..."
-              value={qSearch}
-              onChange={(e) => setQSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            />
-          </div>
-          <div className="mb-4 flex flex-row flex-wrap gap-2">
-            <select
-              value={qStatusFilter}
-              onChange={(e) => setQStatusFilter(e.target.value)}
-              className="flex-1 min-w-[120px] sm:flex-none sm:w-36 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            >
-              <option value="">All statuses</option>
-              {Q_STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {cap(status)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={qTypeFilter}
-              onChange={(e) => setQTypeFilter(e.target.value)}
-              className="flex-1 min-w-[140px] sm:flex-none sm:w-44 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            >
-              <option value="">All types</option>
-              {QUESTION_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="Search questions..."
+                value={qSearch}
+                onChange={(e) => setQSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+            <div className="flex flex-row gap-2 flex-wrap sm:flex-nowrap">
+              <select
+                value={qStatusFilter}
+                onChange={(e) => setQStatusFilter(e.target.value)}
+                className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">All statuses</option>
+                {Q_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {cap(status)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={qTypeFilter}
+                onChange={(e) => setQTypeFilter(e.target.value)}
+                className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">All types</option>
+                {QUESTION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
             {qLoading ? (
