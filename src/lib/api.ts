@@ -358,10 +358,11 @@ export interface AssessmentPackageUpdate {
   display_name?: string;
 }
 
-export interface PackageQuestion {
-  question_id: number;
-  question_text?: string | null;
-  question_type?: string | null;
+export interface AssessmentPackageCategory {
+  id: number;
+  category_id: number;
+  category_key?: string | null;
+  display_name?: string | null;
   status?: string | null;
 }
 
@@ -379,35 +380,77 @@ export const assessmentPackagesApi = {
     api.put<{ data: { package_id: number } }>(`/assessment-packages/${id}`, payload),
   updateStatus: (id: number, status: string) =>
     api.patch<{ data: { package_id: number; status: string } }>(`/assessment-packages/${id}/status`, { status }),
-  listQuestions: (packageId: number) =>
-    api.get<{ data: PackageQuestion[] }>(`/assessment-packages/${packageId}/questions`),
-  addQuestions: (packageId: number, question_ids: number[]) =>
-    api.post(`/assessment-packages/${packageId}/questions`, { question_ids }),
-  removeQuestion: (packageId: number, questionId: number) =>
-    api.delete(`/assessment-packages/${packageId}/questions/${questionId}`),
+  listCategories: (packageId: number) =>
+    api.get<{ data: AssessmentPackageCategory[] }>(`/assessment-packages/${packageId}/categories`),
+  addCategories: (packageId: number, category_ids: number[]) =>
+    api.post<{ data: { package_id: number; added_category_ids: number[]; skipped_category_ids: number[] } }>(
+      `/assessment-packages/${packageId}/categories`,
+      { category_ids }
+    ),
+  removeCategory: (packageId: number, categoryId: number) =>
+    api.delete<{ data: { package_id: number; removed_category_id: number } }>(
+      `/assessment-packages/${packageId}/categories/${categoryId}`
+    ),
 };
 
 // Questionnaire questions
+export interface QuestionnaireOption {
+  option_value: string;
+  display_name: string;
+  tooltip_text?: string | null;
+}
+
 export interface QuestionnaireQuestion {
   question_id: number;
+  question_key?: string | null;
   question_text?: string | null;
   question_type?: string | null;
-  options?: string[] | null;
+  is_required?: boolean;
+  is_read_only?: boolean;
+  help_text?: string | null;
+  options?: QuestionnaireOption[] | null;
   status?: string | null;
   created_at?: string | null;
+  category_id?: number | null;
+  answer?: unknown;
 }
 
 export interface QuestionnaireQuestionCreate {
+  question_key: string;
   question_text: string;
   question_type: string;
-  options?: string[] | null;
+  is_required?: boolean;
+  is_read_only?: boolean;
+  help_text?: string | null;
+  options?: QuestionnaireOption[] | null;
   status?: string;
 }
 
 export interface QuestionnaireQuestionUpdate {
+  question_key: string;
   question_text: string;
   question_type: string;
-  options?: string[] | null;
+  is_required?: boolean;
+  is_read_only?: boolean;
+  help_text?: string | null;
+  options?: QuestionnaireOption[] | null;
+}
+
+export interface QuestionnaireCategory {
+  category_id: number;
+  category_key: string;
+  display_name: string;
+  status?: string | null;
+}
+
+export interface QuestionnaireCategoryCreate {
+  category_key: string;
+  display_name: string;
+}
+
+export interface QuestionnaireCategoryUpdate {
+  category_key: string;
+  display_name: string;
 }
 
 // Participants
@@ -481,7 +524,7 @@ export const onboardingAssistantsApi = {
 };
 
 export const questionnaireQuestionsApi = {
-  list: (params?: { page?: number; limit?: number; status?: string; question_type?: string }) =>
+  list: (params?: { page?: number; limit?: number; status?: string; type?: string }) =>
     api.get<{ data: QuestionnaireQuestion[]; meta: { page: number; limit: number; total: number } }>(
       "/questionnaire/questions",
       { params: { ...params, limit: params?.limit ?? 100 } }
@@ -496,5 +539,32 @@ export const questionnaireQuestionsApi = {
     api.patch<{ data: { question_id: number; status: string } }>(
       `/questionnaire/questions/${id}/status`,
       { status }
+    ),
+};
+
+export const questionnaireCategoriesApi = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<{ data: QuestionnaireCategory[]; meta: { page: number; limit: number; total: number } }>(
+      "/questionnaire/categories",
+      { params: { ...params, limit: params?.limit ?? 100 } }
+    ),
+  get: (id: number) =>
+    api.get<{ data: QuestionnaireCategory }>(`/questionnaire/categories/${id}`),
+  create: (payload: QuestionnaireCategoryCreate) =>
+    api.post<{ data: { category_id: number } }>("/questionnaire/categories", payload),
+  update: (id: number, payload: QuestionnaireCategoryUpdate) =>
+    api.put<{ data: { category_id: number } }>(`/questionnaire/categories/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { category_id: number; status: string } }>(`/questionnaire/categories/${id}/status`, { status }),
+  listQuestions: (categoryId: number) =>
+    api.get<{ data: QuestionnaireQuestion[] }>(`/questionnaire/categories/${categoryId}/questions`),
+  assignQuestions: (categoryId: number, question_ids: number[]) =>
+    api.post<{ data: { category_id: number; question_ids: number[] } }>(
+      `/questionnaire/categories/${categoryId}/questions`,
+      { question_ids }
+    ),
+  removeQuestion: (categoryId: number, questionId: number) =>
+    api.delete<{ data: { category_id: number; question_id: number } }>(
+      `/questionnaire/categories/${categoryId}/questions/${questionId}`
     ),
 };

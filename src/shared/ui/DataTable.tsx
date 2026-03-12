@@ -37,6 +37,7 @@ interface DataTableProps<T> {
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
   onQuestions?: (row: T) => void;
+  onQuestionsLabel?: string;
   onParticipants?: (row: T) => void;
   onAssistants?: (row: T) => void;
   onOccupiedSlots?: (row: T) => void;
@@ -63,6 +64,7 @@ export function DataTable<T extends object>(
     onEdit,
     onDelete,
     onQuestions,
+    onQuestionsLabel = "Manage Questions",
     onParticipants,
     onAssistants,
     onOccupiedSlots,
@@ -270,7 +272,7 @@ export function DataTable<T extends object>(
                               className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
                             >
                               <ListChecks className="w-4 h-4" />
-                              Manage Questions
+                              {onQuestionsLabel}
                             </button>
                           )}
                           {onDelete && (
