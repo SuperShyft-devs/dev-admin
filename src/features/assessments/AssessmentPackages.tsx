@@ -17,6 +17,7 @@ import {
   type QuestionnaireQuestionUpdate,
   getApiError,
 } from "../../lib/api";
+import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const PKG_STATUS_OPTIONS = ["active", "inactive", "archived"] as const;
 const CAT_STATUS_OPTIONS = ["active", "inactive"] as const;
@@ -421,12 +422,13 @@ export function AssessmentPackages() {
     setPkgLoading(true);
     setPkgError(null);
     try {
-      const res = await assessmentPackagesApi.list({
-        page: pkgPage,
-        limit: pkgLimit,
-        status: pkgStatusFilter || undefined,
-      });
-      let rows = res.data.data;
+      let rows = await fetchAllPages<AssessmentPackage>((page, limit) =>
+        assessmentPackagesApi.list({
+          page,
+          limit,
+          status: pkgStatusFilter || undefined,
+        })
+      );
       if (pkgSearch.trim()) {
         const search = pkgSearch.trim().toLowerCase();
         rows = rows.filter((row) =>
@@ -441,11 +443,12 @@ export function AssessmentPackages() {
         const cmp = aValue.localeCompare(bValue, undefined, { numeric: true });
         return pkgSortDir === "asc" ? cmp : -cmp;
       });
-      setPkgData(sorted);
-      setPkgTotal(res.data.meta.total);
+      setPkgTotal(sorted.length);
+      const pagedRows = sorted.slice((pkgPage - 1) * pkgLimit, pkgPage * pkgLimit);
+      setPkgData(pagedRows);
 
       const counts = await Promise.all(
-        sorted.map(async (pkg) => {
+        pagedRows.map(async (pkg) => {
           try {
             const mapped = await assessmentPackagesApi.listCategories(pkg.package_id);
             return [pkg.package_id, mapped.data.data.length] as const;
@@ -476,8 +479,9 @@ export function AssessmentPackages() {
     setCatLoading(true);
     setCatError(null);
     try {
-      const res = await questionnaireCategoriesApi.list({ page: catPage, limit: catLimit });
-      let rows = res.data.data;
+      let rows = await fetchAllPages<QuestionnaireCategory>((page, limit) =>
+        questionnaireCategoriesApi.list({ page, limit })
+      );
       if (catSearch.trim()) {
         const search = catSearch.trim().toLowerCase();
         rows = rows.filter((row) =>
@@ -494,8 +498,8 @@ export function AssessmentPackages() {
         const cmp = aValue.localeCompare(bValue, undefined, { numeric: true });
         return catSortDir === "asc" ? cmp : -cmp;
       });
-      setCatData(sorted);
-      setCatTotal(res.data.meta.total);
+      setCatTotal(sorted.length);
+      setCatData(sorted.slice((catPage - 1) * catLimit, catPage * catLimit));
     } catch (error) {
       setCatError(getApiError(error));
     } finally {
@@ -517,13 +521,14 @@ export function AssessmentPackages() {
     setQLoading(true);
     setQError(null);
     try {
-      const res = await questionnaireQuestionsApi.list({
-        page: qPage,
-        limit: qLimit,
-        status: qStatusFilter || undefined,
-        type: qTypeFilter || undefined,
-      });
-      let rows = res.data.data;
+      let rows = await fetchAllPages<QuestionnaireQuestion>((page, limit) =>
+        questionnaireQuestionsApi.list({
+          page,
+          limit,
+          status: qStatusFilter || undefined,
+          type: qTypeFilter || undefined,
+        })
+      );
       if (qSearch.trim()) {
         const search = qSearch.trim().toLowerCase();
         rows = rows.filter((row) => (row.question_text ?? "").toLowerCase().includes(search));
@@ -534,8 +539,8 @@ export function AssessmentPackages() {
         const cmp = aValue.localeCompare(bValue, undefined, { numeric: true });
         return qSortDir === "asc" ? cmp : -cmp;
       });
-      setQData(sorted);
-      setQTotal(res.data.meta.total);
+      setQTotal(sorted.length);
+      setQData(sorted.slice((qPage - 1) * qLimit, qPage * qLimit));
     } catch (error) {
       setQError(getApiError(error));
     } finally {

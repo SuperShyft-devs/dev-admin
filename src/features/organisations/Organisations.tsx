@@ -15,6 +15,7 @@ import {
   type OrganizationCreate,
   getApiError,
 } from "../../lib/api";
+import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
@@ -72,12 +73,13 @@ export function Organisations() {
     setLoading(true);
     setError(null);
     try {
-      const res = await organizationsApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-      });
-      let items = res.data.data;
+      let items = await fetchAllPages<OrganizationListItem>((nextPage, nextLimit) =>
+        organizationsApi.list({
+          page: nextPage,
+          limit: nextLimit,
+          status: statusFilter || undefined,
+        })
+      );
       const citySet = new Set<string>();
       const countrySet = new Set<string>();
       items.forEach((item) => {
@@ -113,8 +115,8 @@ export function Organisations() {
         const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
         return sortDir === "asc" ? cmp : -cmp;
       });
-      setData(sorted);
-      setTotal(res.data.meta.total);
+      setTotal(sorted.length);
+      setData(sorted.slice((page - 1) * limit, page * limit));
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -147,6 +149,10 @@ export function Organisations() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, cityFilter, countryFilter]);
 
   const openView = (row: OrganizationListItem) => {
     organizationsApi.get(row.organization_id).then((res) => {

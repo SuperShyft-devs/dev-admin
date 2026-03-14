@@ -19,6 +19,7 @@ import {
   type OnboardingAssistant,
   getApiError,
 } from "../../lib/api";
+import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
@@ -114,12 +115,13 @@ export function Engagements() {
     setLoading(true);
     setError(null);
     try {
-      const res = await engagementsApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-      });
-      let items = res.data.data;
+      let items = await fetchAllPages<EngagementListItem>((nextPage, nextLimit) =>
+        engagementsApi.list({
+          page: nextPage,
+          limit: nextLimit,
+          status: statusFilter || undefined,
+        })
+      );
       const typeSet = new Set<string>();
       const citySet = new Set<string>();
       items.forEach((item) => {
@@ -154,8 +156,8 @@ export function Engagements() {
         const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
         return sortDir === "asc" ? cmp : -cmp;
       });
-      setData(sorted);
-      setTotal(res.data.meta.total);
+      setTotal(sorted.length);
+      setData(sorted.slice((page - 1) * limit, page * limit));
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -171,6 +173,10 @@ export function Engagements() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, typeFilter, cityFilter]);
 
   const openView = (row: EngagementListItem) => {
     engagementsApi.get(row.engagement_id).then((res) => {

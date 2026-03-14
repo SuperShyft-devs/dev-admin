@@ -11,6 +11,7 @@ import {
   type UserListItem,
   getApiError,
 } from "../../lib/api";
+import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
@@ -74,12 +75,13 @@ export function Employees() {
     setLoading(true);
     setError(null);
     try {
-      const res = await employeesApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-      });
-      let items = res.data.data;
+      let items = await fetchAllPages<EmployeeListItem>((nextPage, nextLimit) =>
+        employeesApi.list({
+          page: nextPage,
+          limit: nextLimit,
+          status: statusFilter || undefined,
+        })
+      );
       if (search) {
         const q = search.toLowerCase();
         items = items.filter((e) => {
@@ -100,8 +102,8 @@ export function Employees() {
         const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
         return sortDir === "asc" ? cmp : -cmp;
       });
-      setData(sorted);
-      setTotal(res.data.meta.total);
+      setTotal(sorted.length);
+      setData(sorted.slice((page - 1) * limit, page * limit));
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -116,6 +118,10 @@ export function Employees() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   const openAdd = () => {
     setSelected(null);

@@ -10,6 +10,7 @@ import {
   type UserCreate,
   getApiError,
 } from "../../lib/api";
+import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive"];
 const GENDER_OPTIONS = ["male", "female", "other"];
@@ -58,12 +59,13 @@ export function Users() {
     setLoading(true);
     setError(null);
     try {
-      const res = await usersApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-      });
-      let items = res.data.data;
+      let items = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
+        usersApi.list({
+          page: nextPage,
+          limit: nextLimit,
+          status: statusFilter || undefined,
+        })
+      );
 
       if (search) {
         const q = search.toLowerCase();
@@ -86,8 +88,8 @@ export function Users() {
         return sortDir === "asc" ? cmp : -cmp;
       });
 
-      setData(sorted);
-      setTotal(res.data.meta.total);
+      setTotal(sorted.length);
+      setData(sorted.slice((page - 1) * limit, page * limit));
     } catch (err) {
       setError(getApiError(err));
     } finally {
