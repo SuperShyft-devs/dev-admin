@@ -91,22 +91,45 @@ function QuestionForm({
 }: QuestionFormProps) {
   const showOptions = CHOICE_TYPES.has(value.question_type);
   const options = value.options ?? [];
+  const getSuggestedOptionValue = (displayName: string, index: number) => {
+    const normalized = displayName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return normalized || `option_${index + 1}`;
+  };
 
   const setField = (patch: Partial<QuestionnaireQuestionCreate>) => {
     onChange({ ...value, ...patch });
   };
 
   const addOption = () => {
+    const index = options.length;
     const next: QuestionnaireOption[] = [
       ...options,
-      { option_value: "", display_name: "", tooltip_text: "" },
+      { option_value: `option_${index + 1}`, display_name: "", tooltip_text: "" },
     ];
     setField({ options: next });
   };
 
   const updateOption = (index: number, patch: Partial<QuestionnaireOption>) => {
     const next = [...options];
-    next[index] = { ...next[index], ...patch };
+    const current = next[index];
+    const currentSuggested = getSuggestedOptionValue(current.display_name, index);
+    const isAutoValue =
+      !current.option_value?.trim() || current.option_value === currentSuggested;
+    const displayName =
+      patch.display_name !== undefined ? patch.display_name : current.display_name;
+    const nextPatch: Partial<QuestionnaireOption> = { ...patch };
+    if (
+      patch.display_name !== undefined &&
+      patch.option_value === undefined &&
+      isAutoValue
+    ) {
+      nextPatch.option_value = getSuggestedOptionValue(displayName, index);
+    }
+    next[index] = { ...current, ...nextPatch };
     setField({ options: next });
   };
 
@@ -138,6 +161,9 @@ function QuestionForm({
           placeholder="e.g. diet_preference"
           required
         />
+        <p className="mt-1 text-xs text-zinc-500">
+          Internal key used in integrations and exports. Use lowercase with underscores.
+        </p>
       </div>
 
       <div>
@@ -176,6 +202,9 @@ function QuestionForm({
             </option>
           ))}
         </select>
+        <p className="mt-1 text-xs text-zinc-500">
+          Choose Single/Multiple Choice to configure options below.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -210,6 +239,13 @@ function QuestionForm({
         />
       </div>
 
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+        <p className="text-xs text-zinc-600">
+          Category mapping is managed from{" "}
+          <span className="font-medium text-zinc-700">Categories &rarr; Manage Questions</span>.
+        </p>
+      </div>
+
       {showOptions && (
         <div>
           <label className="block text-sm font-medium text-zinc-700 mb-2">
@@ -219,22 +255,32 @@ function QuestionForm({
             {options.map((option, index) => (
               <div key={index} className="rounded-lg border border-zinc-200 p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={option.option_value}
-                    onChange={(e) => updateOption(index, { option_value: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    placeholder="Option value (e.g. O)"
-                    required
-                  />
-                  <input
-                    type="text"
-                    value={option.display_name}
-                    onChange={(e) => updateOption(index, { display_name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    placeholder="Display name"
-                    required
-                  />
+                  <label>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">
+                      Option Value (stored)
+                    </span>
+                    <input
+                      type="text"
+                      value={option.option_value}
+                      onChange={(e) => updateOption(index, { option_value: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
+                      placeholder={`e.g. ${getSuggestedOptionValue(option.display_name, index)}`}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">
+                      Display Name (shown to users)
+                    </span>
+                    <input
+                      type="text"
+                      value={option.display_name}
+                      onChange={(e) => updateOption(index, { display_name: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      placeholder="e.g. Coastal"
+                      required
+                    />
+                  </label>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
