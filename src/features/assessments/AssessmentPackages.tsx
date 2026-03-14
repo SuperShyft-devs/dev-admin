@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
@@ -31,6 +32,7 @@ const QUESTION_TYPES = [
 const CHOICE_TYPES = new Set(["single_choice", "multiple_choice"]);
 
 type TabKey = "packages" | "categories" | "questions";
+const TAB_KEYS: TabKey[] = ["packages", "categories", "questions"];
 
 const BLANK_QUESTION: QuestionnaireQuestionCreate = {
   question_key: "",
@@ -319,7 +321,17 @@ function QuestionForm({
 }
 
 export function AssessmentPackages() {
-  const [activeTab, setActiveTab] = useState<TabKey>("packages");
+  const navigate = useNavigate();
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const activeTab: TabKey = TAB_KEYS.includes((tabParam ?? "") as TabKey)
+    ? (tabParam as TabKey)
+    : "packages";
+
+  useEffect(() => {
+    if (tabParam !== activeTab) {
+      navigate(`/assessment/${activeTab}`, { replace: true });
+    }
+  }, [activeTab, navigate, tabParam]);
 
   // Packages tab
   const [pkgData, setPkgData] = useState<AssessmentPackage[]>([]);
@@ -1085,10 +1097,10 @@ export function AssessmentPackages() {
       </div>
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
-        {(["packages", "categories", "questions"] as const).map((tab) => (
+        {TAB_KEYS.map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => navigate(`/assessment/${tab}`)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               activeTab === tab
                 ? "border-zinc-900 text-zinc-900"

@@ -18,7 +18,7 @@ const navItems = [
   { to: "/users", icon: UserRound, label: "Users" },
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
-  { to: "/assessment-packages", icon: ClipboardList, label: "Assessments" },
+  { to: "/assessment/packages", icon: ClipboardList, label: "Assessments" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
 

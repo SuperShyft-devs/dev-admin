@@ -40,7 +40,27 @@ function AppRoutes() {
         <Route path="organisations" element={<Organisations />} />
         <Route path="engagements" element={<Engagements />} />
         <Route path="employees" element={<Employees />} />
-        <Route path="assessment-packages" element={<AssessmentPackages />} />
+        <Route
+          path="assessment"
+          element={<Navigate to="/assessment/packages" replace />}
+        />
+        <Route path="assessment/:tab" element={<AssessmentPackages />} />
+        <Route
+          path="assessment-packages"
+          element={<Navigate to="/assessment/packages" replace />}
+        />
+        <Route
+          path="assessment-packages/packages"
+          element={<Navigate to="/assessment/packages" replace />}
+        />
+        <Route
+          path="assessment-packages/categories"
+          element={<Navigate to="/assessment/categories" replace />}
+        />
+        <Route
+          path="assessment-packages/questions"
+          element={<Navigate to="/assessment/questions" replace />}
+        />
         <Route path="users" element={<Users />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
