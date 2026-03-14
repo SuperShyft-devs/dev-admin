@@ -41,25 +41,41 @@ function AppRoutes() {
         <Route path="engagements" element={<Engagements />} />
         <Route path="employees" element={<Employees />} />
         <Route
-          path="assessment"
-          element={<Navigate to="/assessment/packages" replace />}
+          path="assessments"
+          element={<Navigate to="/assessments/packages" replace />}
         />
-        <Route path="assessment/:tab" element={<AssessmentPackages />} />
+        <Route path="assessments/:tab" element={<AssessmentPackages />} />
+        <Route
+          path="assessment"
+          element={<Navigate to="/assessments/packages" replace />}
+        />
+        <Route
+          path="assessment/packages"
+          element={<Navigate to="/assessments/packages" replace />}
+        />
+        <Route
+          path="assessment/categories"
+          element={<Navigate to="/assessments/categories" replace />}
+        />
+        <Route
+          path="assessment/questions"
+          element={<Navigate to="/assessments/questions" replace />}
+        />
         <Route
           path="assessment-packages"
-          element={<Navigate to="/assessment/packages" replace />}
+          element={<Navigate to="/assessments/packages" replace />}
         />
         <Route
           path="assessment-packages/packages"
-          element={<Navigate to="/assessment/packages" replace />}
+          element={<Navigate to="/assessments/packages" replace />}
         />
         <Route
           path="assessment-packages/categories"
-          element={<Navigate to="/assessment/categories" replace />}
+          element={<Navigate to="/assessments/categories" replace />}
         />
         <Route
           path="assessment-packages/questions"
-          element={<Navigate to="/assessment/questions" replace />}
+          element={<Navigate to="/assessments/questions" replace />}
         />
         <Route path="users" element={<Users />} />
       </Route>

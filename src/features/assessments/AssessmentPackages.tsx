@@ -329,7 +329,7 @@ export function AssessmentPackages() {
 
   useEffect(() => {
     if (tabParam !== activeTab) {
-      navigate(`/assessment/${activeTab}`, { replace: true });
+      navigate(`/assessments/${activeTab}`, { replace: true });
     }
   }, [activeTab, navigate, tabParam]);
 
@@ -1100,7 +1100,7 @@ export function AssessmentPackages() {
         {TAB_KEYS.map((tab) => (
           <button
             key={tab}
-            onClick={() => navigate(`/assessment/${tab}`)}
+            onClick={() => navigate(`/assessments/${tab}`)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               activeTab === tab
                 ? "border-zinc-900 text-zinc-900"

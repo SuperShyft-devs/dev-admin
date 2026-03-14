@@ -163,7 +163,7 @@ export function Dashboard() {
     { label: "Users", icon: UserRound, to: "/users" },
     { label: "Organisations", icon: Building2, to: "/organisations" },
     { label: "Engagements", icon: CalendarCheck, to: "/engagements" },
-    { label: "Assessments", icon: ClipboardList, to: "/assessment/packages" },
+    { label: "Assessments", icon: ClipboardList, to: "/assessments/packages" },
     { label: "Employees", icon: Users, to: "/employees" },
   ];
 
