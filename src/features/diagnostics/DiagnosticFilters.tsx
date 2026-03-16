@@ -5,7 +5,12 @@ import { GripVertical, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { SortableItem } from "../../components/SortableItem";
-import { diagnosticFiltersApi, getApiError, type DiagnosticFilter } from "../../lib/api";
+import {
+  diagnosticFiltersApi,
+  diagnosticPackagesApi,
+  getApiError,
+  type DiagnosticFilter,
+} from "../../lib/api";
 
 interface DiagnosticFiltersProps {
   embedded?: boolean;
@@ -34,6 +39,8 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
   const [formData, setFormData] = useState(EMPTY_FILTER);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [reorderSaving, setReorderSaving] = useState(false);
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -50,9 +57,31 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
     }
   }, []);
 
+  const fetchTagOptions = useCallback(async () => {
+    try {
+      const res = await diagnosticPackagesApi.list();
+      const options = Array.from(
+        new Set(
+          (res.data.data ?? []).flatMap((row) =>
+            (row.tags ?? [])
+              .map((tag) => tag.tag_name?.trim())
+              .filter((tagName): tagName is string => !!tagName)
+          )
+        )
+      ).sort((a, b) => a.localeCompare(b));
+      setTagOptions(options);
+    } catch {
+      setTagOptions([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchFilters();
   }, [fetchFilters]);
+
+  useEffect(() => {
+    void fetchTagOptions();
+  }, [fetchTagOptions]);
 
   const filteredRows = useMemo(() => {
     const rows = [...filters].sort(
@@ -68,11 +97,18 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
     );
   }, [filters, search]);
 
+  const filteredTagOptions = useMemo(() => {
+    const query = formData.filter_key.trim().toLowerCase();
+    if (!query) return tagOptions;
+    return tagOptions.filter((tagName) => tagName.toLowerCase().includes(query));
+  }, [tagOptions, formData.filter_key]);
+
   const openAdd = () => {
     setModalMode("add");
     setEditingFilter(null);
     setFormData(EMPTY_FILTER);
     setFormError(null);
+    setShowTagSuggestions(false);
     setModalOpen(true);
   };
 
@@ -86,6 +122,7 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
       display_order: row.display_order != null ? String(row.display_order) : "",
     });
     setFormError(null);
+    setShowTagSuggestions(false);
     setModalOpen(true);
   };
 
@@ -94,12 +131,25 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
       setFormError("Display name and filter key are required.");
       return;
     }
+    if (formData.filter_type === "tag") {
+      const tagMap = new Map(tagOptions.map((tag) => [tag.toLowerCase(), tag]));
+      const canonicalTag = tagMap.get(formData.filter_key.trim().toLowerCase());
+      if (!canonicalTag) {
+        setFormError("Please choose an existing tag from suggestions.");
+        return;
+      }
+    }
     setSubmitting(true);
     setFormError(null);
     try {
+      const payloadFilterKey =
+        formData.filter_type === "tag"
+          ? tagOptions.find((tag) => tag.toLowerCase() === formData.filter_key.trim().toLowerCase()) ??
+            formData.filter_key.trim()
+          : formData.filter_key.trim();
       const payload = {
         display_name: formData.display_name.trim(),
-        filter_key: formData.filter_key.trim(),
+        filter_key: payloadFilterKey,
         filter_type: formData.filter_type || "tag",
         display_order: formData.display_order ? Number(formData.display_order) : undefined,
       };
@@ -284,20 +334,73 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">Filter key</label>
-            <input
-              type="text"
-              value={formData.filter_key}
-              onChange={(e) => setFormData((prev) => ({ ...prev, filter_key: e.target.value }))}
-              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-              required
-            />
+            {formData.filter_type === "tag" ? (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.filter_key}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, filter_key: e.target.value }));
+                    setShowTagSuggestions(true);
+                  }}
+                  onFocus={() => setShowTagSuggestions(true)}
+                  onBlur={() => {
+                    setTimeout(() => setShowTagSuggestions(false), 120);
+                  }}
+                  placeholder={tagOptions.length ? "Type to search tags..." : "No tags available"}
+                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                  autoComplete="off"
+                  required
+                />
+                {showTagSuggestions && formData.filter_type === "tag" && (
+                  <div className="absolute z-20 mt-1 w-full max-h-44 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
+                    {filteredTagOptions.length > 0 ? (
+                      filteredTagOptions.map((tagName) => (
+                        <button
+                          key={tagName}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            setFormData((prev) => ({ ...prev, filter_key: tagName }));
+                            setShowTagSuggestions(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                        >
+                          {tagName}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-zinc-500">No matching tags</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={formData.filter_key}
+                onChange={(e) => setFormData((prev) => ({ ...prev, filter_key: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                required
+              />
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Filter type</label>
               <select
                 value={formData.filter_type}
-                onChange={(e) => setFormData((prev) => ({ ...prev, filter_type: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    filter_type: e.target.value,
+                    filter_key:
+                      e.target.value === "tag" && !tagOptions.includes(prev.filter_key)
+                        ? ""
+                        : prev.filter_key,
+                  }))
+                }
+                onBlur={() => setShowTagSuggestions(false)}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
               >
                 <option value="gender">gender</option>
