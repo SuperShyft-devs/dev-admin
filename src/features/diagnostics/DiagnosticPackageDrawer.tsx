@@ -407,7 +407,10 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
         </div>
 
         <div className="px-4 sm:px-6 border-b border-zinc-200">
-          <div className="flex gap-1 overflow-x-auto">
+          <div
+            className="flex gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
             {[
               { key: "overview", label: "Overview" },
               { key: "reasons", label: "Reasons" },
@@ -430,7 +433,10 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50">
+        <div
+          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
           {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
           {loading ? (
             <div className="text-sm text-zinc-500">Loading...</div>
