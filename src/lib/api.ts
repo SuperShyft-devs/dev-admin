@@ -59,6 +59,37 @@ export function getApiError(err: unknown): string {
   return err instanceof Error ? err.message : "Unknown error";
 }
 
+// Support tickets
+export type SupportTicketStatus = "open" | "resolved" | "closed";
+
+export interface SupportTicket {
+  ticket_id: number;
+  user_id: number | null;
+  contact_input: string;
+  query_text: string;
+  status: SupportTicketStatus;
+  created_at: string;
+}
+
+export interface SupportTicketCreate {
+  contact_input: string;
+  query_text: string;
+}
+
+export const supportApi = {
+  submitTicket: (payload: SupportTicketCreate) =>
+    api.post<{ data: SupportTicket; meta: Record<string, unknown> }>("/support/tickets", payload),
+  listTickets: (params?: { status?: SupportTicketStatus }) =>
+    api.get<{ data: SupportTicket[]; meta: Record<string, unknown> }>("/support/tickets", { params }),
+  getTicket: (ticketId: number) =>
+    api.get<{ data: SupportTicket; meta: Record<string, unknown> }>(`/support/tickets/${ticketId}`),
+  updateTicketStatus: (ticketId: number, status: SupportTicketStatus) =>
+    api.patch<{ data: { ticket_id: number; status: SupportTicketStatus }; meta: Record<string, unknown> }>(
+      `/support/tickets/${ticketId}/status`,
+      { status }
+    ),
+};
+
 // Auth
 export interface AuthTokens {
   user_id: number;

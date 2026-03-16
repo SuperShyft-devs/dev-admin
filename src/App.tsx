@@ -10,6 +10,7 @@ import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 import { Users } from "./features/users/Users";
 import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
 import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
+import { SupportTickets } from "./features/support/SupportTickets";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -83,6 +84,7 @@ function AppRoutes() {
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
         <Route path="diagnostics/filters" element={<DiagnosticFilters />} />
+        <Route path="support" element={<SupportTickets />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

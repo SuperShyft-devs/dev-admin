@@ -11,6 +11,7 @@ import {
   Menu,
   LogOut,
   X,
+  LifeBuoy,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -21,6 +22,7 @@ const navItems = [
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
   { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
+  { to: "/support", icon: LifeBuoy, label: "Support" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
 
