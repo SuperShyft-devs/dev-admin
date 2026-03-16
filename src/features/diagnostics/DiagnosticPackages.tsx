@@ -40,6 +40,10 @@ export function DiagnosticPackages() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
+  const [genderFilter, setGenderFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("add");
@@ -93,12 +97,57 @@ export function DiagnosticPackages() {
     }
   }, [activeTab, fetchPackages]);
 
+  const tagOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows.flatMap((row) =>
+            (row.tags ?? [])
+              .map((tag) => tag.tag_name?.trim())
+              .filter((tagName): tagName is string => !!tagName)
+          )
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
+  const providerOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => row.diagnostic_provider?.trim())
+            .filter((provider): provider is string => !!provider)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
+  const genderOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => row.gender_suitability?.trim().toLowerCase())
+            .filter((gender): gender is string => !!gender)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
   const filteredRows = useMemo(() => {
     const sorted = [...rows].sort((a, b) => a.package_name.localeCompare(b.package_name));
-    if (!search.trim()) return sorted;
-    const q = search.toLowerCase();
-    return sorted.filter((row) => row.package_name.toLowerCase().includes(q));
-  }, [rows, search]);
+    const q = search.trim().toLowerCase();
+
+    return sorted.filter((row) => {
+      if (q && !row.package_name.toLowerCase().includes(q)) return false;
+      if (providerFilter && (row.diagnostic_provider?.trim() ?? "") !== providerFilter) return false;
+      if (genderFilter && (row.gender_suitability?.trim().toLowerCase() ?? "") !== genderFilter) return false;
+      if (statusFilter && (row.status?.trim().toLowerCase() ?? "") !== statusFilter) return false;
+      if (tagFilter && !(row.tags ?? []).some((tag) => (tag.tag_name?.trim() ?? "") === tagFilter)) return false;
+      return true;
+    });
+  }, [rows, search, providerFilter, genderFilter, statusFilter, tagFilter]);
 
   const openCreate = () => {
     setModalMode("add");
@@ -298,8 +347,8 @@ export function DiagnosticPackages() {
         <div>
           {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
 
-          <div className="mb-4">
-            <div className="relative max-w-xl">
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
                 type="search"
@@ -308,6 +357,53 @@ export function DiagnosticPackages() {
                 className="w-full pl-9 pr-4 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-zinc-900"
                 placeholder="Search package name..."
               />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                className="px-3 py-2 border border-zinc-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">All tags</option>
+                {tagOptions.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="px-3 py-2 border border-zinc-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">All providers</option>
+                {providerOptions.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={genderFilter}
+                onChange={(e) => setGenderFilter(e.target.value)}
+                className="px-3 py-2 border border-zinc-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">All genders</option>
+                {genderOptions.map((gender) => (
+                  <option key={gender} value={gender}>
+                    {gender}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-zinc-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">All status</option>
+                <option value="active">active</option>
+                <option value="inactive">inactive</option>
+              </select>
             </div>
           </div>
 
