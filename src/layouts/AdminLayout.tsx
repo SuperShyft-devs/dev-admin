@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   Users,
   ClipboardList,
+  FlaskConical,
   UserRound,
   Menu,
   LogOut,
@@ -19,6 +20,7 @@ const navItems = [
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
+  { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
 

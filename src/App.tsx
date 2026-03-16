@@ -8,6 +8,8 @@ import { Engagements } from "./features/engagements/Engagements";
 import { Employees } from "./features/employees/Employees";
 import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 import { Users } from "./features/users/Users";
+import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
+import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -78,6 +80,9 @@ function AppRoutes() {
           element={<Navigate to="/assessments/questions" replace />}
         />
         <Route path="users" element={<Users />} />
+        <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
+        <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
+        <Route path="diagnostics/filters" element={<DiagnosticFilters />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

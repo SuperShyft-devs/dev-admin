@@ -568,3 +568,206 @@ export const questionnaireCategoriesApi = {
       `/questionnaire/categories/${categoryId}/questions/${questionId}`
     ),
 };
+
+// Diagnostics
+export interface DiagnosticTag {
+  tag_id: number;
+  diagnostic_package_id: number;
+  tag_name: string;
+  display_order?: number | null;
+}
+
+export interface DiagnosticReason {
+  reason_id: number;
+  diagnostic_package_id: number;
+  display_order?: number | null;
+  reason_text: string;
+}
+
+export interface DiagnosticTest {
+  test_id: number;
+  group_id: number;
+  test_name: string;
+  display_order?: number | null;
+  is_available?: boolean;
+}
+
+export interface DiagnosticTestGroup {
+  group_id: number;
+  diagnostic_package_id: number;
+  group_name: string;
+  test_count?: number | null;
+  display_order?: number | null;
+  tests?: DiagnosticTest[];
+}
+
+export interface DiagnosticSample {
+  sample_id: number;
+  diagnostic_package_id: number;
+  sample_type: string;
+  description?: string | null;
+  display_order?: number | null;
+}
+
+export interface DiagnosticPreparation {
+  preparation_id: number;
+  diagnostic_package_id: number;
+  preparation_title: string;
+  steps?: string[] | null;
+  display_order?: number | null;
+}
+
+export interface DiagnosticPackageListItem {
+  diagnostic_package_id: number;
+  package_name: string;
+  diagnostic_provider?: string | null;
+  no_of_tests?: number | null;
+  report_duration_hours?: number | null;
+  collection_type?: string | null;
+  price?: number | null;
+  original_price?: number | null;
+  discount_percent?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
+  status?: string | null;
+  tags?: DiagnosticTag[];
+}
+
+export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
+  about_text?: string | null;
+  bookings_count?: number | null;
+  reasons?: DiagnosticReason[];
+  samples?: DiagnosticSample[];
+  preparations?: DiagnosticPreparation[];
+}
+
+export interface DiagnosticPackageCreate {
+  package_name: string;
+  diagnostic_provider?: string | null;
+  no_of_tests?: number | null;
+  report_duration_hours?: number | null;
+  collection_type?: string | null;
+  about_text?: string | null;
+  bookings_count?: number | null;
+  price?: number | null;
+  original_price?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
+}
+
+export interface DiagnosticFilter {
+  filter_id: number;
+  filter_key: string;
+  display_name: string;
+  display_order?: number | null;
+  filter_type?: string | null;
+  status?: string | null;
+}
+
+export const diagnosticPackagesApi = {
+  list: (params?: { gender?: string; tag?: string }) =>
+    api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
+  get: (id: number) =>
+    api.get<{ data: DiagnosticPackageDetail }>(`/diagnostic-packages/${id}`),
+  getTests: (id: number) =>
+    api.get<{ data: DiagnosticTestGroup[] }>(`/diagnostic-packages/${id}/tests`),
+  create: (payload: DiagnosticPackageCreate) =>
+    api.post<{ data: { diagnostic_package_id: number } }>("/diagnostic-packages", payload),
+  update: (id: number, payload: Partial<DiagnosticPackageCreate>) =>
+    api.put<{ data: { diagnostic_package_id: number } }>(`/diagnostic-packages/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { diagnostic_package_id: number; status: string } }>(
+      `/diagnostic-packages/${id}/status`,
+      { status }
+    ),
+  addReason: (id: number, payload: { reason_text: string; display_order?: number }) =>
+    api.post<{ data: DiagnosticReason }>(`/diagnostic-packages/${id}/reasons`, payload),
+  updateReason: (id: number, reasonId: number, payload: { reason_text?: string; display_order?: number }) =>
+    api.put<{ data: DiagnosticReason }>(`/diagnostic-packages/${id}/reasons/${reasonId}`, payload),
+  deleteReason: (id: number, reasonId: number) =>
+    api.delete<{ data: { reason_id: number; deleted: boolean } }>(`/diagnostic-packages/${id}/reasons/${reasonId}`),
+  addTag: (id: number, payload: { tag_name: string; display_order?: number }) =>
+    api.post<{ data: DiagnosticTag }>(`/diagnostic-packages/${id}/tags`, payload),
+  deleteTag: (id: number, tagId: number) =>
+    api.delete<{ data: { tag_id: number; deleted: boolean } }>(`/diagnostic-packages/${id}/tags/${tagId}`),
+  addTestGroup: (id: number, payload: { group_name: string; test_count?: number; display_order?: number }) =>
+    api.post<{ data: DiagnosticTestGroup }>(`/diagnostic-packages/${id}/test-groups`, payload),
+  updateTestGroup: (
+    id: number,
+    groupId: number,
+    payload: { group_name?: string; test_count?: number; display_order?: number }
+  ) => api.put<{ data: DiagnosticTestGroup }>(`/diagnostic-packages/${id}/test-groups/${groupId}`, payload),
+  deleteTestGroup: (id: number, groupId: number) =>
+    api.delete<{ data: { group_id: number; deleted: boolean } }>(`/diagnostic-packages/${id}/test-groups/${groupId}`),
+  addTest: (
+    id: number,
+    groupId: number,
+    payload: { test_name: string; is_available?: boolean; display_order?: number }
+  ) =>
+    api.post<{ data: DiagnosticTest }>(
+      `/diagnostic-packages/${id}/test-groups/${groupId}/tests`,
+      payload
+    ),
+  updateTest: (
+    id: number,
+    groupId: number,
+    testId: number,
+    payload: { test_name?: string; is_available?: boolean; display_order?: number }
+  ) =>
+    api.put<{ data: DiagnosticTest }>(
+      `/diagnostic-packages/${id}/test-groups/${groupId}/tests/${testId}`,
+      payload
+    ),
+  deleteTest: (id: number, groupId: number, testId: number) =>
+    api.delete<{ data: { test_id: number; deleted: boolean } }>(
+      `/diagnostic-packages/${id}/test-groups/${groupId}/tests/${testId}`
+    ),
+  addSample: (id: number, payload: { sample_type: string; description?: string; display_order?: number }) =>
+    api.post<{ data: DiagnosticSample }>(`/diagnostic-packages/${id}/samples`, payload),
+  updateSample: (
+    id: number,
+    sampleId: number,
+    payload: { sample_type?: string; description?: string; display_order?: number }
+  ) => api.put<{ data: DiagnosticSample }>(`/diagnostic-packages/${id}/samples/${sampleId}`, payload),
+  deleteSample: (id: number, sampleId: number) =>
+    api.delete<{ data: { sample_id: number; deleted: boolean } }>(`/diagnostic-packages/${id}/samples/${sampleId}`),
+  addPreparation: (
+    id: number,
+    payload: { preparation_title: string; steps?: string[]; display_order?: number }
+  ) => api.post<{ data: DiagnosticPreparation }>(`/diagnostic-packages/${id}/preparations`, payload),
+  updatePreparation: (
+    id: number,
+    preparationId: number,
+    payload: { preparation_title?: string; steps?: string[]; display_order?: number }
+  ) =>
+    api.put<{ data: DiagnosticPreparation }>(
+      `/diagnostic-packages/${id}/preparations/${preparationId}`,
+      payload
+    ),
+  deletePreparation: (id: number, preparationId: number) =>
+    api.delete<{ data: { preparation_id: number; deleted: boolean } }>(
+      `/diagnostic-packages/${id}/preparations/${preparationId}`
+    ),
+};
+
+export const diagnosticFiltersApi = {
+  list: () => api.get<{ data: DiagnosticFilter[] }>("/diagnostic-packages/filters"),
+  create: (payload: {
+    display_name: string;
+    filter_key: string;
+    filter_type?: string;
+    display_order?: number;
+  }) => api.post<{ data: DiagnosticFilter }>("/diagnostic-packages/filters", payload),
+  update: (
+    filterId: number,
+    payload: {
+      display_name?: string;
+      filter_key?: string;
+      filter_type?: string;
+      display_order?: number;
+      status?: string;
+    }
+  ) => api.put<{ data: DiagnosticFilter }>(`/diagnostic-packages/filters/${filterId}`, payload),
+  delete: (filterId: number) =>
+    api.delete<{ data: { filter_id: number; deleted: boolean } }>(`/diagnostic-packages/filters/${filterId}`),
+};
