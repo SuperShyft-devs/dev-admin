@@ -50,13 +50,36 @@ export function DiagnosticPackages() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPackageId, setDrawerPackageId] = useState<number | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
 
   const fetchPackages = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await diagnosticPackagesApi.list();
-      setRows(res.data.data ?? []);
+      const baseRows = res.data.data ?? [];
+      const providerMissing = baseRows.some((row) => !row.diagnostic_provider);
+
+      // Some backend list responses can omit provider; hydrate from detail endpoint so table shows real values.
+      if (providerMissing) {
+        const detailed = await Promise.all(
+          baseRows.map(async (row) => {
+            if (row.diagnostic_provider) return row;
+            try {
+              const detailRes = await diagnosticPackagesApi.get(row.diagnostic_package_id);
+              return {
+                ...row,
+                diagnostic_provider: detailRes.data.data.diagnostic_provider ?? row.diagnostic_provider,
+              };
+            } catch {
+              return row;
+            }
+          })
+        );
+        setRows(detailed);
+      } else {
+        setRows(baseRows);
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -112,11 +135,14 @@ export function DiagnosticPackages() {
 
   const toggleStatus = async (row: DiagnosticPackageListItem) => {
     const next = (row.status ?? "active").toLowerCase() === "active" ? "inactive" : "active";
+    setUpdatingStatusId(row.diagnostic_package_id);
     try {
       await diagnosticPackagesApi.updateStatus(row.diagnostic_package_id, next);
       await fetchPackages();
     } catch (err) {
       setError(getApiError(err));
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
 
@@ -161,7 +187,12 @@ export function DiagnosticPackages() {
       label: "Package name",
       render: (row) => <span className="font-medium text-zinc-900">{row.package_name}</span>,
     },
-    { key: "diagnostic_provider", label: "Provider", render: (row) => row.diagnostic_provider ?? "—", hideOnMobile: true },
+    {
+      key: "diagnostic_provider",
+      label: "Provider",
+      render: (row) => row.diagnostic_provider?.trim() || "—",
+      hideOnMobile: true,
+    },
     { key: "no_of_tests", label: "Tests", render: (row) => row.no_of_tests ?? "—", hideOnMobile: true },
     {
       key: "price",
@@ -204,13 +235,18 @@ export function DiagnosticPackages() {
             event.stopPropagation();
             void toggleStatus(row);
           }}
-          className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-medium ${
-            (row.status ?? "").toLowerCase() === "active"
-              ? "bg-green-50 text-green-700"
-              : "bg-zinc-100 text-zinc-500"
+          disabled={updatingStatusId === row.diagnostic_package_id}
+          className={`inline-flex items-center w-12 h-6 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+            (row.status ?? "").toLowerCase() === "active" ? "bg-emerald-500" : "bg-zinc-300"
           }`}
+          aria-pressed={(row.status ?? "").toLowerCase() === "active"}
+          aria-label={`Set ${row.package_name} ${(row.status ?? "").toLowerCase() === "active" ? "inactive" : "active"}`}
         >
-          {(row.status ?? "").toLowerCase() === "active" ? "Active" : "Inactive"}
+          <span
+            className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${
+              (row.status ?? "").toLowerCase() === "active" ? "translate-x-6" : "translate-x-0.5"
+            }`}
+          />
         </button>
       ),
     },
