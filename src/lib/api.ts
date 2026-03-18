@@ -39,6 +39,7 @@ export interface UserProfile {
   last_name?: string | null;
   phone: string;
   email?: string | null;
+  profile_photo?: string | null;
 }
 
 export interface UserListItem {
@@ -47,6 +48,7 @@ export interface UserListItem {
   last_name?: string | null;
   phone?: string | null;
   email?: string | null;
+  profile_photo?: string | null;
   is_participant?: boolean | null;
   status?: string | null;
 }
@@ -120,6 +122,7 @@ export interface UserDetail {
   last_name?: string | null;
   phone: string;
   email?: string | null;
+  profile_photo?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
   address?: string | null;
@@ -139,6 +142,7 @@ export interface UserCreate {
   last_name?: string | null;
   phone: string;
   email?: string | null;
+  profile_photo?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
   address?: string | null;
@@ -177,6 +181,24 @@ export const usersApi = {
     api.put<{ data: { user_id: number; status: string } }>(`/users/${id}`, payload),
   deactivate: (id: number) =>
     api.patch<{ data: { user_id: number; status: string } }>(`/users/${id}/deactivate`),
+};
+
+// Uploads
+export const uploadsApi = {
+  uploadUserProfilePhoto: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: { url: string } }>("/uploads/users/profile-photo", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  uploadOrganizationLogo: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: { url: string } }>("/uploads/organizations/logo", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 // Employees

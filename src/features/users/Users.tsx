@@ -5,6 +5,7 @@ import { Modal } from "../../shared/ui/Modal";
 import {
   usersApi,
   employeesApi,
+  uploadsApi,
   type UserListItem,
   type UserDetail,
   type UserCreate,
@@ -23,6 +24,7 @@ const EMPTY_FORM: UserCreate = {
   last_name: "",
   phone: "",
   email: "",
+  profile_photo: "",
   date_of_birth: "",
   gender: "",
   address: "",
@@ -52,6 +54,7 @@ export function Users() {
   const [selected, setSelected] = useState<UserDetail | null>(null);
   const [formData, setFormData] = useState<UserCreate>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<UserListItem | null>(null);
   const [alwaysActiveUserId, setAlwaysActiveUserId] = useState<number | null>(null);
 
@@ -137,6 +140,7 @@ export function Users() {
           last_name: u.last_name ?? "",
           phone: u.phone ?? "",
           email: u.email ?? "",
+          profile_photo: u.profile_photo ?? "",
           date_of_birth: u.date_of_birth ?? "",
           gender: u.gender ?? "",
           address: u.address ?? "",
@@ -167,6 +171,7 @@ export function Users() {
         first_name: formData.first_name || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
+        profile_photo: formData.profile_photo || null,
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
         address: formData.address || null,
@@ -215,6 +220,20 @@ export function Users() {
   const getFullName = (u: UserListItem | UserDetail) => {
     const name = [u.first_name, u.last_name].filter(Boolean).join(" ");
     return name || "—";
+  };
+
+  const handlePhotoUpload = async (file?: File) => {
+    if (!file) return;
+    setPhotoUploading(true);
+    setError(null);
+    try {
+      const res = await uploadsApi.uploadUserProfilePhoto(file);
+      setFormData((prev) => ({ ...prev, profile_photo: res.data.data.url }));
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setPhotoUploading(false);
+    }
   };
 
   const columns: Column<UserListItem>[] = [
@@ -405,6 +424,7 @@ export function Users() {
                 {field("Last Name", selected.last_name)}
                 {field("Phone", selected.phone)}
                 {field("Email", selected.email)}
+                {field("Profile Photo URL", selected.profile_photo)}
                 {field("Date of Birth", formatDate(selected.date_of_birth))}
                 {field("Gender", selected.gender)}
               </div>
@@ -509,6 +529,29 @@ export function Users() {
                     className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                     placeholder="email@example.com"
                   />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Profile Photo URL</label>
+                  <input
+                    type="url"
+                    value={formData.profile_photo ?? ""}
+                    onChange={(e) => setFormData({ ...formData, profile_photo: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    placeholder="https://"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Upload Profile Photo</label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => void handlePhotoUpload(e.target.files?.[0])}
+                    className="w-full text-sm"
+                    disabled={photoUploading}
+                  />
+                  {photoUploading && (
+                    <p className="mt-1 text-xs text-zinc-500">Uploading profile photo...</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-1">Date of Birth</label>

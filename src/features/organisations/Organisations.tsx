@@ -8,6 +8,7 @@ import {
   organizationsApi,
   employeesApi,
   usersApi,
+  uploadsApi,
   type EmployeeListItem,
   type UserListItem,
   type OrganizationListItem,
@@ -58,6 +59,7 @@ export function Organisations() {
   const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<OrganizationListItem | null>(null);
 
   const [participantsOrg, setParticipantsOrg] = useState<{
@@ -240,6 +242,20 @@ export function Organisations() {
       setError(getApiError(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleLogoUpload = async (file?: File) => {
+    if (!file) return;
+    setLogoUploading(true);
+    setError(null);
+    try {
+      const res = await uploadsApi.uploadOrganizationLogo(file);
+      setFormData((prev) => ({ ...prev, logo: res.data.data.url }));
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -484,6 +500,19 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   placeholder="https://"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Upload Logo</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => void handleLogoUpload(e.target.files?.[0])}
+                  className="w-full text-sm"
+                  disabled={logoUploading}
+                />
+                {logoUploading && (
+                  <p className="mt-1 text-xs text-zinc-500">Uploading logo...</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Website</label>
