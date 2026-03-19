@@ -10,8 +10,10 @@ import {
 } from "../../lib/api";
 import { DiagnosticFilters } from "./DiagnosticFilters";
 import { DiagnosticPackageDrawer } from "./DiagnosticPackageDrawer";
+import { DiagnosticTests } from "./DiagnosticTests";
+import { DiagnosticTestGroups } from "./DiagnosticTestGroups";
 
-type TabKey = "packages" | "filters";
+type TabKey = "packages" | "test-groups" | "tests" | "filters";
 type ModalMode = "add" | "edit";
 
 const EMPTY_FORM: DiagnosticPackageCreate = {
@@ -55,6 +57,8 @@ export function DiagnosticPackages() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPackageId, setDrawerPackageId] = useState<number | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
+  const [openCreateTestGroup, setOpenCreateTestGroup] = useState<(() => void) | null>(null);
+  const [openCreateTest, setOpenCreateTest] = useState<(() => void) | null>(null);
 
   const fetchPackages = useCallback(async () => {
     setLoading(true);
@@ -316,6 +320,26 @@ export function DiagnosticPackages() {
             Add Package
           </button>
         )}
+        {activeTab === "test-groups" && (
+          <button
+            type="button"
+            onClick={() => openCreateTestGroup?.()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            <Plus className="w-4 h-4" />
+            Add Test Group
+          </button>
+        )}
+        {activeTab === "tests" && (
+          <button
+            type="button"
+            onClick={() => openCreateTest?.()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            <Plus className="w-4 h-4" />
+            Add Test
+          </button>
+        )}
       </div>
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
@@ -329,6 +353,28 @@ export function DiagnosticPackages() {
           }`}
         >
           Packages
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("test-groups")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+            activeTab === "test-groups"
+              ? "border-zinc-900 text-zinc-900"
+              : "border-transparent text-zinc-500 hover:text-zinc-700"
+          }`}
+        >
+          Test Groups
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("tests")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+            activeTab === "tests"
+              ? "border-zinc-900 text-zinc-900"
+              : "border-transparent text-zinc-500 hover:text-zinc-700"
+          }`}
+        >
+          Tests
         </button>
         <button
           type="button"
@@ -424,6 +470,10 @@ export function DiagnosticPackages() {
             )}
           </div>
         </div>
+      ) : activeTab === "test-groups" ? (
+        <DiagnosticTestGroups onRequestCreate={(trigger) => setOpenCreateTestGroup(() => trigger)} />
+      ) : activeTab === "tests" ? (
+        <DiagnosticTests onRequestCreate={(trigger) => setOpenCreateTest(() => trigger)} />
       ) : (
         <DiagnosticFilters embedded />
       )}

@@ -155,9 +155,7 @@ export interface UserCreate {
   status?: string | null;
 }
 
-export interface UserUpdate extends UserCreate {
-  // phone is required for update too
-}
+export type UserUpdate = UserCreate;
 
 export const usersApi = {
   me: () => api.get<{ data: UserProfile }>("/users/me"),
@@ -723,7 +721,7 @@ export const diagnosticPackagesApi = {
   get: (id: number) =>
     api.get<{ data: DiagnosticPackageDetail }>(`/diagnostic-packages/${id}`),
   getTests: (id: number) =>
-    api.get<{ data: DiagnosticTestGroup[] }>(`/diagnostic-packages/${id}/tests`),
+    api.get<{ data: PackageTestsResponse }>(`/diagnostic-packages/${id}/tests`),
   create: (payload: DiagnosticPackageCreate) =>
     api.post<{ data: { diagnostic_package_id: number } }>("/diagnostic-packages", payload),
   update: (id: number, payload: Partial<DiagnosticPackageCreate>) =>
@@ -801,6 +799,12 @@ export const diagnosticPackagesApi = {
     api.delete<{ data: { preparation_id: number; deleted: boolean } }>(
       `/diagnostic-packages/${id}/preparations/${preparationId}`
     ),
+  assignTestGroups: (id: number, payload: { group_ids: number[] }) =>
+    api.post<{ data: AssignGroupsToPackageResponse }>(`/diagnostic-packages/${id}/test-groups`, payload),
+  reorderTestGroups: (id: number, payload: { group_ids: number[] }) =>
+    api.patch<{ data: ReorderPackageGroupsResponse }>(`/diagnostic-packages/${id}/test-groups/order`, payload),
+  removeTestGroup: (id: number, groupId: number) =>
+    api.delete(`/diagnostic-packages/${id}/test-groups/${groupId}`),
 };
 
 export const diagnosticFiltersApi = {
@@ -823,4 +827,78 @@ export const diagnosticFiltersApi = {
   ) => api.put<{ data: DiagnosticFilter }>(`/diagnostic-packages/filters/${filterId}`, payload),
   delete: (filterId: number) =>
     api.delete<{ data: { filter_id: number; deleted: boolean } }>(`/diagnostic-packages/filters/${filterId}`),
+};
+
+export interface DiagnosticTestStandalone {
+  test_id: number;
+  test_name: string;
+  is_available: boolean;
+  display_order?: number | null;
+}
+
+export interface DiagnosticTestGroupStandalone {
+  group_id: number;
+  group_name: string;
+  display_order?: number | null;
+  test_count: number;
+  tests?: DiagnosticTestStandalone[];
+}
+
+export interface AssignTestsToGroupResponse {
+  group_id: number;
+  added_test_ids: number[];
+  skipped_test_ids: number[];
+}
+
+export interface ReorderGroupTestsResponse {
+  group_id: number;
+  test_ids: number[];
+}
+
+export interface AssignGroupsToPackageResponse {
+  diagnostic_package_id: number;
+  added_group_ids: number[];
+  skipped_group_ids: number[];
+}
+
+export interface ReorderPackageGroupsResponse {
+  diagnostic_package_id: number;
+  group_ids: number[];
+}
+
+export interface PackageTestsResponse {
+  diagnostic_package_id: number;
+  groups: DiagnosticTestGroupStandalone[];
+}
+
+export const diagnosticTestsApi = {
+  list: () => api.get<{ data: DiagnosticTestStandalone[] }>("/diagnostic-tests"),
+  get: (testId: number) =>
+    api.get<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`),
+  create: (payload: { test_name: string; is_available?: boolean; display_order?: number }) =>
+    api.post<{ data: DiagnosticTestStandalone }>("/diagnostic-tests", payload),
+  update: (
+    testId: number,
+    payload: { test_name?: string; is_available?: boolean; display_order?: number }
+  ) => api.put<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`, payload),
+  delete: (testId: number) => api.delete(`/diagnostic-tests/${testId}`),
+};
+
+export const diagnosticTestGroupsApi = {
+  list: () => api.get<{ data: DiagnosticTestGroupStandalone[] }>("/diagnostic-test-groups"),
+  get: (groupId: number) =>
+    api.get<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`),
+  create: (payload: { group_name: string; display_order?: number }) =>
+    api.post<{ data: DiagnosticTestGroupStandalone }>("/diagnostic-test-groups", payload),
+  update: (groupId: number, payload: { group_name?: string; display_order?: number }) =>
+    api.put<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`, payload),
+  delete: (groupId: number) => api.delete(`/diagnostic-test-groups/${groupId}`),
+  getTests: (groupId: number) =>
+    api.get<{ data: DiagnosticTestStandalone[] }>(`/diagnostic-test-groups/${groupId}/tests`),
+  assignTests: (groupId: number, payload: { test_ids: number[] }) =>
+    api.post<{ data: AssignTestsToGroupResponse }>(`/diagnostic-test-groups/${groupId}/tests`, payload),
+  reorderTests: (groupId: number, payload: { test_ids: number[] }) =>
+    api.patch<{ data: ReorderGroupTestsResponse }>(`/diagnostic-test-groups/${groupId}/tests/order`, payload),
+  removeTest: (groupId: number, testId: number) =>
+    api.delete(`/diagnostic-test-groups/${groupId}/tests/${testId}`),
 };

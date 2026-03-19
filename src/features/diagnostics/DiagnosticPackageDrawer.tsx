@@ -9,26 +9,29 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
+  Loader2,
   ChevronDown,
   ChevronRight,
   GripVertical,
   Pencil,
   Plus,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
 import {
   diagnosticPackagesApi,
+  diagnosticTestGroupsApi,
   getApiError,
   type DiagnosticPackageDetail,
   type DiagnosticPreparation,
   type DiagnosticReason,
   type DiagnosticSample,
   type DiagnosticTag,
-  type DiagnosticTest,
-  type DiagnosticTestGroup,
+  type DiagnosticTestGroupStandalone,
 } from "../../lib/api";
 import { SortableItem } from "../../components/SortableItem";
+import { Modal } from "../../shared/ui/Modal";
 
 interface DiagnosticPackageDrawerProps {
   open: boolean;
@@ -44,15 +47,22 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DiagnosticPackageDetail | null>(null);
-  const [testGroups, setTestGroups] = useState<DiagnosticTestGroup[]>([]);
+  const [testGroups, setTestGroups] = useState<DiagnosticTestGroupStandalone[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
 
   const [tagInput, setTagInput] = useState("");
   const [reasonInput, setReasonInput] = useState("");
   const [editingReasonId, setEditingReasonId] = useState<number | null>(null);
   const [editingReasonText, setEditingReasonText] = useState("");
-  const [groupInput, setGroupInput] = useState("");
-  const [newTestInputs, setNewTestInputs] = useState<Record<number, string>>({});
+  const [assignGroupsModalOpen, setAssignGroupsModalOpen] = useState(false);
+  const [assignGroupsLoading, setAssignGroupsLoading] = useState(false);
+  const [assignGroupsSubmitting, setAssignGroupsSubmitting] = useState(false);
+  const [assignGroupsError, setAssignGroupsError] = useState<string | null>(null);
+  const [assignGroupsSearch, setAssignGroupsSearch] = useState("");
+  const [allGroups, setAllGroups] = useState<DiagnosticTestGroupStandalone[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  const [assignGroupsNote, setAssignGroupsNote] = useState<string | null>(null);
+  const [reorderingGroups, setReorderingGroups] = useState(false);
 
   const [sampleFormOpen, setSampleFormOpen] = useState(false);
   const [sampleForm, setSampleForm] = useState({ sample_type: "", description: "" });
@@ -101,12 +111,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
         diagnosticPackagesApi.getTests(packageId),
       ]);
       const nextDetail = detailRes.data.data;
-      const nextGroups = (testsRes.data.data ?? []).map((group) => ({
-        ...group,
-        tests: [...(group.tests ?? [])].sort(
-          (a, b) => (a.display_order ?? Number.MAX_SAFE_INTEGER) - (b.display_order ?? Number.MAX_SAFE_INTEGER)
-        ),
-      }));
+      const nextGroups = testsRes.data.data?.groups ?? [];
       setDetail(nextDetail);
       setTestGroups(nextGroups);
       setExpandedGroups(Object.fromEntries(nextGroups.map((group) => [group.group_id, true])));
@@ -204,113 +209,112 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
     void reorderReasons(updated);
   };
 
-  const addGroup = async () => {
-    if (!packageId || !groupInput.trim()) return;
-    await withBusy("add-group", async () => {
-      await diagnosticPackagesApi.addTestGroup(packageId, {
-        group_name: groupInput.trim(),
-        display_order: testGroups.length + 1,
-      });
-      setGroupInput("");
-    });
-  };
-
-  const editGroup = async (group: DiagnosticTestGroup) => {
+  const removeAssignedGroup = async (groupId: number) => {
     if (!packageId) return;
-    const name = window.prompt("Edit group name", group.group_name);
-    if (!name || !name.trim()) return;
-    await withBusy(`edit-group-${group.group_id}`, async () => {
-      await diagnosticPackagesApi.updateTestGroup(packageId, group.group_id, {
-        group_name: name.trim(),
-        test_count: group.tests?.length ?? group.test_count ?? 0,
-      });
+    if (!window.confirm("Remove this test group from the package?")) return;
+    await withBusy(`remove-group-${groupId}`, async () => {
+      await diagnosticPackagesApi.removeTestGroup(packageId, groupId);
     });
   };
 
-  const deleteGroup = async (group: DiagnosticTestGroup) => {
+  const openAssignGroupsModal = async () => {
     if (!packageId) return;
-    if (!window.confirm("This will delete all tests in this group. Continue?")) return;
-    await withBusy(`delete-group-${group.group_id}`, async () => {
-      await diagnosticPackagesApi.deleteTestGroup(packageId, group.group_id);
-    });
+    setAssignGroupsModalOpen(true);
+    setAssignGroupsLoading(true);
+    setAssignGroupsSubmitting(false);
+    setAssignGroupsError(null);
+    setAssignGroupsSearch("");
+    setAssignGroupsNote(null);
+    try {
+      const [allGroupsRes, assignedRes] = await Promise.all([
+        diagnosticTestGroupsApi.list(),
+        diagnosticPackagesApi.getTests(packageId),
+      ]);
+      const all = allGroupsRes.data.data ?? [];
+      const assigned = assignedRes.data.data?.groups ?? [];
+      setAllGroups(all);
+      setSelectedGroupIds(assigned.map((group) => group.group_id));
+    } catch (err) {
+      setAssignGroupsError(getApiError(err));
+    } finally {
+      setAssignGroupsLoading(false);
+    }
   };
 
-  const onGroupDragEnd = (event: DragEndEvent) => {
+  const toggleGroupSelection = (groupId: number) => {
+    setSelectedGroupIds((prev) => (prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]));
+  };
+
+  const filteredAllGroups = useMemo(() => {
+    const q = assignGroupsSearch.trim().toLowerCase();
+    return allGroups.filter((group) => !q || group.group_name.toLowerCase().includes(q));
+  }, [allGroups, assignGroupsSearch]);
+
+  const selectedAssignGroups = useMemo(() => {
+    const map = new Map(allGroups.map((group) => [group.group_id, group]));
+    return selectedGroupIds.map((groupId) => map.get(groupId)).filter((group): group is DiagnosticTestGroupStandalone => Boolean(group));
+  }, [allGroups, selectedGroupIds]);
+
+  const onSelectedAssignGroupsDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id || !packageId) return;
+    if (!over || active.id === over.id) return;
+    const oldIndex = selectedGroupIds.findIndex((id) => id === Number(active.id));
+    const newIndex = selectedGroupIds.findIndex((id) => id === Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    setSelectedGroupIds((prev) => arrayMove(prev, oldIndex, newIndex));
+  };
+
+  const onAssignedGroupsDragEnd = async (event: DragEndEvent) => {
+    if (!packageId || reorderingGroups || testGroups.length < 2) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
     const oldIndex = testGroups.findIndex((group) => group.group_id === Number(active.id));
     const newIndex = testGroups.findIndex((group) => group.group_id === Number(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
-    const updated = arrayMove(testGroups, oldIndex, newIndex);
-    setTestGroups(updated);
-    void withBusy("reorder-groups", async () => {
-      await Promise.all(
-        updated.map((group, index) =>
-          diagnosticPackagesApi.updateTestGroup(packageId, group.group_id, {
-            display_order: index + 1,
-            group_name: group.group_name,
-            test_count: group.tests?.length ?? group.test_count ?? 0,
-          })
-        )
-      );
-    });
+    const previous = [...testGroups];
+    const next = arrayMove(testGroups, oldIndex, newIndex);
+    setTestGroups(next);
+    setReorderingGroups(true);
+    setError(null);
+    try {
+      await diagnosticPackagesApi.reorderTestGroups(packageId, { group_ids: next.map((group) => group.group_id) });
+      await fetchData();
+      onUpdated?.();
+    } catch (err) {
+      setTestGroups(previous);
+      setError(getApiError(err));
+    } finally {
+      setReorderingGroups(false);
+    }
   };
 
-  const addTest = async (group: DiagnosticTestGroup) => {
+  const assignSelectedGroups = async () => {
     if (!packageId) return;
-    const value = (newTestInputs[group.group_id] ?? "").trim();
-    if (!value) return;
-    await withBusy(`add-test-${group.group_id}`, async () => {
-      await diagnosticPackagesApi.addTest(packageId, group.group_id, {
-        test_name: value,
-        is_available: true,
-        display_order: (group.tests?.length ?? 0) + 1,
-      });
-      setNewTestInputs((prev) => ({ ...prev, [group.group_id]: "" }));
-    });
-  };
-
-  const toggleTestAvailability = async (groupId: number, test: DiagnosticTest) => {
-    if (!packageId) return;
-    await withBusy(`toggle-test-${test.test_id}`, async () => {
-      await diagnosticPackagesApi.updateTest(packageId, groupId, test.test_id, {
-        is_available: !test.is_available,
-      });
-    });
-  };
-
-  const deleteTest = async (groupId: number, test: DiagnosticTest) => {
-    if (!packageId) return;
-    await withBusy(`delete-test-${test.test_id}`, async () => {
-      await diagnosticPackagesApi.deleteTest(packageId, groupId, test.test_id);
-    });
-  };
-
-  const reorderGroupTests = async (groupId: number, nextRows: DiagnosticTest[]) => {
-    if (!packageId) return;
-    await withBusy(`reorder-tests-${groupId}`, async () => {
-      await Promise.all(
-        nextRows.map((row, index) =>
-          diagnosticPackagesApi.updateTest(packageId, groupId, row.test_id, {
-            display_order: index + 1,
-          })
-        )
-      );
-    });
-  };
-
-  const onTestDragEnd = (group: DiagnosticTestGroup, event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const rows = [...(group.tests ?? [])];
-    const oldIndex = rows.findIndex((test) => test.test_id === Number(active.id));
-    const newIndex = rows.findIndex((test) => test.test_id === Number(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    const updated = arrayMove(rows, oldIndex, newIndex);
-    setTestGroups((prev) =>
-      prev.map((item) => (item.group_id === group.group_id ? { ...item, tests: updated } : item))
-    );
-    void reorderGroupTests(group.group_id, updated);
+    if (selectedGroupIds.length === 0) {
+      setAssignGroupsError("Select at least one test group.");
+      return;
+    }
+    setAssignGroupsSubmitting(true);
+    setAssignGroupsError(null);
+    try {
+      const res = await diagnosticPackagesApi.assignTestGroups(packageId, { group_ids: selectedGroupIds });
+      const latestAssignedRes = await diagnosticPackagesApi.getTests(packageId);
+      const latestAssignedIds = (latestAssignedRes.data.data?.groups ?? []).map((group) => group.group_id);
+      const orderedIds = [
+        ...selectedGroupIds,
+        ...latestAssignedIds.filter((groupId) => !selectedGroupIds.includes(groupId)),
+      ];
+      await diagnosticPackagesApi.reorderTestGroups(packageId, { group_ids: orderedIds });
+      const data = res.data.data;
+      setAssignGroupsNote(`${data.added_group_ids.length} groups added. ${data.skipped_group_ids.length} already assigned (skipped).`);
+      setAssignGroupsModalOpen(false);
+      await fetchData();
+      onUpdated?.();
+    } catch (err) {
+      setAssignGroupsError(getApiError(err));
+    } finally {
+      setAssignGroupsSubmitting(false);
+    }
   };
 
   const addSample = async () => {
@@ -569,117 +573,91 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
             </div>
           ) : activeTab === "tests" ? (
             <div className="space-y-3">
-              <div className="bg-white border border-zinc-200 rounded-xl p-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={groupInput}
-                    onChange={(e) => setGroupInput(e.target.value)}
-                    className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                    placeholder="Add test group"
-                  />
-                  <button type="button" onClick={() => void addGroup()} className="px-3 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 text-sm inline-flex items-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    Add Group
-                  </button>
+              {assignGroupsNote && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+                  {assignGroupsNote}
                 </div>
-              </div>
-
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onGroupDragEnd}>
-                <SortableContext items={testGroups.map((group) => group.group_id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-2">
-                    {testGroups.map((group) => (
-                      <SortableItem
-                        key={group.group_id}
-                        id={group.group_id}
-                        handle={<GripVertical className="w-4 h-4" />}
-                        className="bg-white border border-zinc-200 rounded-xl p-3"
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedGroups((prev) => ({ ...prev, [group.group_id]: !prev[group.group_id] }))
-                              }
-                              className="inline-flex items-center gap-2 text-left"
-                            >
-                              {expandedGroups[group.group_id] ? <ChevronDown className="w-4 h-4 text-zinc-500" /> : <ChevronRight className="w-4 h-4 text-zinc-500" />}
-                              <span className="text-sm font-medium text-zinc-900">{group.group_name}</span>
-                              <span className="text-xs text-zinc-500">({group.tests?.length ?? 0})</span>
-                            </button>
-                            <div className="flex items-center gap-1">
-                              <button type="button" onClick={() => void editGroup(group)} className="p-1.5 rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700">
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button type="button" onClick={() => void deleteGroup(group)} className="p-1.5 rounded text-zinc-500 hover:bg-zinc-100 hover:text-red-600">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {expandedGroups[group.group_id] && (
-                            <div className="space-y-2 pl-1">
-                              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => onTestDragEnd(group, event)}>
-                                <SortableContext items={(group.tests ?? []).map((test) => test.test_id)} strategy={verticalListSortingStrategy}>
-                                  <div className="space-y-2">
-                                    {(group.tests ?? []).map((test) => (
-                                      <SortableItem
-                                        key={test.test_id}
-                                        id={test.test_id}
-                                        handle={<GripVertical className="w-4 h-4" />}
-                                        className="border border-zinc-200 rounded-lg px-3 py-2 bg-zinc-50"
-                                      >
-                                        <div className="flex items-center justify-between gap-3">
-                                          <div className="min-w-0">
-                                            <p className="text-sm text-zinc-900 truncate">{test.test_name}</p>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              type="button"
-                                              onClick={() => void toggleTestAvailability(group.group_id, test)}
-                                              className={`inline-flex items-center w-10 h-5 rounded-full ${
-                                                test.is_available ? "bg-zinc-900" : "bg-zinc-300"
-                                              }`}
-                                              aria-label="Toggle availability"
-                                            >
-                                              <span
-                                                className={`h-4 w-4 rounded-full bg-white transform transition ${
-                                                  test.is_available ? "translate-x-5" : "translate-x-0.5"
-                                                }`}
-                                              />
-                                            </button>
-                                            <button type="button" onClick={() => void deleteTest(group.group_id, test)} className="p-1 rounded text-zinc-500 hover:bg-zinc-100 hover:text-red-600">
-                                              <Trash2 className="w-4 h-4" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </SortableItem>
-                                    ))}
-                                  </div>
-                                </SortableContext>
-                              </DndContext>
-
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={newTestInputs[group.group_id] ?? ""}
-                                  onChange={(e) => setNewTestInputs((prev) => ({ ...prev, [group.group_id]: e.target.value }))}
-                                  className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                                  placeholder="Add test"
-                                />
-                                <button type="button" onClick={() => void addTest(group)} className="px-3 py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 text-sm">
-                                  Add Test
+              )}
+              <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-medium text-zinc-900">Assigned Test Groups</h3>
+                {testGroups.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No test groups assigned. Use the button below to assign.</p>
+                ) : (
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void onAssignedGroupsDragEnd(event)}>
+                    <SortableContext items={testGroups.map((group) => group.group_id)} strategy={verticalListSortingStrategy}>
+                      <div className="space-y-2">
+                        {testGroups.map((group) => (
+                          <SortableItem
+                            key={group.group_id}
+                            id={group.group_id}
+                            handle={<GripVertical className="w-4 h-4" />}
+                            className="border border-zinc-200 rounded-lg bg-zinc-50"
+                          >
+                            <div>
+                              <div className="px-3 py-2 flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedGroups((prev) => ({ ...prev, [group.group_id]: !prev[group.group_id] }))
+                                  }
+                                  className="inline-flex items-center gap-2 text-left"
+                                >
+                                  {expandedGroups[group.group_id] ? (
+                                    <ChevronDown className="w-4 h-4 text-zinc-500" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-zinc-500" />
+                                  )}
+                                  <span className="text-sm font-medium text-zinc-900">{group.group_name}</span>
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
+                                    {group.test_count}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void removeAssignedGroup(group.group_id)}
+                                  className="px-2 py-1 rounded border border-zinc-200 text-zinc-700 hover:bg-zinc-50 text-xs"
+                                >
+                                  Remove
                                 </button>
                               </div>
+                              {expandedGroups[group.group_id] && (
+                                <div className="px-3 pb-3 space-y-2">
+                                  {(group.tests ?? []).length === 0 ? (
+                                    <p className="text-sm text-zinc-500">No tests in this group.</p>
+                                  ) : (
+                                    (group.tests ?? []).map((test) => (
+                                      <div key={test.test_id} className="border border-zinc-200 rounded-lg px-3 py-2 bg-white">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-sm text-zinc-900">{test.test_name}</p>
+                                          <span
+                                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                                              test.is_available ? "bg-green-50 text-green-700" : "bg-zinc-100 text-zinc-500"
+                                            }`}
+                                          >
+                                            {test.is_available ? "Yes" : "No"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </SortableItem>
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
+                          </SortableItem>
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void openAssignGroupsModal()}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 text-sm font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Assign Test Groups
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -896,6 +874,112 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
             </div>
           )}
         </div>
+
+        <Modal
+          open={assignGroupsModalOpen}
+          onClose={() => setAssignGroupsModalOpen(false)}
+          title="Assign Test Groups to Package"
+          maxWidthClassName="max-w-2xl"
+        >
+          <div className="space-y-4">
+            {assignGroupsError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {assignGroupsError}
+              </div>
+            )}
+            <div className="relative min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input
+                type="search"
+                value={assignGroupsSearch}
+                onChange={(e) => setAssignGroupsSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-zinc-900"
+                placeholder="Search groups..."
+              />
+            </div>
+
+            {assignGroupsLoading ? (
+              <div className="py-10 flex justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="max-h-56 overflow-y-auto border border-zinc-200 rounded-lg bg-white">
+                  {filteredAllGroups.map((group) => (
+                    <label
+                      key={group.group_id}
+                      className="flex items-center justify-between gap-3 px-3 py-2 border-b last:border-b-0 border-zinc-200"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroupIds.includes(group.group_id)}
+                          onChange={() => toggleGroupSelection(group.group_id)}
+                        />
+                        <span className="text-sm text-zinc-900 truncate">{group.group_name}</span>
+                      </div>
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
+                        {group.test_count}
+                      </span>
+                    </label>
+                  ))}
+                  {filteredAllGroups.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-zinc-500">No groups found.</div>
+                  )}
+                </div>
+                <div className="border border-zinc-200 rounded-lg bg-zinc-50 p-3">
+                  <p className="text-sm font-medium text-zinc-900 mb-2">Selected order</p>
+                  {selectedAssignGroups.length === 0 ? (
+                    <p className="text-sm text-zinc-500">Select test groups to set their order.</p>
+                  ) : (
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSelectedAssignGroupsDragEnd}>
+                      <SortableContext items={selectedGroupIds} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-2">
+                          {selectedAssignGroups.map((group, index) => (
+                            <SortableItem
+                              key={group.group_id}
+                              id={group.group_id}
+                              handle={<GripVertical className="w-4 h-4" />}
+                              className="border border-zinc-200 rounded-lg px-3 py-2 bg-white"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-zinc-500">#{index + 1}</p>
+                                  <p className="text-sm text-zinc-900 truncate">{group.group_name}</p>
+                                </div>
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
+                                  {group.test_count}
+                                </span>
+                              </div>
+                            </SortableItem>
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              <button
+                type="button"
+                disabled={assignGroupsSubmitting || assignGroupsLoading}
+                onClick={() => void assignSelectedGroups()}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {assignGroupsSubmitting ? "Assigning..." : "Assign Selected"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignGroupsModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );
