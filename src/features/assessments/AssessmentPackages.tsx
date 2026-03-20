@@ -26,6 +26,7 @@ import {
   type QuestionnaireQuestion,
   type QuestionnaireQuestionCreate,
   type QuestionnaireQuestionUpdate,
+  type QuestionnaireVisibilityCondition,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -104,6 +105,17 @@ function QuestionForm({
   onSubmit,
   onCancel,
 }: QuestionFormProps) {
+  type ConditionOperator = "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in";
+  type EditableVisibilityCondition = {
+    type: "question_answer" | "user_preference";
+    operator: ConditionOperator;
+    question_key: string;
+    preference_key: "diet_preference" | "allergies" | "";
+    value: unknown;
+  };
+  type VisibilityConditionPatch = Partial<
+    Pick<EditableVisibilityCondition, "type" | "operator" | "question_key" | "preference_key" | "value">
+  >;
   const CONDITION_OPERATORS = [
     { value: "equals", label: "Equals" },
     { value: "not_equals", label: "Does not equal" },
@@ -140,10 +152,7 @@ function QuestionForm({
     onChange({ ...value, ...patch });
   };
 
-  const parseRuleValue = (
-    operator: "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in",
-    rawValue: string
-  ): unknown => {
+  const parseRuleValue = (operator: ConditionOperator, rawValue: string): unknown => {
     if (operator === "in" || operator === "not_in") {
       return rawValue
         .split(",")
@@ -159,10 +168,11 @@ function QuestionForm({
     return String(rawValue);
   };
 
-  const normalizeVisibilityRule = (condition: Record<string, unknown>) => {
-    const normalizedType = condition.type === "user_preference" ? "user_preference" : "question_answer";
+  const normalizeVisibilityRule = (condition: QuestionnaireVisibilityCondition): EditableVisibilityCondition => {
+    const normalizedType: EditableVisibilityCondition["type"] =
+      condition.type === "user_preference" ? "user_preference" : "question_answer";
     const normalizedOperator = CONDITION_OPERATORS.some((item) => item.value === condition.operator)
-      ? (condition.operator as "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in")
+      ? (condition.operator as ConditionOperator)
       : "equals";
     return {
       type: normalizedType,
@@ -180,14 +190,11 @@ function QuestionForm({
     };
   };
 
+  const getEditableVisibilityConditions = (): EditableVisibilityCondition[] =>
+    visibilityConditions.map((condition) => normalizeVisibilityRule(condition));
+
   const persistVisibilityRules = (
-    conditions: Array<{
-      type: "question_answer" | "user_preference";
-      operator: "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in";
-      question_key: string;
-      preference_key: "diet_preference" | "allergies" | "";
-      value: unknown;
-    }>,
+    conditions: EditableVisibilityCondition[],
     nextMatch: "all" | "any" = matchMode
   ) => {
     if (conditions.length === 0) {
@@ -233,16 +240,17 @@ function QuestionForm({
     ]);
   };
 
-  const updateVisibilityCondition = (index: number, patch: Partial<Record<string, unknown>>) => {
-    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+  const updateVisibilityCondition = (index: number, patch: VisibilityConditionPatch) => {
+    const normalized = getEditableVisibilityConditions();
     const current = normalized[index];
     if (!current) return;
-    const nextType = patch.type === "user_preference" ? "user_preference" : patch.type === "question_answer" ? "question_answer" : current.type;
+    const nextType: EditableVisibilityCondition["type"] =
+      patch.type === "user_preference" ? "user_preference" : patch.type === "question_answer" ? "question_answer" : current.type;
     const nextOperator = CONDITION_OPERATORS.some((item) => item.value === patch.operator)
-      ? (patch.operator as "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in")
+      ? (patch.operator as ConditionOperator)
       : current.operator;
     const nextRawValue = patch.value ?? current.value;
-    const nextCondition = {
+    const nextCondition: EditableVisibilityCondition = {
       type: nextType,
       operator: nextOperator,
       question_key:
@@ -265,7 +273,7 @@ function QuestionForm({
   };
 
   const addVisibilityCondition = () => {
-    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+    const normalized = getEditableVisibilityConditions();
     normalized.push({
       type: "question_answer",
       operator: "equals",
@@ -277,7 +285,7 @@ function QuestionForm({
   };
 
   const removeVisibilityCondition = (index: number) => {
-    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+    const normalized = getEditableVisibilityConditions();
     persistVisibilityRules(
       normalized.filter((_, itemIndex) => itemIndex !== index),
       matchMode
@@ -452,7 +460,7 @@ function QuestionForm({
         {hasConditionalVisibility && (
           <div className="space-y-3 rounded-lg border border-zinc-200 p-3 bg-zinc-50">
             {visibilityConditions.map((rawCondition, index) => {
-              const condition = normalizeVisibilityRule(rawCondition as Record<string, unknown>);
+              const condition = normalizeVisibilityRule(rawCondition);
               const conditionValue = stringifyRuleValue(condition.value);
               const valuePlaceholder =
                 condition.operator === "in" || condition.operator === "not_in"
@@ -479,7 +487,11 @@ function QuestionForm({
                       <span className="mb-1 block text-xs font-medium text-zinc-600">Condition type</span>
                       <select
                         value={condition.type}
-                        onChange={(e) => updateVisibilityCondition(index, { type: e.target.value })}
+                        onChange={(e) =>
+                          updateVisibilityCondition(index, {
+                            type: e.target.value === "user_preference" ? "user_preference" : "question_answer",
+                          })
+                        }
                         className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
                       >
                         <option value="question_answer">Another question answer</option>
@@ -490,7 +502,14 @@ function QuestionForm({
                       <span className="mb-1 block text-xs font-medium text-zinc-600">Operator</span>
                       <select
                         value={condition.operator}
-                        onChange={(e) => updateVisibilityCondition(index, { operator: e.target.value, value: conditionValue })}
+                        onChange={(e) =>
+                          updateVisibilityCondition(index, {
+                            operator: (CONDITION_OPERATORS.some((item) => item.value === e.target.value)
+                              ? e.target.value
+                              : "equals") as ConditionOperator,
+                            value: conditionValue,
+                          })
+                        }
                         className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
                       >
                         {CONDITION_OPERATORS.map((item) => (
@@ -525,7 +544,14 @@ function QuestionForm({
                         <span className="mb-1 block text-xs font-medium text-zinc-600">Preference field</span>
                         <select
                           value={condition.preference_key}
-                          onChange={(e) => updateVisibilityCondition(index, { preference_key: e.target.value })}
+                          onChange={(e) =>
+                            updateVisibilityCondition(index, {
+                              preference_key:
+                                e.target.value === "diet_preference" || e.target.value === "allergies"
+                                  ? e.target.value
+                                  : "",
+                            })
+                          }
                           className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
                         >
                           <option value="">Select preference...</option>
@@ -568,7 +594,7 @@ function QuestionForm({
                     value={matchMode}
                     onChange={(e) =>
                       persistVisibilityRules(
-                        visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>)),
+                        getEditableVisibilityConditions(),
                         e.target.value === "any" ? "any" : "all"
                       )
                     }
