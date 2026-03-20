@@ -418,6 +418,7 @@ export function AssessmentPackages() {
   const [pkgCatsModalOpen, setPkgCatsModalOpen] = useState(false);
   const [pkgCategories, setPkgCategories] = useState<AssessmentPackageCategory[]>([]);
   const [pkgCatsLoading, setPkgCatsLoading] = useState(false);
+  const [pkgReorderingCategories, setPkgReorderingCategories] = useState(false);
   const [pkgRemovingCategoryId, setPkgRemovingCategoryId] = useState<number | null>(null);
   const [pkgAddCatsModalOpen, setPkgAddCatsModalOpen] = useState(false);
   const [pkgAddCatsSubmitting, setPkgAddCatsSubmitting] = useState(false);
@@ -736,7 +737,15 @@ export function AssessmentPackages() {
     if (!selectedPkg || selectedCategoryIds.size === 0) return;
     setPkgAddCatsSubmitting(true);
     try {
-      await assessmentPackagesApi.addCategories(selectedPkg.package_id, Array.from(selectedCategoryIds));
+      const selectedIds = Array.from(selectedCategoryIds);
+      await assessmentPackagesApi.addCategories(selectedPkg.package_id, selectedIds);
+      const latestRes = await assessmentPackagesApi.listCategories(selectedPkg.package_id);
+      const latestAssignedIds = (latestRes.data.data ?? []).map((item) => item.category_id);
+      const orderedIds = [
+        ...selectedIds,
+        ...latestAssignedIds.filter((categoryId) => !selectedIds.includes(categoryId)),
+      ];
+      await assessmentPackagesApi.reorderCategories(selectedPkg.package_id, { category_ids: orderedIds });
       setPkgAddCatsModalOpen(false);
       await fetchPackageCategories(selectedPkg.package_id);
       fetchPackages();
@@ -1065,6 +1074,31 @@ export function AssessmentPackages() {
       setCatError(getApiError(error));
     } finally {
       setCatReorderingQuestions(false);
+    }
+  };
+
+  const onPackageCategoriesDragEnd = async (event: DragEndEvent) => {
+    if (!selectedPkg || pkgCatsLoading || pkgReorderingCategories || pkgCategories.length < 2) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = pkgCategories.findIndex((item) => item.category_id === Number(active.id));
+    const newIndex = pkgCategories.findIndex((item) => item.category_id === Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const previous = [...pkgCategories];
+    const next = arrayMove(pkgCategories, oldIndex, newIndex);
+    setPkgCategories(next);
+    setPkgReorderingCategories(true);
+    try {
+      await assessmentPackagesApi.reorderCategories(selectedPkg.package_id, {
+        category_ids: next.map((item) => item.category_id),
+      });
+      await fetchPackageCategories(selectedPkg.package_id);
+      fetchPackages();
+    } catch (error) {
+      setPkgCategories(previous);
+      setPkgError(getApiError(error));
+    } finally {
+      setPkgReorderingCategories(false);
     }
   };
 
@@ -1618,7 +1652,9 @@ export function AssessmentPackages() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-zinc-500">
-              {pkgCatsLoading ? "Loading..." : `${pkgCategories.length} categories`}
+              {pkgCatsLoading
+                ? "Loading..."
+                : `${pkgCategories.length} categories${pkgCategories.length > 1 ? " · Drag to reorder" : ""}`}
             </p>
             <button
               onClick={openAddCategoryToPackageModal}
@@ -1636,26 +1672,41 @@ export function AssessmentPackages() {
               No categories in this package yet.
             </div>
           ) : (
-            <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-[50vh] overflow-y-auto">
-              {pkgCategories.map((category) => (
-                <li
-                  key={category.category_id}
-                  className="flex items-start sm:items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-900 leading-snug">{category.display_name ?? "—"}</p>
-                    <p className="text-xs text-zinc-400 mt-0.5 font-mono">{category.category_key ?? "—"}</p>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveCategoryFromPackage(category.category_id)}
-                    disabled={pkgRemovingCategoryId === category.category_id}
-                    className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                  >
-                    {pkgRemovingCategoryId === category.category_id ? "Removing..." : "Remove"}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(event) => void onPackageCategoriesDragEnd(event)}
+            >
+              <SortableContext
+                items={pkgCategories.map((category) => category.category_id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2 border border-zinc-200 rounded-lg max-h-[50vh] overflow-y-auto p-2">
+                  {pkgCategories.map((category) => (
+                    <SortableItem
+                      key={category.category_id}
+                      id={category.category_id}
+                      handle={<GripVertical className="w-4 h-4" />}
+                      className="border border-zinc-200 rounded-lg px-3 py-3 bg-white hover:bg-zinc-50"
+                    >
+                      <div className="flex items-start sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-zinc-900 leading-snug">{category.display_name ?? "—"}</p>
+                          <p className="text-xs text-zinc-400 mt-0.5 font-mono">{category.category_key ?? "—"}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveCategoryFromPackage(category.category_id)}
+                          disabled={pkgRemovingCategoryId === category.category_id || pkgReorderingCategories}
+                          className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        >
+                          {pkgRemovingCategoryId === category.category_id ? "Removing..." : "Remove"}
+                        </button>
+                      </div>
+                    </SortableItem>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </Modal>

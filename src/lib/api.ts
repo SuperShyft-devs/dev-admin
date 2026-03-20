@@ -414,6 +414,7 @@ export interface AssessmentPackageCategory {
   category_id: number;
   category_key?: string | null;
   display_name?: string | null;
+  display_order?: number | null;
   status?: string | null;
 }
 
@@ -437,6 +438,11 @@ export const assessmentPackagesApi = {
     api.post<{ data: { package_id: number; added_category_ids: number[]; skipped_category_ids: number[] } }>(
       `/assessment-packages/${packageId}/categories`,
       { category_ids }
+    ),
+  reorderCategories: (packageId: number, payload: { category_ids: number[] }) =>
+    api.patch<{ data: { package_id: number; category_ids: number[] } }>(
+      `/assessment-packages/${packageId}/categories/order`,
+      payload
     ),
   removeCategory: (packageId: number, categoryId: number) =>
     api.delete<{ data: { package_id: number; removed_category_id: number } }>(
