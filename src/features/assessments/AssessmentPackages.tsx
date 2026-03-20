@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
@@ -446,6 +456,7 @@ export function AssessmentPackages() {
   const [catManageQOpen, setCatManageQOpen] = useState(false);
   const [catManageQuestions, setCatManageQuestions] = useState<QuestionnaireQuestion[]>([]);
   const [catManageQLoading, setCatManageQLoading] = useState(false);
+  const [catReorderingQuestions, setCatReorderingQuestions] = useState(false);
   const [catRemovingQuestionId, setCatRemovingQuestionId] = useState<number | null>(null);
   const [catAddQOpen, setCatAddQOpen] = useState(false);
   const [catAddQSearch, setCatAddQSearch] = useState("");
@@ -453,6 +464,7 @@ export function AssessmentPackages() {
   const [allActiveQuestions, setAllActiveQuestions] = useState<QuestionnaireQuestion[]>([]);
   const [allActiveQuestionsLoading, setAllActiveQuestionsLoading] = useState(false);
   const [selectedQuestionIdsForCategory, setSelectedQuestionIdsForCategory] = useState<Set<number>>(new Set());
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Questions tab
   const [qData, setQData] = useState<QuestionnaireQuestion[]>([]);
@@ -860,7 +872,15 @@ export function AssessmentPackages() {
     if (!selectedCat || selectedQuestionIdsForCategory.size === 0) return;
     setCatAddQSubmitting(true);
     try {
-      await questionnaireCategoriesApi.assignQuestions(selectedCat.category_id, Array.from(selectedQuestionIdsForCategory));
+      const selectedIds = Array.from(selectedQuestionIdsForCategory);
+      await questionnaireCategoriesApi.assignQuestions(selectedCat.category_id, selectedIds);
+      const latestRes = await questionnaireCategoriesApi.listQuestions(selectedCat.category_id);
+      const latestAssignedIds = (latestRes.data.data ?? []).map((item) => item.question_id);
+      const orderedIds = [
+        ...selectedIds,
+        ...latestAssignedIds.filter((questionId) => !selectedIds.includes(questionId)),
+      ];
+      await questionnaireCategoriesApi.reorderQuestions(selectedCat.category_id, { question_ids: orderedIds });
       setCatAddQOpen(false);
       await fetchCategoryQuestions(selectedCat.category_id);
       if (catDetailsCategory?.category_id === selectedCat.category_id) {
@@ -1013,6 +1033,40 @@ export function AssessmentPackages() {
       (question.question_key ?? "").toLowerCase().includes(search)
     );
   }, [allActiveQuestions, catAddQSearch, catManageQuestions]);
+
+  const onCategoryQuestionsDragEnd = async (event: DragEndEvent) => {
+    if (!selectedCat || catManageQLoading || catReorderingQuestions || catManageQuestions.length < 2) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = catManageQuestions.findIndex((item) => item.question_id === Number(active.id));
+    const newIndex = catManageQuestions.findIndex((item) => item.question_id === Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const previous = [...catManageQuestions];
+    const next = arrayMove(catManageQuestions, oldIndex, newIndex);
+    setCatManageQuestions(next);
+    if (catDetailsCategory?.category_id === selectedCat.category_id) {
+      setCatDetailsQuestions(next);
+    }
+    setCatReorderingQuestions(true);
+    try {
+      await questionnaireCategoriesApi.reorderQuestions(selectedCat.category_id, {
+        question_ids: next.map((item) => item.question_id),
+      });
+      await fetchCategoryQuestions(selectedCat.category_id);
+      if (catDetailsCategory?.category_id === selectedCat.category_id) {
+        const detailsRes = await questionnaireCategoriesApi.listQuestions(selectedCat.category_id);
+        setCatDetailsQuestions(detailsRes.data.data);
+      }
+    } catch (error) {
+      setCatManageQuestions(previous);
+      if (catDetailsCategory?.category_id === selectedCat.category_id) {
+        setCatDetailsQuestions(previous);
+      }
+      setCatError(getApiError(error));
+    } finally {
+      setCatReorderingQuestions(false);
+    }
+  };
 
   const pkgColumns: Column<AssessmentPackage>[] = [
     {
@@ -1880,7 +1934,9 @@ export function AssessmentPackages() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-zinc-500">
-              {catManageQLoading ? "Loading..." : `${catManageQuestions.length} questions`}
+              {catManageQLoading
+                ? "Loading..."
+                : `${catManageQuestions.length} questions${catManageQuestions.length > 1 ? " · Drag to reorder" : ""}`}
             </p>
             <button
               onClick={openAddQuestionToCategoryModal}
@@ -1898,34 +1954,49 @@ export function AssessmentPackages() {
               No questions in this category yet.
             </div>
           ) : (
-            <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-[50vh] overflow-y-auto">
-              {catManageQuestions.map((question) => (
-                <li
-                  key={question.question_id}
-                  className="flex items-start sm:items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-900 leading-snug">{question.question_text ?? "—"}</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      {question.question_key && <span className="font-mono">{question.question_key}</span>}
-                      {question.question_type && (
-                        <>
-                          {" "}
-                          · <span className="font-mono">{question.question_type}</span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveQuestionFromCategory(question.question_id)}
-                    disabled={catRemovingQuestionId === question.question_id}
-                    className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                  >
-                    {catRemovingQuestionId === question.question_id ? "Removing..." : "Remove"}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(event) => void onCategoryQuestionsDragEnd(event)}
+            >
+              <SortableContext
+                items={catManageQuestions.map((question) => question.question_id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2 border border-zinc-200 rounded-lg max-h-[50vh] overflow-y-auto p-2">
+                  {catManageQuestions.map((question) => (
+                    <SortableItem
+                      key={question.question_id}
+                      id={question.question_id}
+                      handle={<GripVertical className="w-4 h-4" />}
+                      className="border border-zinc-200 rounded-lg px-3 py-3 bg-white hover:bg-zinc-50"
+                    >
+                      <div className="flex items-start sm:items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-zinc-900 leading-snug">{question.question_text ?? "—"}</p>
+                          <p className="text-xs text-zinc-400 mt-0.5">
+                            {question.question_key && <span className="font-mono">{question.question_key}</span>}
+                            {question.question_type && (
+                              <>
+                                {" "}
+                                · <span className="font-mono">{question.question_type}</span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveQuestionFromCategory(question.question_id)}
+                          disabled={catRemovingQuestionId === question.question_id || catReorderingQuestions}
+                          className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-40 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        >
+                          {catRemovingQuestionId === question.question_id ? "Removing..." : "Remove"}
+                        </button>
+                      </div>
+                    </SortableItem>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </Modal>

@@ -463,6 +463,7 @@ export interface QuestionnaireQuestion {
   status?: string | null;
   created_at?: string | null;
   category_id?: number | null;
+  display_order?: number | null;
   answer?: unknown;
 }
 
@@ -613,6 +614,11 @@ export const questionnaireCategoriesApi = {
     api.post<{ data: { category_id: number; question_ids: number[] } }>(
       `/questionnaire/categories/${categoryId}/questions`,
       { question_ids }
+    ),
+  reorderQuestions: (categoryId: number, payload: { question_ids: number[] }) =>
+    api.patch<{ data: { category_id: number; question_ids: number[] } }>(
+      `/questionnaire/categories/${categoryId}/questions/order`,
+      payload
     ),
   removeQuestion: (categoryId: number, questionId: number) =>
     api.delete<{ data: { category_id: number; question_id: number } }>(
