@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronUp, GripVertical, Info, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import { GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -41,7 +41,6 @@ const QUESTION_TYPES = [
 ] as const;
 const CHOICE_TYPES = new Set(["single_choice", "multiple_choice"]);
 const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
-type LogicTemplate = "none" | "depends_on_answer" | "depends_on_preference" | "prefill_only" | "custom";
 
 type TabKey = "packages" | "categories" | "questions";
 const TAB_KEYS: TabKey[] = ["packages", "categories", "questions"];
@@ -105,29 +104,22 @@ function QuestionForm({
   onSubmit,
   onCancel,
 }: QuestionFormProps) {
+  const CONDITION_OPERATORS = [
+    { value: "equals", label: "Equals" },
+    { value: "not_equals", label: "Does not equal" },
+    { value: "contains", label: "Contains" },
+    { value: "not_contains", label: "Does not contain" },
+    { value: "in", label: "In list" },
+    { value: "not_in", label: "Not in list" },
+  ] as const;
   const showOptions = CHOICE_TYPES.has(value.question_type);
   const options = value.options ?? [];
-  const visibilityRules = value.visibility_rules ?? { match: "all" as const, conditions: [] };
-  const questionCondition = visibilityRules.conditions.find((item) => item.type === "question_answer");
-  const preferenceCondition = visibilityRules.conditions.find((item) => item.type === "user_preference");
-  const questionDependencyKey = typeof questionCondition?.question_key === "string" ? questionCondition.question_key : "";
-  const questionDependencyValue = questionCondition?.value == null ? "" : String(questionCondition.value);
-  const preferenceDependencyKey = preferenceCondition?.preference_key ?? "";
-  const preferenceDependencyValue = preferenceCondition?.value == null ? "" : String(preferenceCondition.value);
-  const preferenceOperator = preferenceCondition?.operator ?? "equals";
+  const visibilityRules = value.visibility_rules ?? null;
+  const visibilityConditions = Array.isArray(visibilityRules?.conditions) ? visibilityRules.conditions : [];
+  const hasConditionalVisibility = visibilityConditions.length > 0;
+  const matchMode = visibilityRules?.match === "any" ? "any" : "all";
   const prefillPreferenceKey = value.prefill_from?.preference_key ?? "";
-  const [draftQuestionKey, setDraftQuestionKey] = useState(questionDependencyKey);
-  const [draftQuestionValue, setDraftQuestionValue] = useState(questionDependencyValue);
-  const [draftPreferenceKey, setDraftPreferenceKey] = useState(preferenceDependencyKey);
-  const [draftPreferenceValue, setDraftPreferenceValue] = useState(preferenceDependencyValue);
-  const [draftPreferenceOperator, setDraftPreferenceOperator] = useState<"equals" | "contains">(
-    preferenceOperator === "contains" ? "contains" : "equals"
-  );
-  const [openHintId, setOpenHintId] = useState<string | null>(null);
-  const isAdvancedConfigured =
-    (visibilityRules.conditions?.length ?? 0) > 0 || Boolean(value.prefill_from?.preference_key);
-  const [showAdvanced, setShowAdvanced] = useState(isAdvancedConfigured);
-  const [useCustomQuestionKey, setUseCustomQuestionKey] = useState(false);
+  const [showOptionKeys, setShowOptionKeys] = useState(false);
   const availableParentKeys = useMemo(
     () =>
       (availableQuestionKeys ?? [])
@@ -135,48 +127,6 @@ function QuestionForm({
         .sort((a, b) => a.localeCompare(b)),
     [availableQuestionKeys, value.question_key]
   );
-  const detectTemplate = (): LogicTemplate => {
-    const hasQuestionRule = Boolean(questionCondition);
-    const hasPreferenceRule = Boolean(preferenceCondition);
-    const hasPrefill = Boolean(prefillPreferenceKey);
-    if (hasQuestionRule && !hasPreferenceRule && !hasPrefill) return "depends_on_answer";
-    if (!hasQuestionRule && hasPreferenceRule && !hasPrefill) return "depends_on_preference";
-    if (!hasQuestionRule && !hasPreferenceRule && hasPrefill) return "prefill_only";
-    if (!hasQuestionRule && !hasPreferenceRule && !hasPrefill) return "none";
-    return "custom";
-  };
-  const [selectedTemplate, setSelectedTemplate] = useState<LogicTemplate | null>(null);
-  const logicTemplate = selectedTemplate ?? detectTemplate();
-  const isCustomQuestionKeyMode = useCustomQuestionKey || availableParentKeys.length === 0;
-  const advancedSummary = (() => {
-    const parts: string[] = [];
-    if ((visibilityRules.conditions?.length ?? 0) > 0) {
-      parts.push(`${visibilityRules.conditions.length} condition${visibilityRules.conditions.length > 1 ? "s" : ""}`);
-    }
-    if (prefillPreferenceKey) {
-      parts.push(`auto-fill: ${prefillPreferenceKey}`);
-    }
-    return parts.length > 0 ? parts.join(" • ") : "No advanced logic configured";
-  })();
-  const setTemplateAndReset = (template: LogicTemplate) => {
-    setSelectedTemplate(template);
-    if (template === "none") {
-      setField({ visibility_rules: null, prefill_from: null });
-      return;
-    }
-    if (template === "prefill_only") {
-      setField({ visibility_rules: null });
-      return;
-    }
-    if (template === "depends_on_answer") {
-      setField({ prefill_from: null });
-      return;
-    }
-    if (template === "depends_on_preference") {
-      setField({ prefill_from: null });
-      return;
-    }
-  };
   const getSuggestedOptionValue = (displayName: string, index: number) => {
     const normalized = displayName
       .toLowerCase()
@@ -190,90 +140,149 @@ function QuestionForm({
     onChange({ ...value, ...patch });
   };
 
-  const setVisibilityRules = (params: {
-    questionKey: string;
-    questionValue: string;
-    preferenceKey: string;
-    preferenceValue: string;
-    preferenceOperator: "equals" | "contains";
-    match: "all" | "any";
-  }) => {
-    const conditions: {
+  const parseRuleValue = (
+    operator: "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in",
+    rawValue: string
+  ): unknown => {
+    if (operator === "in" || operator === "not_in") {
+      return rawValue
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return rawValue;
+  };
+
+  const stringifyRuleValue = (rawValue: unknown): string => {
+    if (Array.isArray(rawValue)) return rawValue.join(", ");
+    if (rawValue == null) return "";
+    return String(rawValue);
+  };
+
+  const normalizeVisibilityRule = (condition: Record<string, unknown>) => {
+    const normalizedType = condition.type === "user_preference" ? "user_preference" : "question_answer";
+    const normalizedOperator = CONDITION_OPERATORS.some((item) => item.value === condition.operator)
+      ? (condition.operator as "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in")
+      : "equals";
+    return {
+      type: normalizedType,
+      operator: normalizedOperator,
+      question_key:
+        normalizedType === "question_answer" && typeof condition.question_key === "string"
+          ? condition.question_key
+          : "",
+      preference_key:
+        normalizedType === "user_preference" &&
+        (condition.preference_key === "diet_preference" || condition.preference_key === "allergies")
+          ? (condition.preference_key as "diet_preference" | "allergies")
+          : "",
+      value: condition.value,
+    };
+  };
+
+  const persistVisibilityRules = (
+    conditions: Array<{
       type: "question_answer" | "user_preference";
-      operator: "equals" | "contains";
-      question_key?: string;
-      preference_key?: "diet_preference" | "allergies";
-      value: string;
-    }[] = [];
-    const normalizedQuestionKey = params.questionKey.trim().toLowerCase();
-    if (normalizedQuestionKey) {
-      conditions.push({
-        type: "question_answer",
-        operator: "equals",
-        question_key: normalizedQuestionKey,
-        value: params.questionValue,
-      });
-    }
-    if (params.preferenceKey) {
-      conditions.push({
-        type: "user_preference",
-        operator: params.preferenceOperator,
-        preference_key: params.preferenceKey as "diet_preference" | "allergies",
-        value: params.preferenceValue,
-      });
-    }
+      operator: "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in";
+      question_key: string;
+      preference_key: "diet_preference" | "allergies" | "";
+      value: unknown;
+    }>,
+    nextMatch: "all" | "any" = matchMode
+  ) => {
     if (conditions.length === 0) {
       setField({ visibility_rules: null });
       return;
     }
     setField({
       visibility_rules: {
-        match: params.match,
-        conditions,
+        match: nextMatch,
+        conditions: conditions.map((condition) =>
+          condition.type === "question_answer"
+            ? {
+                type: "question_answer" as const,
+                operator: condition.operator,
+                question_key: condition.question_key.trim().toLowerCase(),
+                value: condition.value,
+              }
+            : {
+                type: "user_preference" as const,
+                operator: condition.operator,
+                preference_key: condition.preference_key || "diet_preference",
+                value: condition.value,
+              }
+        ),
       },
     });
   };
-  const setQuestionDependencyRule = (questionKey: string, answerValue: string) => {
-    setVisibilityRules({
-      questionKey,
-      questionValue: answerValue,
-      preferenceKey: "",
-      preferenceValue: "",
-      preferenceOperator: "equals",
-      match: "all",
-    });
+
+  const setConditionalVisibilityEnabled = (enabled: boolean) => {
+    if (!enabled) {
+      setField({ visibility_rules: null });
+      return;
+    }
+    if (visibilityConditions.length > 0) return;
+    persistVisibilityRules([
+      {
+        type: "question_answer",
+        operator: "equals",
+        question_key: "",
+        preference_key: "",
+        value: "",
+      },
+    ]);
   };
-  const setPreferenceDependencyRule = (
-    preferenceKey: string,
-    preferenceValue: string,
-    operator: "equals" | "contains"
-  ) => {
-    setVisibilityRules({
-      questionKey: "",
-      questionValue: "",
-      preferenceKey,
-      preferenceValue,
-      preferenceOperator: operator,
-      match: "all",
-    });
+
+  const updateVisibilityCondition = (index: number, patch: Partial<Record<string, unknown>>) => {
+    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+    const current = normalized[index];
+    if (!current) return;
+    const nextType = patch.type === "user_preference" ? "user_preference" : patch.type === "question_answer" ? "question_answer" : current.type;
+    const nextOperator = CONDITION_OPERATORS.some((item) => item.value === patch.operator)
+      ? (patch.operator as "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in")
+      : current.operator;
+    const nextRawValue = patch.value ?? current.value;
+    const nextCondition = {
+      type: nextType,
+      operator: nextOperator,
+      question_key:
+        nextType === "question_answer"
+          ? String(patch.question_key ?? current.question_key ?? "")
+          : "",
+      preference_key:
+        nextType === "user_preference"
+          ? (patch.preference_key === "diet_preference" || patch.preference_key === "allergies"
+              ? patch.preference_key
+              : (current.preference_key || "diet_preference")) as "diet_preference" | "allergies"
+          : "",
+      value:
+        typeof nextRawValue === "string"
+          ? parseRuleValue(nextOperator, nextRawValue)
+          : nextRawValue,
+    };
+    normalized[index] = nextCondition;
+    persistVisibilityRules(normalized, matchMode);
   };
-  const renderHelpHint = (id: string, text: string) => (
-    <span className="relative inline-flex items-center">
-      <button
-        type="button"
-        onClick={() => setOpenHintId((prev) => (prev === id ? null : id))}
-        className="inline-flex items-center text-zinc-400 hover:text-zinc-600"
-        aria-label={text}
-      >
-        <Info className="h-3.5 w-3.5" />
-      </button>
-      {openHintId === id && (
-        <span className="absolute left-5 top-0 z-20 w-64 rounded-md border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-lg">
-          {text}
-        </span>
-      )}
-    </span>
-  );
+
+  const addVisibilityCondition = () => {
+    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+    normalized.push({
+      type: "question_answer",
+      operator: "equals",
+      question_key: "",
+      preference_key: "",
+      value: "",
+    });
+    persistVisibilityRules(normalized, matchMode);
+  };
+
+  const removeVisibilityCondition = (index: number) => {
+    const normalized = visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>));
+    persistVisibilityRules(
+      normalized.filter((_, itemIndex) => itemIndex !== index),
+      matchMode
+    );
+  };
 
   const addOption = () => {
     const index = options.length;
@@ -320,353 +329,301 @@ function QuestionForm({
         <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-1">
-          Question Key <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          value={value.question_key}
-          onChange={(e) => setField({ question_key: e.target.value.toLowerCase() })}
-          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-          placeholder="e.g. diet_preference"
-          required
-        />
-        <p className="mt-1 text-xs text-zinc-500">
-          Internal key used in integrations and exports. Use lowercase with underscores.
-        </p>
+      <div className="rounded-xl border border-zinc-200 p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">1) Question basics</h3>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Define the question identity, wording, and answer format.
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Question Key <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={value.question_key}
+            onChange={(e) => setField({ question_key: e.target.value.toLowerCase() })}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
+            placeholder="e.g. diet_preference"
+            required
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            Stable key used for logic, preferences, and exports.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Question Text <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            rows={3}
+            value={value.question_text}
+            onChange={(e) => setField({ question_text: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
+            placeholder="Enter question text..."
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Question Type <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={value.question_type}
+            onChange={(e) =>
+              setField({
+                question_type: e.target.value,
+                options: CHOICE_TYPES.has(e.target.value)
+                  ? options.length > 0
+                    ? options
+                    : [{ option_value: "", display_name: "", tooltip_text: "" }]
+                  : null,
+              })
+            }
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+            required
+          >
+            <option value="">Select type...</option>
+            {QUESTION_TYPES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-zinc-500">
+            Choice types need options. Text/scale do not.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={!!value.is_required}
+              onChange={(e) => setField({ is_required: e.target.checked })}
+              className="h-4 w-4 rounded border-zinc-300"
+            />
+            Required
+          </label>
+          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={!!value.is_read_only}
+              onChange={(e) => setField({ is_read_only: e.target.checked })}
+              className="h-4 w-4 rounded border-zinc-300"
+            />
+            Read only
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">Help Text</label>
+          <textarea
+            rows={2}
+            value={value.help_text ?? ""}
+            onChange={(e) => setField({ help_text: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
+            placeholder="Optional hint shown under the question..."
+          />
+        </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-1">
-          Question Text <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          rows={3}
-          value={value.question_text}
-          onChange={(e) => setField({ question_text: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
-          placeholder="Enter question text..."
-          required
-        />
-      </div>
+      <div className="rounded-xl border border-zinc-200 p-4 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">2) Visibility and auto-fill</h3>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Configure when this question appears and whether a default answer should come from preferences.
+          </p>
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-1">
-          Question Type <span className="text-red-500">*</span>
-        </label>
-        <select
-          value={value.question_type}
-          onChange={(e) =>
-            setField({
-              question_type: e.target.value,
-              options: CHOICE_TYPES.has(e.target.value) ? (options.length > 0 ? options : [{ option_value: "", display_name: "", tooltip_text: "" }]) : null,
-            })
-          }
-          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-          required
-        >
-          <option value="">Select type...</option>
-          {QUESTION_TYPES.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-zinc-500">
-          Choose Single/Multiple Choice to configure options below.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
           <input
             type="checkbox"
-            checked={!!value.is_required}
-            onChange={(e) => setField({ is_required: e.target.checked })}
+            checked={hasConditionalVisibility}
+            onChange={(e) => setConditionalVisibilityEnabled(e.target.checked)}
             className="h-4 w-4 rounded border-zinc-300"
           />
-          Required
+          Show this question conditionally
         </label>
-        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            checked={!!value.is_read_only}
-            onChange={(e) => setField({ is_read_only: e.target.checked })}
-            className="h-4 w-4 rounded border-zinc-300"
-          />
-          Read only
-        </label>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-zinc-700 mb-1">Help Text</label>
-        <textarea
-          rows={2}
-          value={value.help_text ?? ""}
-          onChange={(e) => setField({ help_text: e.target.value })}
-          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
-          placeholder="Optional hint shown under the question..."
-        />
-      </div>
+        {hasConditionalVisibility && (
+          <div className="space-y-3 rounded-lg border border-zinc-200 p-3 bg-zinc-50">
+            {visibilityConditions.map((rawCondition, index) => {
+              const condition = normalizeVisibilityRule(rawCondition as Record<string, unknown>);
+              const conditionValue = stringifyRuleValue(condition.value);
+              const valuePlaceholder =
+                condition.operator === "in" || condition.operator === "not_in"
+                  ? "Comma separated values, e.g. yes, maybe"
+                  : condition.type === "user_preference" && condition.preference_key === "allergies"
+                    ? "e.g. dairy"
+                    : "e.g. yes";
+              return (
+                <div key={index} className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-zinc-600">Condition {index + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() => removeVisibilityCondition(index)}
+                      className="p-1.5 rounded text-zinc-400 hover:text-red-500 hover:bg-red-50"
+                      aria-label="Remove condition"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
 
-      <div className="rounded-lg border border-zinc-200">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((prev) => !prev)}
-          className="w-full px-3 py-2 flex items-center justify-between hover:bg-zinc-50 rounded-lg"
-        >
-          <div className="text-left">
-            <p className="text-sm font-medium text-zinc-800">Advanced logic (optional)</p>
-            <p className="text-xs text-zinc-500">
-              Use this only when the question should depend on another answer or saved preference.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {!showAdvanced && (
-              <span className="text-xs text-zinc-500 px-2 py-1 rounded-full bg-zinc-100">{advancedSummary}</span>
-            )}
-            {showAdvanced ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
-          </div>
-        </button>
-
-        {showAdvanced && (
-          <div className="border-t border-zinc-200 p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-zinc-800">How should this question behave?</p>
-              {renderHelpHint("template-help", "Pick a guided template. You can switch to Custom if needed.")}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-              {[
-                { id: "none", label: "No advanced logic", hint: "Always show this question." },
-                { id: "depends_on_answer", label: "Follow-up question", hint: "Show only when another answer matches." },
-                { id: "depends_on_preference", label: "Use user preferences", hint: "Show only when profile preference matches." },
-                { id: "prefill_only", label: "Auto-fill from preference", hint: "Pre-fill answer from saved preferences." },
-                { id: "custom", label: "Custom", hint: "Manually configure all fields." },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setTemplateAndReset(item.id as LogicTemplate)}
-                  className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                    logicTemplate === item.id ? "border-zinc-900 bg-zinc-50" : "border-zinc-300 hover:bg-zinc-50"
-                  }`}
-                >
-                  <p className="text-sm font-medium text-zinc-800">{item.label}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{item.hint}</p>
-                </button>
-              ))}
-            </div>
-
-            {(logicTemplate === "depends_on_answer" || logicTemplate === "custom") && (
-              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-zinc-800">When should this question appear?</p>
-                  {renderHelpHint("followup-help", "Example: show 'How many cups?' only when 'Do you consume coffee or tea?' is yes.")}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                  {!isCustomQuestionKeyMode ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Depends on question</span>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Condition type</span>
                       <select
-                        value={draftQuestionKey}
-                        onChange={(e) => {
-                          setDraftQuestionKey(e.target.value);
-                          setQuestionDependencyRule(e.target.value, draftQuestionValue);
-                        }}
+                        value={condition.type}
+                        onChange={(e) => updateVisibilityCondition(index, { type: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
                       >
-                        <option value="">Select question...</option>
-                        {availableParentKeys.map((key) => (
-                          <option key={key} value={key}>
-                            {key}
+                        <option value="question_answer">Another question answer</option>
+                        <option value="user_preference">User preference</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Operator</span>
+                      <select
+                        value={condition.operator}
+                        onChange={(e) => updateVisibilityCondition(index, { operator: e.target.value, value: conditionValue })}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                      >
+                        {CONDITION_OPERATORS.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
                           </option>
                         ))}
                       </select>
                     </label>
-                  ) : (
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {condition.type === "question_answer" ? (
+                      <label>
+                        <span className="mb-1 block text-xs font-medium text-zinc-600">Question key</span>
+                        <input
+                          type="text"
+                          value={condition.question_key}
+                          list="assessment-question-keys"
+                          onChange={(e) => updateVisibilityCondition(index, { question_key: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
+                          placeholder="e.g. consume_coffee_or_tea"
+                        />
+                        <datalist id="assessment-question-keys">
+                          {availableParentKeys.map((key) => (
+                            <option key={key} value={key} />
+                          ))}
+                        </datalist>
+                      </label>
+                    ) : (
+                      <label>
+                        <span className="mb-1 block text-xs font-medium text-zinc-600">Preference field</span>
+                        <select
+                          value={condition.preference_key}
+                          onChange={(e) => updateVisibilityCondition(index, { preference_key: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                        >
+                          <option value="">Select preference...</option>
+                          {PREFILL_PREFERENCE_KEYS.map((key) => (
+                            <option key={key} value={key}>
+                              {key}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Depends on question key</span>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Expected value</span>
                       <input
                         type="text"
-                        value={draftQuestionKey}
-                        onChange={(e) => {
-                          setDraftQuestionKey(e.target.value);
-                          setQuestionDependencyRule(e.target.value, draftQuestionValue);
-                        }}
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-                        placeholder="e.g. consume_coffee_or_tea"
+                        value={conditionValue}
+                        onChange={(e) => updateVisibilityCondition(index, { value: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        placeholder={valuePlaceholder}
                       />
                     </label>
-                  )}
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">Show this question when answer is</span>
-                    <input
-                      type="text"
-                      value={draftQuestionValue}
-                      onChange={(e) => {
-                        setDraftQuestionValue(e.target.value);
-                        setQuestionDependencyRule(draftQuestionKey, e.target.value);
-                      }}
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                      placeholder="e.g. yes"
-                    />
-                  </label>
-                  {availableParentKeys.length > 0 && (
-                    <div>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Question selector</span>
-                      <button
-                        type="button"
-                        onClick={() => setUseCustomQuestionKey((prev) => !prev)}
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-xs text-zinc-700 hover:bg-zinc-50"
-                      >
-                        {useCustomQuestionKey ? "Use selectable list" : "Use custom key"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {(logicTemplate === "depends_on_preference" || logicTemplate === "custom") && (
-              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-zinc-800">Show based on user preference</p>
-                  {renderHelpHint("preference-help", "Example: show non-veg question only when diet preference equals non_veg.")}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">Preference field</span>
-                    <select
-                      value={draftPreferenceKey}
-                      onChange={(e) =>
-                        {
-                          setDraftPreferenceKey(e.target.value);
-                          setPreferenceDependencyRule(
-                            e.target.value,
-                            draftPreferenceValue,
-                            draftPreferenceOperator
-                          );
-                        }
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-                    >
-                      <option value="">Select preference...</option>
-                      {PREFILL_PREFERENCE_KEYS.map((key) => (
-                        <option key={key} value={key}>
-                          {key}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">Expected preference value</span>
-                    <input
-                      type="text"
-                      value={draftPreferenceValue}
-                      onChange={(e) =>
-                        {
-                          setDraftPreferenceValue(e.target.value);
-                          setPreferenceDependencyRule(
-                            draftPreferenceKey,
-                            e.target.value,
-                            draftPreferenceOperator
-                          );
-                        }
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                      placeholder={draftPreferenceKey === "allergies" ? "e.g. dairy" : "e.g. veg"}
-                    />
-                  </label>
-                  <div>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">How to compare</span>
-                    <div className="inline-flex rounded-lg border border-zinc-300 overflow-hidden">
-                      {(["equals", "contains"] as const).map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => {
-                            setDraftPreferenceOperator(item);
-                            setPreferenceDependencyRule(
-                              draftPreferenceKey,
-                              draftPreferenceValue,
-                              item
-                            );
-                          }}
-                          className={`px-3 py-2 text-sm ${
-                            draftPreferenceOperator === item ? "bg-zinc-900 text-white" : "bg-white text-zinc-700 hover:bg-zinc-50"
-                          }`}
-                        >
-                          {item === "equals" ? "Equals" : "Contains"}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {draftPreferenceOperator === "equals"
-                        ? "Use exact value match."
-                        : "Use this when preference is a list (example: allergies)."}
-                    </p>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
 
-            {(logicTemplate === "prefill_only" || logicTemplate === "custom") && (
-              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-zinc-800">Auto-fill answer from preferences</p>
-                  {renderHelpHint("prefill-help", "Draft answers always override auto-filled values.")}
-                </div>
-                <label className="block max-w-md">
-                  <span className="mb-1 block text-xs font-medium text-zinc-600">Auto-fill from</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={addVisibilityCondition}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-100"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add condition
+              </button>
+              {visibilityConditions.length > 1 && (
+                <label className="inline-flex items-center gap-2 text-xs text-zinc-600">
+                  Match
                   <select
-                    value={prefillPreferenceKey}
+                    value={matchMode}
                     onChange={(e) =>
-                      setField({
-                        prefill_from: e.target.value
-                          ? {
-                              source: "user_preference",
-                              preference_key: e.target.value as "diet_preference" | "allergies",
-                            }
-                          : null,
-                      })
+                      persistVisibilityRules(
+                        visibilityConditions.map((condition) => normalizeVisibilityRule(condition as Record<string, unknown>)),
+                        e.target.value === "any" ? "any" : "all"
+                      )
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                    className="px-2 py-1 rounded border border-zinc-300 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   >
-                    <option value="">None</option>
-                    {PREFILL_PREFERENCE_KEYS.map((key) => (
-                      <option key={key} value={key}>
-                        {key}
-                      </option>
-                    ))}
+                    <option value="all">All conditions</option>
+                    <option value="any">Any condition</option>
                   </select>
                 </label>
-              </div>
-            )}
-
-            {logicTemplate === "custom" && (visibilityRules.conditions?.length ?? 0) > 1 && (
-              <label className="block max-w-sm">
-                <span className="mb-1 block text-xs font-medium text-zinc-600">When multiple conditions exist</span>
-                <select
-                  value={visibilityRules.match}
-                  onChange={(e) =>
-                    setVisibilityRules({
-                      questionKey: draftQuestionKey,
-                      questionValue: draftQuestionValue,
-                      preferenceKey: draftPreferenceKey,
-                      preferenceValue: draftPreferenceValue,
-                      preferenceOperator: draftPreferenceOperator === "contains" ? "contains" : "equals",
-                      match: e.target.value === "any" ? "any" : "all",
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-                >
-                  <option value="all">All conditions must match</option>
-                  <option value="any">Any condition can match</option>
-                </select>
-              </label>
-            )}
+              )}
+            </div>
           </div>
+        )}
+
+        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
+          <input
+            type="checkbox"
+            checked={Boolean(prefillPreferenceKey)}
+            onChange={(e) =>
+              setField({
+                prefill_from: e.target.checked
+                  ? {
+                      source: "user_preference",
+                      preference_key: "diet_preference",
+                    }
+                  : null,
+              })
+            }
+            className="h-4 w-4 rounded border-zinc-300"
+          />
+          Auto-fill answer from user preference
+        </label>
+
+        {prefillPreferenceKey && (
+          <label className="block max-w-md">
+            <span className="mb-1 block text-xs font-medium text-zinc-600">Auto-fill source</span>
+            <select
+              value={prefillPreferenceKey}
+              onChange={(e) =>
+                setField({
+                  prefill_from: {
+                    source: "user_preference",
+                    preference_key: (e.target.value || "diet_preference") as "diet_preference" | "allergies",
+                  },
+                })
+              }
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+            >
+              {PREFILL_PREFERENCE_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
       </div>
 
@@ -678,30 +635,32 @@ function QuestionForm({
       </div>
 
       {showOptions && (
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-2">
-            Options <span className="text-red-500">*</span>
-          </label>
+        <div className="rounded-xl border border-zinc-200 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900">
+                3) Options <span className="text-red-500">*</span>
+              </h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Add answer choices users will see. Internal keys are auto-generated from labels.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOptionKeys((prev) => !prev)}
+              className="px-2.5 py-1.5 rounded-lg border border-zinc-300 text-xs text-zinc-700 hover:bg-zinc-50"
+            >
+              {showOptionKeys ? "Hide internal keys" : "Edit internal keys"}
+            </button>
+          </div>
+
           <div className="space-y-2">
             {options.map((option, index) => (
               <div key={index} className="rounded-lg border border-zinc-200 p-3 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label>
                     <span className="mb-1 block text-xs font-medium text-zinc-600">
-                      Option Value (stored)
-                    </span>
-                    <input
-                      type="text"
-                      value={option.option_value}
-                      onChange={(e) => updateOption(index, { option_value: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-                      placeholder={`e.g. ${getSuggestedOptionValue(option.display_name, index)}`}
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">
-                      Display Name (shown to users)
+                      Label shown to users
                     </span>
                     <input
                       type="text"
@@ -712,7 +671,29 @@ function QuestionForm({
                       required
                     />
                   </label>
+
+                  {showOptionKeys ? (
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Internal key</span>
+                      <input
+                        type="text"
+                        value={option.option_value}
+                        onChange={(e) => updateOption(index, { option_value: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
+                        placeholder={`e.g. ${getSuggestedOptionValue(option.display_name, index)}`}
+                        required
+                      />
+                    </label>
+                  ) : (
+                    <div>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Internal key</span>
+                      <div className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm font-mono bg-zinc-50 text-zinc-600">
+                        {option.option_value || getSuggestedOptionValue(option.display_name, index)}
+                      </div>
+                    </div>
+                  )}
                 </div>
+
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -732,6 +713,7 @@ function QuestionForm({
                 </div>
               </div>
             ))}
+
             <button
               type="button"
               onClick={addOption}
@@ -1401,13 +1383,22 @@ export function AssessmentPackages() {
         }
       }
     }
-    const questionRule = form.visibility_rules?.conditions?.find((item) => item.type === "question_answer");
-    if (questionRule && (!questionRule.question_key || String(questionRule.value ?? "").trim() === "")) {
-      return "Question dependency rule is incomplete.";
-    }
-    const preferenceRule = form.visibility_rules?.conditions?.find((item) => item.type === "user_preference");
-    if (preferenceRule && (!preferenceRule.preference_key || String(preferenceRule.value ?? "").trim() === "")) {
-      return "Preference dependency rule is incomplete.";
+    const conditions = form.visibility_rules?.conditions ?? [];
+    for (const condition of conditions) {
+      if (condition.type === "question_answer") {
+        const value = condition.value;
+        const isEmptyArray = Array.isArray(value) && value.length === 0;
+        if (!condition.question_key || (String(value ?? "").trim() === "" && !Array.isArray(value)) || isEmptyArray) {
+          return "Question dependency rule is incomplete.";
+        }
+      }
+      if (condition.type === "user_preference") {
+        const value = condition.value;
+        const isEmptyArray = Array.isArray(value) && value.length === 0;
+        if (!condition.preference_key || (String(value ?? "").trim() === "" && !Array.isArray(value)) || isEmptyArray) {
+          return "Preference dependency rule is incomplete.";
+        }
+      }
     }
     return null;
   };
