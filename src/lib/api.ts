@@ -457,6 +457,24 @@ export interface QuestionnaireOption {
   tooltip_text?: string | null;
 }
 
+export interface QuestionnaireVisibilityCondition {
+  type: "question_answer" | "user_preference";
+  operator: "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in";
+  question_key?: string;
+  preference_key?: "diet_preference" | "allergies";
+  value: unknown;
+}
+
+export interface QuestionnaireVisibilityRules {
+  match: "all" | "any";
+  conditions: QuestionnaireVisibilityCondition[];
+}
+
+export interface QuestionnairePrefillFrom {
+  source: "user_preference";
+  preference_key: "diet_preference" | "allergies";
+}
+
 export interface QuestionnaireQuestion {
   question_id: number;
   question_key?: string | null;
@@ -466,6 +484,8 @@ export interface QuestionnaireQuestion {
   is_read_only?: boolean;
   help_text?: string | null;
   options?: QuestionnaireOption[] | null;
+  visibility_rules?: QuestionnaireVisibilityRules | null;
+  prefill_from?: QuestionnairePrefillFrom | null;
   status?: string | null;
   created_at?: string | null;
   category_id?: number | null;
@@ -481,6 +501,8 @@ export interface QuestionnaireQuestionCreate {
   is_read_only?: boolean;
   help_text?: string | null;
   options?: QuestionnaireOption[] | null;
+  visibility_rules?: QuestionnaireVisibilityRules | null;
+  prefill_from?: QuestionnairePrefillFrom | null;
   status?: string;
 }
 
@@ -492,6 +514,8 @@ export interface QuestionnaireQuestionUpdate {
   is_read_only?: boolean;
   help_text?: string | null;
   options?: QuestionnaireOption[] | null;
+  visibility_rules?: QuestionnaireVisibilityRules | null;
+  prefill_from?: QuestionnairePrefillFrom | null;
 }
 
 export interface QuestionnaireCategory {

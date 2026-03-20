@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Info, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -40,6 +40,8 @@ const QUESTION_TYPES = [
   { value: "scale", label: "Scale" },
 ] as const;
 const CHOICE_TYPES = new Set(["single_choice", "multiple_choice"]);
+const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
+type LogicTemplate = "none" | "depends_on_answer" | "depends_on_preference" | "prefill_only" | "custom";
 
 type TabKey = "packages" | "categories" | "questions";
 const TAB_KEYS: TabKey[] = ["packages", "categories", "questions"];
@@ -52,6 +54,8 @@ const BLANK_QUESTION: QuestionnaireQuestionCreate = {
   is_read_only: false,
   help_text: "",
   options: null,
+  visibility_rules: null,
+  prefill_from: null,
   status: "active",
 };
 
@@ -77,6 +81,7 @@ function StatusBadge({ status }: { status?: string | null }) {
 interface QuestionFormProps {
   value: QuestionnaireQuestionCreate;
   onChange: (value: QuestionnaireQuestionCreate) => void;
+  availableQuestionKeys?: string[];
   mode: "add" | "edit";
   error: string | null;
   submitting: boolean;
@@ -90,6 +95,7 @@ interface QuestionFormProps {
 function QuestionForm({
   value,
   onChange,
+  availableQuestionKeys,
   mode,
   error,
   submitting,
@@ -101,6 +107,76 @@ function QuestionForm({
 }: QuestionFormProps) {
   const showOptions = CHOICE_TYPES.has(value.question_type);
   const options = value.options ?? [];
+  const visibilityRules = value.visibility_rules ?? { match: "all" as const, conditions: [] };
+  const questionCondition = visibilityRules.conditions.find((item) => item.type === "question_answer");
+  const preferenceCondition = visibilityRules.conditions.find((item) => item.type === "user_preference");
+  const questionDependencyKey = typeof questionCondition?.question_key === "string" ? questionCondition.question_key : "";
+  const questionDependencyValue = questionCondition?.value == null ? "" : String(questionCondition.value);
+  const preferenceDependencyKey = preferenceCondition?.preference_key ?? "";
+  const preferenceDependencyValue = preferenceCondition?.value == null ? "" : String(preferenceCondition.value);
+  const preferenceOperator = preferenceCondition?.operator ?? "equals";
+  const prefillPreferenceKey = value.prefill_from?.preference_key ?? "";
+  const [draftQuestionKey, setDraftQuestionKey] = useState(questionDependencyKey);
+  const [draftQuestionValue, setDraftQuestionValue] = useState(questionDependencyValue);
+  const [draftPreferenceKey, setDraftPreferenceKey] = useState(preferenceDependencyKey);
+  const [draftPreferenceValue, setDraftPreferenceValue] = useState(preferenceDependencyValue);
+  const [draftPreferenceOperator, setDraftPreferenceOperator] = useState<"equals" | "contains">(
+    preferenceOperator === "contains" ? "contains" : "equals"
+  );
+  const [openHintId, setOpenHintId] = useState<string | null>(null);
+  const isAdvancedConfigured =
+    (visibilityRules.conditions?.length ?? 0) > 0 || Boolean(value.prefill_from?.preference_key);
+  const [showAdvanced, setShowAdvanced] = useState(isAdvancedConfigured);
+  const [useCustomQuestionKey, setUseCustomQuestionKey] = useState(false);
+  const availableParentKeys = useMemo(
+    () =>
+      (availableQuestionKeys ?? [])
+        .filter((item) => item && item !== value.question_key)
+        .sort((a, b) => a.localeCompare(b)),
+    [availableQuestionKeys, value.question_key]
+  );
+  const detectTemplate = (): LogicTemplate => {
+    const hasQuestionRule = Boolean(questionCondition);
+    const hasPreferenceRule = Boolean(preferenceCondition);
+    const hasPrefill = Boolean(prefillPreferenceKey);
+    if (hasQuestionRule && !hasPreferenceRule && !hasPrefill) return "depends_on_answer";
+    if (!hasQuestionRule && hasPreferenceRule && !hasPrefill) return "depends_on_preference";
+    if (!hasQuestionRule && !hasPreferenceRule && hasPrefill) return "prefill_only";
+    if (!hasQuestionRule && !hasPreferenceRule && !hasPrefill) return "none";
+    return "custom";
+  };
+  const [selectedTemplate, setSelectedTemplate] = useState<LogicTemplate | null>(null);
+  const logicTemplate = selectedTemplate ?? detectTemplate();
+  const isCustomQuestionKeyMode = useCustomQuestionKey || availableParentKeys.length === 0;
+  const advancedSummary = (() => {
+    const parts: string[] = [];
+    if ((visibilityRules.conditions?.length ?? 0) > 0) {
+      parts.push(`${visibilityRules.conditions.length} condition${visibilityRules.conditions.length > 1 ? "s" : ""}`);
+    }
+    if (prefillPreferenceKey) {
+      parts.push(`auto-fill: ${prefillPreferenceKey}`);
+    }
+    return parts.length > 0 ? parts.join(" • ") : "No advanced logic configured";
+  })();
+  const setTemplateAndReset = (template: LogicTemplate) => {
+    setSelectedTemplate(template);
+    if (template === "none") {
+      setField({ visibility_rules: null, prefill_from: null });
+      return;
+    }
+    if (template === "prefill_only") {
+      setField({ visibility_rules: null });
+      return;
+    }
+    if (template === "depends_on_answer") {
+      setField({ prefill_from: null });
+      return;
+    }
+    if (template === "depends_on_preference") {
+      setField({ prefill_from: null });
+      return;
+    }
+  };
   const getSuggestedOptionValue = (displayName: string, index: number) => {
     const normalized = displayName
       .toLowerCase()
@@ -113,6 +189,91 @@ function QuestionForm({
   const setField = (patch: Partial<QuestionnaireQuestionCreate>) => {
     onChange({ ...value, ...patch });
   };
+
+  const setVisibilityRules = (params: {
+    questionKey: string;
+    questionValue: string;
+    preferenceKey: string;
+    preferenceValue: string;
+    preferenceOperator: "equals" | "contains";
+    match: "all" | "any";
+  }) => {
+    const conditions: {
+      type: "question_answer" | "user_preference";
+      operator: "equals" | "contains";
+      question_key?: string;
+      preference_key?: "diet_preference" | "allergies";
+      value: string;
+    }[] = [];
+    const normalizedQuestionKey = params.questionKey.trim().toLowerCase();
+    if (normalizedQuestionKey) {
+      conditions.push({
+        type: "question_answer",
+        operator: "equals",
+        question_key: normalizedQuestionKey,
+        value: params.questionValue,
+      });
+    }
+    if (params.preferenceKey) {
+      conditions.push({
+        type: "user_preference",
+        operator: params.preferenceOperator,
+        preference_key: params.preferenceKey as "diet_preference" | "allergies",
+        value: params.preferenceValue,
+      });
+    }
+    if (conditions.length === 0) {
+      setField({ visibility_rules: null });
+      return;
+    }
+    setField({
+      visibility_rules: {
+        match: params.match,
+        conditions,
+      },
+    });
+  };
+  const setQuestionDependencyRule = (questionKey: string, answerValue: string) => {
+    setVisibilityRules({
+      questionKey,
+      questionValue: answerValue,
+      preferenceKey: "",
+      preferenceValue: "",
+      preferenceOperator: "equals",
+      match: "all",
+    });
+  };
+  const setPreferenceDependencyRule = (
+    preferenceKey: string,
+    preferenceValue: string,
+    operator: "equals" | "contains"
+  ) => {
+    setVisibilityRules({
+      questionKey: "",
+      questionValue: "",
+      preferenceKey,
+      preferenceValue,
+      preferenceOperator: operator,
+      match: "all",
+    });
+  };
+  const renderHelpHint = (id: string, text: string) => (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => setOpenHintId((prev) => (prev === id ? null : id))}
+        className="inline-flex items-center text-zinc-400 hover:text-zinc-600"
+        aria-label={text}
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      {openHintId === id && (
+        <span className="absolute left-5 top-0 z-20 w-64 rounded-md border border-zinc-200 bg-white p-2 text-xs text-zinc-600 shadow-lg">
+          {text}
+        </span>
+      )}
+    </span>
+  );
 
   const addOption = () => {
     const index = options.length;
@@ -247,6 +408,266 @@ function QuestionForm({
           className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
           placeholder="Optional hint shown under the question..."
         />
+      </div>
+
+      <div className="rounded-lg border border-zinc-200">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((prev) => !prev)}
+          className="w-full px-3 py-2 flex items-center justify-between hover:bg-zinc-50 rounded-lg"
+        >
+          <div className="text-left">
+            <p className="text-sm font-medium text-zinc-800">Advanced logic (optional)</p>
+            <p className="text-xs text-zinc-500">
+              Use this only when the question should depend on another answer or saved preference.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!showAdvanced && (
+              <span className="text-xs text-zinc-500 px-2 py-1 rounded-full bg-zinc-100">{advancedSummary}</span>
+            )}
+            {showAdvanced ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
+          </div>
+        </button>
+
+        {showAdvanced && (
+          <div className="border-t border-zinc-200 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-zinc-800">How should this question behave?</p>
+              {renderHelpHint("template-help", "Pick a guided template. You can switch to Custom if needed.")}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+              {[
+                { id: "none", label: "No advanced logic", hint: "Always show this question." },
+                { id: "depends_on_answer", label: "Follow-up question", hint: "Show only when another answer matches." },
+                { id: "depends_on_preference", label: "Use user preferences", hint: "Show only when profile preference matches." },
+                { id: "prefill_only", label: "Auto-fill from preference", hint: "Pre-fill answer from saved preferences." },
+                { id: "custom", label: "Custom", hint: "Manually configure all fields." },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTemplateAndReset(item.id as LogicTemplate)}
+                  className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                    logicTemplate === item.id ? "border-zinc-900 bg-zinc-50" : "border-zinc-300 hover:bg-zinc-50"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-zinc-800">{item.label}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{item.hint}</p>
+                </button>
+              ))}
+            </div>
+
+            {(logicTemplate === "depends_on_answer" || logicTemplate === "custom") && (
+              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-zinc-800">When should this question appear?</p>
+                  {renderHelpHint("followup-help", "Example: show 'How many cups?' only when 'Do you consume coffee or tea?' is yes.")}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                  {!isCustomQuestionKeyMode ? (
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Depends on question</span>
+                      <select
+                        value={draftQuestionKey}
+                        onChange={(e) => {
+                          setDraftQuestionKey(e.target.value);
+                          setQuestionDependencyRule(e.target.value, draftQuestionValue);
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                      >
+                        <option value="">Select question...</option>
+                        {availableParentKeys.map((key) => (
+                          <option key={key} value={key}>
+                            {key}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Depends on question key</span>
+                      <input
+                        type="text"
+                        value={draftQuestionKey}
+                        onChange={(e) => {
+                          setDraftQuestionKey(e.target.value);
+                          setQuestionDependencyRule(e.target.value, draftQuestionValue);
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
+                        placeholder="e.g. consume_coffee_or_tea"
+                      />
+                    </label>
+                  )}
+                  <label>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">Show this question when answer is</span>
+                    <input
+                      type="text"
+                      value={draftQuestionValue}
+                      onChange={(e) => {
+                        setDraftQuestionValue(e.target.value);
+                        setQuestionDependencyRule(draftQuestionKey, e.target.value);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      placeholder="e.g. yes"
+                    />
+                  </label>
+                  {availableParentKeys.length > 0 && (
+                    <div>
+                      <span className="mb-1 block text-xs font-medium text-zinc-600">Question selector</span>
+                      <button
+                        type="button"
+                        onClick={() => setUseCustomQuestionKey((prev) => !prev)}
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-xs text-zinc-700 hover:bg-zinc-50"
+                      >
+                        {useCustomQuestionKey ? "Use selectable list" : "Use custom key"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {(logicTemplate === "depends_on_preference" || logicTemplate === "custom") && (
+              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-zinc-800">Show based on user preference</p>
+                  {renderHelpHint("preference-help", "Example: show non-veg question only when diet preference equals non_veg.")}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                  <label>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">Preference field</span>
+                    <select
+                      value={draftPreferenceKey}
+                      onChange={(e) =>
+                        {
+                          setDraftPreferenceKey(e.target.value);
+                          setPreferenceDependencyRule(
+                            e.target.value,
+                            draftPreferenceValue,
+                            draftPreferenceOperator
+                          );
+                        }
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                    >
+                      <option value="">Select preference...</option>
+                      {PREFILL_PREFERENCE_KEYS.map((key) => (
+                        <option key={key} value={key}>
+                          {key}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">Expected preference value</span>
+                    <input
+                      type="text"
+                      value={draftPreferenceValue}
+                      onChange={(e) =>
+                        {
+                          setDraftPreferenceValue(e.target.value);
+                          setPreferenceDependencyRule(
+                            draftPreferenceKey,
+                            e.target.value,
+                            draftPreferenceOperator
+                          );
+                        }
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      placeholder={draftPreferenceKey === "allergies" ? "e.g. dairy" : "e.g. veg"}
+                    />
+                  </label>
+                  <div>
+                    <span className="mb-1 block text-xs font-medium text-zinc-600">How to compare</span>
+                    <div className="inline-flex rounded-lg border border-zinc-300 overflow-hidden">
+                      {(["equals", "contains"] as const).map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => {
+                            setDraftPreferenceOperator(item);
+                            setPreferenceDependencyRule(
+                              draftPreferenceKey,
+                              draftPreferenceValue,
+                              item
+                            );
+                          }}
+                          className={`px-3 py-2 text-sm ${
+                            draftPreferenceOperator === item ? "bg-zinc-900 text-white" : "bg-white text-zinc-700 hover:bg-zinc-50"
+                          }`}
+                        >
+                          {item === "equals" ? "Equals" : "Contains"}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {draftPreferenceOperator === "equals"
+                        ? "Use exact value match."
+                        : "Use this when preference is a list (example: allergies)."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(logicTemplate === "prefill_only" || logicTemplate === "custom") && (
+              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-zinc-800">Auto-fill answer from preferences</p>
+                  {renderHelpHint("prefill-help", "Draft answers always override auto-filled values.")}
+                </div>
+                <label className="block max-w-md">
+                  <span className="mb-1 block text-xs font-medium text-zinc-600">Auto-fill from</span>
+                  <select
+                    value={prefillPreferenceKey}
+                    onChange={(e) =>
+                      setField({
+                        prefill_from: e.target.value
+                          ? {
+                              source: "user_preference",
+                              preference_key: e.target.value as "diet_preference" | "allergies",
+                            }
+                          : null,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                  >
+                    <option value="">None</option>
+                    {PREFILL_PREFERENCE_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {logicTemplate === "custom" && (visibilityRules.conditions?.length ?? 0) > 1 && (
+              <label className="block max-w-sm">
+                <span className="mb-1 block text-xs font-medium text-zinc-600">When multiple conditions exist</span>
+                <select
+                  value={visibilityRules.match}
+                  onChange={(e) =>
+                    setVisibilityRules({
+                      questionKey: draftQuestionKey,
+                      questionValue: draftQuestionValue,
+                      preferenceKey: draftPreferenceKey,
+                      preferenceValue: draftPreferenceValue,
+                      preferenceOperator: draftPreferenceOperator === "contains" ? "contains" : "equals",
+                      match: e.target.value === "any" ? "any" : "all",
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+                >
+                  <option value="all">All conditions must match</option>
+                  <option value="any">Any condition can match</option>
+                </select>
+              </label>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
@@ -934,6 +1355,8 @@ export function AssessmentPackages() {
           is_read_only: !!item.is_read_only,
           help_text: item.help_text ?? "",
           options: item.options ?? null,
+          visibility_rules: item.visibility_rules ?? null,
+          prefill_from: item.prefill_from ?? null,
           status: item.status ?? "active",
         });
         setQFormError(null);
@@ -960,6 +1383,8 @@ export function AssessmentPackages() {
       is_read_only: !!form.is_read_only,
       help_text: (form.help_text ?? "").trim() || null,
       options,
+      visibility_rules: form.visibility_rules ?? null,
+      prefill_from: form.prefill_from ?? null,
     };
   };
 
@@ -975,6 +1400,14 @@ export function AssessmentPackages() {
           return "Option value and display name are required.";
         }
       }
+    }
+    const questionRule = form.visibility_rules?.conditions?.find((item) => item.type === "question_answer");
+    if (questionRule && (!questionRule.question_key || String(questionRule.value ?? "").trim() === "")) {
+      return "Question dependency rule is incomplete.";
+    }
+    const preferenceRule = form.visibility_rules?.conditions?.find((item) => item.type === "user_preference");
+    if (preferenceRule && (!preferenceRule.preference_key || String(preferenceRule.value ?? "").trim() === "")) {
+      return "Preference dependency rule is incomplete.";
     }
     return null;
   };
@@ -2190,6 +2623,15 @@ export function AssessmentPackages() {
                   <dd className="text-zinc-700">{selectedQ.help_text}</dd>
                 </div>
               )}
+              {(selectedQ.visibility_rules || selectedQ.prefill_from) && (
+                <div>
+                  <dt className="text-zinc-500 mb-1">Conditional Logic</dt>
+                  <dd className="text-zinc-700 text-xs">
+                    {selectedQ.visibility_rules ? JSON.stringify(selectedQ.visibility_rules) : "No visibility rules"}
+                    {selectedQ.prefill_from ? ` | Prefill: ${JSON.stringify(selectedQ.prefill_from)}` : ""}
+                  </dd>
+                </div>
+              )}
               {selectedQ.options && selectedQ.options.length > 0 && (
                 <div>
                   <dt className="text-zinc-500 mb-1">Options</dt>
@@ -2242,6 +2684,9 @@ export function AssessmentPackages() {
           <QuestionForm
             value={qForm}
             onChange={setQForm}
+            availableQuestionKeys={qData
+              .map((question) => question.question_key ?? "")
+              .filter((item) => item.length > 0)}
             mode={qModalMode as "add" | "edit"}
             error={qFormError}
             submitting={qSubmitting}
