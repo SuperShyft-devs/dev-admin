@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   ListChecks,
+  ClipboardCheck,
   Users,
   UserCog,
   CalendarClock,
@@ -41,6 +42,9 @@ interface DataTableProps<T> {
   onParticipants?: (row: T) => void;
   onAssistants?: (row: T) => void;
   onOccupiedSlots?: (row: T) => void;
+  /** Engagement checklist manager (shown with ClipboardCheck icon). */
+  onManageChecklists?: (row: T) => void;
+  onManageChecklistsLabel?: string;
   firstColumnClickableView?: boolean;
   pagination?: {
     page: number;
@@ -68,12 +72,22 @@ export function DataTable<T extends object>(
     onParticipants,
     onAssistants,
     onOccupiedSlots,
+    onManageChecklists,
+    onManageChecklistsLabel = "Manage Checklists",
     firstColumnClickableView = true,
     pagination,
   } = props;
 
   const firstKey = columns[0]?.key;
-  const hasActions = onView || onEdit || onDelete || onQuestions || onParticipants || onAssistants || onOccupiedSlots;
+  const hasActions =
+    onView ||
+    onEdit ||
+    onDelete ||
+    onQuestions ||
+    onParticipants ||
+    onAssistants ||
+    onOccupiedSlots ||
+    onManageChecklists;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -261,6 +275,18 @@ export function DataTable<T extends object>(
                             >
                               <CalendarClock className="w-4 h-4" />
                               View Occupied Slots
+                            </button>
+                          )}
+                          {onManageChecklists && (
+                            <button
+                              onClick={() => {
+                                onManageChecklists(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <ClipboardCheck className="w-4 h-4" />
+                              {onManageChecklistsLabel}
                             </button>
                           )}
                           {onQuestions && (

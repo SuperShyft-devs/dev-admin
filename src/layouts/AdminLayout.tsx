@@ -14,36 +14,55 @@ import {
   LifeBuoy,
   ClipboardCheck,
   Inbox,
+  Library,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+const primaryNavItems = [
+  { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true as const },
   { to: "/users", icon: UserRound, label: "Users" },
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
-  { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
-  { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
-  { to: "/checklists", icon: ClipboardCheck, label: "Checklists" },
-  { to: "/my-tasks", icon: Inbox, label: "My Tasks" },
   { to: "/support", icon: LifeBuoy, label: "Support" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
+
+const libraryNavItems = [
+  { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
+  { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
+  { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates" },
+];
+
+function isLibraryPath(pathname: string) {
+  return (
+    pathname.startsWith("/assessments") ||
+    pathname.startsWith("/diagnostics") ||
+    pathname.startsWith("/checklists")
+  );
+}
 
 export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout, userProfile, userId } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const pendingTaskCount = usePendingTaskCount(location.pathname);
+  const [libraryOpen, setLibraryOpen] = useState(() => isLibraryPath(location.pathname));
 
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
   };
 
-  const location = useLocation();
   useEffect(() => {
     setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (isLibraryPath(location.pathname)) setLibraryOpen(true);
   }, [location.pathname]);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
@@ -105,11 +124,85 @@ export function AdminLayout() {
           </div>
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {primaryNavItems.slice(0, 4).map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
-              end={to === "/"}
+              end={end ?? false}
+              onClick={closeMobileMenu}
+              className={({ isActive }) =>
+                `${navLinkClass({ isActive })} ${sidebarCollapsed ? "justify-center" : ""}`
+              }
+            >
+              <Icon className="w-5 h-5 shrink-0" />
+              {!sidebarCollapsed && <span>{label}</span>}
+            </NavLink>
+          ))}
+
+          {sidebarCollapsed ? (
+            libraryNavItems.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={closeMobileMenu}
+                title={label}
+                className={({ isActive }) =>
+                  `${navLinkClass({ isActive })} justify-center`
+                }
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+              </NavLink>
+            ))
+          ) : (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => setLibraryOpen((o) => !o)}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isLibraryPath(location.pathname)
+                    ? "bg-zinc-100 text-zinc-900"
+                    : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                }`}
+                aria-expanded={libraryOpen}
+              >
+                <Library className="w-5 h-5 shrink-0" />
+                <span className="flex-1 text-left">Library</span>
+                <ChevronDown
+                  className={`w-4 h-4 shrink-0 text-zinc-400 transition-transform ${
+                    libraryOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                />
+              </button>
+              {libraryOpen && (
+                <div className="mt-0.5 ml-2 pl-2 border-l border-zinc-200 space-y-0.5">
+                  {libraryNavItems.map(({ to, icon: Icon, label }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      onClick={closeMobileMenu}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-zinc-100 text-zinc-900"
+                            : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                        }`
+                      }
+                    >
+                      <Icon className="w-4 h-4 shrink-0 opacity-80" />
+                      <span>{label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {primaryNavItems.slice(4).map(({ to, icon: Icon, label, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end ?? false}
               onClick={closeMobileMenu}
               className={({ isActive }) =>
                 `${navLinkClass({ isActive })} ${sidebarCollapsed ? "justify-center" : ""}`
@@ -131,7 +224,31 @@ export function AdminLayout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex-1 lg:flex-none" />
+          <div className="flex-1 min-w-0" />
+          <NavLink
+            to="/my-tasks"
+            className={({ isActive }) =>
+              `relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                isActive
+                  ? "bg-zinc-100 text-zinc-900"
+                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+              }`
+            }
+            title="My tasks"
+            aria-label={
+              pendingTaskCount != null && pendingTaskCount > 0
+                ? `My tasks, ${pendingTaskCount} pending`
+                : "My tasks"
+            }
+          >
+            <Inbox className="w-5 h-5 shrink-0" />
+            <span className="hidden sm:inline">Tasks</span>
+            {pendingTaskCount != null && pendingTaskCount > 0 ? (
+              <span className="min-w-[1.125rem] h-5 px-1 rounded-full bg-zinc-900 text-white text-[11px] font-semibold flex items-center justify-center tabular-nums leading-none">
+                {pendingTaskCount > 99 ? "99+" : pendingTaskCount}
+              </span>
+            ) : null}
+          </NavLink>
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="text-sm text-zinc-600 truncate max-w-[120px] sm:max-w-none">
               {userProfile?.first_name || userProfile?.last_name

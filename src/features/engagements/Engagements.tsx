@@ -7,7 +7,6 @@ import {
   UserCog,
   Trash2,
   X,
-  ClipboardCheck,
   Check,
   ChevronDown,
   ChevronRight,
@@ -317,7 +316,7 @@ function EngagementChecklistModal({
                         </button>
                       </div>
                       {isOpen && (
-                        <ul className="mt-3 pt-3 border-t border-zinc-100 space-y-3 sm:ml-6">
+                        <ul className="mt-3 pt-3 border-t border-zinc-100 space-y-2 sm:ml-6">
                           {cl.tasks.map((task) => {
                             const doneTask = (task.status ?? "").toLowerCase() === "done";
                             const busy = taskUpdating.has(task.task_id);
@@ -325,71 +324,92 @@ function EngagementChecklistModal({
                             const assigneeValue =
                               task.assigned_employee_id != null ? String(task.assigned_employee_id) : "";
                             return (
-                              <li key={task.task_id} className="flex gap-3">
-                                <button
-                                  type="button"
-                                  disabled={busy || assigning}
-                                  onClick={() => void toggleTaskStatus(task.task_id, task.status)}
-                                  className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                    doneTask
-                                      ? "bg-emerald-500 border-emerald-500 text-white"
-                                      : "border-zinc-300 bg-white hover:border-zinc-400"
-                                  } disabled:opacity-60`}
-                                  aria-label={doneTask ? "Mark pending" : "Mark done"}
-                                >
-                                  {busy ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
-                                  ) : doneTask ? (
-                                    <Check className="w-3.5 h-3.5" />
-                                  ) : null}
-                                </button>
-                                <div className="min-w-0 flex-1 space-y-2">
-                                  <p className="font-medium text-zinc-900">{task.item_title}</p>
-                                  {task.item_description?.trim() ? (
-                                    <p className="text-sm text-zinc-500">{task.item_description}</p>
-                                  ) : null}
-                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
-                                    <label className="text-xs font-medium text-zinc-600 shrink-0" htmlFor={`assign-${task.task_id}`}>
-                                      Assign to
-                                    </label>
-                                    <div className="flex items-center gap-2 min-w-0 flex-1 sm:max-w-xs">
-                                      <select
-                                        id={`assign-${task.task_id}`}
-                                        value={assigneeValue}
-                                        disabled={busy || assigning}
-                                        onChange={(e) => void assignTask(task.task_id, e.target.value)}
-                                        className="w-full min-w-0 border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
-                                      >
-                                        <option value="">Unassigned</option>
-                                        {employees.map((emp) => (
-                                          <option key={emp.employee_id} value={emp.employee_id}>
-                                            #{emp.employee_id}
-                                            {emp.role ? ` · ${emp.role}` : ""}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      {assigning ? (
-                                        <Loader2 className="w-4 h-4 animate-spin text-zinc-400 shrink-0" aria-hidden />
-                                      ) : null}
-                                    </div>
-                                    {task.due_date ? (
-                                      <span className="text-xs text-zinc-500 sm:ml-auto">
-                                        Due {formatTaskDue(task.due_date)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {task.notes?.trim() ? (
-                                    <p className="text-xs italic text-zinc-500">{task.notes}</p>
-                                  ) : null}
+                              <li
+                                key={task.task_id}
+                                className="rounded-lg border border-zinc-200 bg-zinc-50/90 p-3 sm:p-3.5"
+                              >
+                                <div className="flex gap-3">
                                   <button
                                     type="button"
-                                    onClick={() => openTaskEdit(task)}
                                     disabled={busy || assigning}
-                                    className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                                    onClick={() => void toggleTaskStatus(task.task_id, task.status)}
+                                    className={`mt-1 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                      doneTask
+                                        ? "bg-emerald-500 border-emerald-500 text-white"
+                                        : "border-zinc-300 bg-white hover:border-zinc-400"
+                                    } disabled:opacity-60`}
+                                    aria-label={doneTask ? "Mark pending" : "Mark done"}
                                   >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                    Edit due date and notes
+                                    {busy ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+                                    ) : doneTask ? (
+                                      <Check className="w-3.5 h-3.5" />
+                                    ) : null}
                                   </button>
+                                  <div className="min-w-0 flex-1 space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                      <p className="font-medium text-zinc-900 leading-snug min-w-[8rem] flex-1">
+                                        {task.item_title}
+                                      </p>
+                                      <div className="flex items-center gap-2 w-full sm:w-auto sm:max-w-[min(100%,18rem)] shrink-0">
+                                        <label
+                                          className="text-xs font-medium text-zinc-600 whitespace-nowrap"
+                                          htmlFor={`assign-${task.task_id}`}
+                                        >
+                                          Assign to
+                                        </label>
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                          <select
+                                            id={`assign-${task.task_id}`}
+                                            value={assigneeValue}
+                                            disabled={busy || assigning}
+                                            onChange={(e) => void assignTask(task.task_id, e.target.value)}
+                                            className="w-full min-w-0 border border-zinc-300 rounded-lg px-2.5 py-1.5 text-sm text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                                          >
+                                            <option value="">Unassigned</option>
+                                            {employees.map((emp) => (
+                                              <option key={emp.employee_id} value={emp.employee_id}>
+                                                #{emp.employee_id}
+                                                {emp.role ? ` · ${emp.role}` : ""}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          {assigning ? (
+                                            <Loader2
+                                              className="w-4 h-4 animate-spin text-zinc-400 shrink-0"
+                                              aria-hidden
+                                            />
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {task.item_description?.trim() ? (
+                                      <p className="text-sm text-zinc-500 leading-relaxed">{task.item_description}</p>
+                                    ) : null}
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                      {task.due_date ? (
+                                        <span className="text-xs text-zinc-500">
+                                          Due {formatTaskDue(task.due_date)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-zinc-400">No due date</span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => openTaskEdit(task)}
+                                        disabled={busy || assigning}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700 hover:text-zinc-900 underline-offset-2 hover:underline disabled:opacity-50"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                        Edit date &amp; notes
+                                      </button>
+                                    </div>
+                                    {task.notes?.trim() ? (
+                                      <p className="text-xs italic text-zinc-600 border-l-2 border-zinc-200 pl-2">
+                                        {task.notes}
+                                      </p>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </li>
                             );
@@ -403,38 +423,46 @@ function EngagementChecklistModal({
             )}
           </section>
 
-          <section className="border-t border-zinc-200 pt-4">
-            <h3 className="text-sm font-semibold text-zinc-900 mb-3">Apply a template</h3>
+          <section className="border-t border-zinc-200 pt-5">
+            <h3 className="text-sm font-semibold text-zinc-900">Add a checklist</h3>
+            <p className="text-xs text-zinc-500 mt-1 mb-4">
+              Pick an active template. Tasks are created automatically for this engagement.
+            </p>
             {applyError && (
               <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 {applyError}
               </div>
             )}
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-              <div className="flex-1 min-w-0">
-                <label className="block text-xs font-medium text-zinc-600 mb-1">Template</label>
-                <select
-                  value={applyTemplateId}
-                  onChange={(e) => setApplyTemplateId(e.target.value)}
-                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div className="flex-1 min-w-0">
+                  <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="apply-template-select">
+                    Checklist template
+                  </label>
+                  <select
+                    id="apply-template-select"
+                    value={applyTemplateId}
+                    onChange={(e) => setApplyTemplateId(e.target.value)}
+                    className="w-full border border-zinc-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  >
+                    <option value="">Choose a template…</option>
+                    {activeTemplates.map((t) => (
+                      <option key={t.template_id} value={t.template_id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  disabled={!applyTemplateId || applyLoading}
+                  onClick={() => void handleApply()}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0 w-full sm:w-auto"
                 >
-                  <option value="">Select a template…</option>
-                  {activeTemplates.map((t) => (
-                    <option key={t.template_id} value={t.template_id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+                  {applyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Apply to engagement
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={!applyTemplateId || applyLoading}
-                onClick={() => void handleApply()}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0"
-              >
-                {applyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Apply
-              </button>
             </div>
           </section>
         </div>
@@ -917,19 +945,11 @@ export function Engagements() {
 
   const columns: Column<EngagementListItem>[] = [
     { key: "engagement_name", label: "Name", sortable: true, render: (r) => r.engagement_name || r.engagement_code || "—" },
-    { key: "engagement_code", label: "Code", sortable: true, hideOnTablet: true },
     { key: "organization_id", label: "Organisation", sortable: true, render: (r) => getOrgName(r.organization_id ?? 0), hideOnMobile: true },
     { key: "engagement_type", label: "Type", sortable: true, hideOnTablet: true },
     { key: "city", label: "City", sortable: true, hideOnTablet: true },
     { key: "start_date", label: "Start", sortable: true, hideOnMobile: true, render: (r) => formatDate(r.start_date) },
     { key: "end_date", label: "End", sortable: true, hideOnTablet: true, render: (r) => formatDate(r.end_date) },
-    {
-      key: "participant_count",
-      label: "Participants",
-      sortable: true,
-      hideOnTablet: true,
-      render: (r) => (r.participant_count != null ? String(r.participant_count) : "—"),
-    },
     {
       key: "readiness",
       label: "Readiness",
@@ -971,26 +991,6 @@ export function Engagements() {
           </button>
         );
       },
-    },
-    {
-      key: "_checklist_shortcut",
-      label: "",
-      sortable: false,
-      className: "w-12 px-2",
-      render: (r) => (
-        <button
-          type="button"
-          title="Manage checklists"
-          aria-label="Manage checklists"
-          onClick={(e) => {
-            e.stopPropagation();
-            openChecklistModal(r);
-          }}
-          className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 mx-auto block"
-        >
-          <ClipboardCheck className="w-4 h-4" />
-        </button>
-      ),
     },
     {
       key: "status",
@@ -1119,8 +1119,7 @@ export function Engagements() {
             onParticipants={openParticipants}
             onOccupiedSlots={openOccupiedSlots}
             onAssistants={openAssistantsModal}
-            onQuestions={(r) => openChecklistModal(r)}
-            onQuestionsLabel="Manage Checklists"
+            onManageChecklists={(r) => openChecklistModal(r)}
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
               page,

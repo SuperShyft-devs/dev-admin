@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { checklistTasksApi, getApiError, type MyTask } from "../../lib/api";
@@ -131,6 +131,31 @@ export function MyTasks() {
       render: (r) => <span className="font-medium text-zinc-900">{r.item_title}</span>,
     },
     {
+      key: "status",
+      label: "Done",
+      sortable: true,
+      className: "w-14 text-center",
+      render: (r) => {
+        const done = (r.status ?? "").toLowerCase() === "done";
+        const busy = updatingId === r.task_id;
+        return (
+          <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+            {busy ? (
+              <Loader2 className="w-5 h-5 animate-spin text-zinc-400" aria-hidden />
+            ) : (
+              <input
+                type="checkbox"
+                checked={done}
+                onChange={() => void toggleStatus(r)}
+                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-zinc-900 cursor-pointer"
+                aria-label={done ? "Mark as pending" : "Mark as done"}
+              />
+            )}
+          </div>
+        );
+      },
+    },
+    {
       key: "engagement_name",
       label: "Engagement",
       sortable: true,
@@ -153,23 +178,6 @@ export function MyTasks() {
       },
     },
     {
-      key: "status",
-      label: "Status",
-      sortable: true,
-      render: (r) => {
-        const done = (r.status ?? "").toLowerCase() === "done";
-        return (
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              done ? "bg-green-50 text-green-700" : "bg-zinc-100 text-zinc-500"
-            }`}
-          >
-            {done ? "Done" : "Pending"}
-          </span>
-        );
-      },
-    },
-    {
       key: "notes",
       label: "Notes",
       sortable: false,
@@ -178,36 +186,6 @@ export function MyTasks() {
         const n = r.notes?.trim();
         if (!n) return "—";
         return n.length > 50 ? `${n.slice(0, 50)}…` : n;
-      },
-    },
-    {
-      key: "_action",
-      label: "Actions",
-      render: (r) => {
-        const done = (r.status ?? "").toLowerCase() === "done";
-        const busy = updatingId === r.task_id;
-        return (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              type="button"
-              onClick={() => openEdit(r)}
-              disabled={busy}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-700 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => void toggleStatus(r)}
-              disabled={busy}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-700 text-xs font-medium hover:bg-zinc-50 disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-              {done ? "Mark pending" : "Mark done"}
-            </button>
-          </div>
-        );
       },
     },
   ];
@@ -265,6 +243,7 @@ export function MyTasks() {
             sortDir={sortDir}
             onSort={handleSort}
             firstColumnClickableView={false}
+            onEdit={openEdit}
           />
         )}
       </div>

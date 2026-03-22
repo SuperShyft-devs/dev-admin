@@ -10,13 +10,16 @@ import {
   RefreshCw,
   TrendingUp,
   ClipboardList,
+  Inbox,
 } from "lucide-react";
 import {
   organizationsApi,
   engagementsApi,
   employeesApi,
   usersApi,
+  checklistTasksApi,
   type EngagementListItem,
+  type MyTask,
   getApiError,
 } from "../../lib/api";
 
@@ -80,6 +83,10 @@ interface Stats {
 export function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentEngagements, setRecentEngagements] = useState<EngagementListItem[]>([]);
+  const [myTasksPending, setMyTasksPending] = useState<{
+    count: number;
+    preview: MyTask[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -113,6 +120,17 @@ export function Dashboard() {
 
       // Top 5 most recent engagements from the first call
       setRecentEngagements(engsAll.data.data.slice(0, 5));
+
+      try {
+        const tasksRes = await checklistTasksApi.myTasks({ status: "pending" });
+        const list = tasksRes.data.data;
+        setMyTasksPending({
+          count: list.length,
+          preview: list.slice(0, 4),
+        });
+      } catch {
+        setMyTasksPending(null);
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -215,29 +233,82 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* Bottom section: Quick Links + Recent Engagements */}
+      {/* Bottom section: Quick Links + My tasks + Recent Engagements */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Quick Links */}
-        <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-4 h-4 text-zinc-400" />
-            <h2 className="text-sm font-semibold text-zinc-900">Quick Links</h2>
+        <div className="space-y-4">
+          {/* Quick Links */}
+          <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-4 h-4 text-zinc-400" />
+              <h2 className="text-sm font-semibold text-zinc-900">Quick Links</h2>
+            </div>
+            <div className="space-y-1">
+              {quickLinks.map(({ label, icon: Icon, to }) => (
+                <button
+                  key={to}
+                  type="button"
+                  onClick={() => navigate(to)}
+                  className="group w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600 transition-colors shrink-0" />
+                    <span className="text-sm text-zinc-700 font-medium">{label}</span>
+                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-zinc-300 group-hover:text-zinc-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1">
-            {quickLinks.map(({ label, icon: Icon, to }) => (
-              <button
-                key={to}
-                type="button"
-                onClick={() => navigate(to)}
-                className="group w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-50 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <Icon className="w-4 h-4 text-zinc-400 group-hover:text-zinc-600 transition-colors shrink-0" />
-                  <span className="text-sm text-zinc-700 font-medium">{label}</span>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-zinc-300 group-hover:text-zinc-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-              </button>
-            ))}
+
+          {/* My tasks */}
+          <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Inbox className="w-4 h-4 text-zinc-400 shrink-0" />
+                <h2 className="text-sm font-semibold text-zinc-900">My tasks</h2>
+              </div>
+              {!loading && myTasksPending != null && myTasksPending.count > 0 ? (
+                <span className="shrink-0 min-w-[1.25rem] h-6 px-1.5 rounded-full bg-zinc-900 text-white text-xs font-semibold flex items-center justify-center tabular-nums">
+                  {myTasksPending.count > 99 ? "99+" : myTasksPending.count}
+                </span>
+              ) : null}
+            </div>
+            {loading ? (
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 bg-zinc-100 rounded animate-pulse" />
+                <div className="h-4 w-1/2 bg-zinc-100 rounded animate-pulse" />
+              </div>
+            ) : myTasksPending == null ? (
+              <p className="text-sm text-zinc-500">Task list unavailable.</p>
+            ) : myTasksPending.count === 0 ? (
+              <p className="text-sm text-zinc-500">No pending tasks. You’re all caught up.</p>
+            ) : (
+              <>
+                <ul className="space-y-2 mb-4">
+                  {myTasksPending.preview.map((t) => (
+                    <li
+                      key={t.task_id}
+                      className="text-sm text-zinc-700 line-clamp-2 leading-snug"
+                    >
+                      {t.item_title}
+                    </li>
+                  ))}
+                </ul>
+                {myTasksPending.count > myTasksPending.preview.length ? (
+                  <p className="text-xs text-zinc-400 mb-3">
+                    +{myTasksPending.count - myTasksPending.preview.length} more
+                  </p>
+                ) : null}
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate("/my-tasks")}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors"
+            >
+              Open my tasks
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
