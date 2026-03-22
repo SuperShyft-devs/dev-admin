@@ -181,6 +181,96 @@ export const usersApi = {
     api.patch<{ data: { user_id: number; status: string } }>(`/users/${id}/deactivate`),
 };
 
+// Participant journey (employee: per-user assessments + questionnaire)
+export interface ParticipantJourneyCategoryProgress {
+  category_id: number;
+  display_name?: string | null;
+  category_key?: string | null;
+  status: string;
+  completed_at?: string | null;
+}
+
+export interface ParticipantJourneyQuestionnaireRollup {
+  response_count: number;
+  draft_count: number;
+  submitted_count: number;
+  categories_touched: number;
+}
+
+export interface ParticipantJourneyInstanceSummary {
+  assessment_instance_id: number;
+  status?: string | null;
+  assigned_at?: string | null;
+  completed_at?: string | null;
+  package_id: number;
+  package_code?: string | null;
+  package_display_name?: string | null;
+  engagement_id: number;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+  category_progress: ParticipantJourneyCategoryProgress[];
+  questionnaire: ParticipantJourneyQuestionnaireRollup;
+}
+
+export interface ParticipantJourneySummaryData {
+  instances: ParticipantJourneyInstanceSummary[];
+}
+
+export type ParticipantJourneyAnswerState = "empty" | "draft" | "submitted";
+
+export interface ParticipantJourneyQuestionRow {
+  question_id: number;
+  question_text?: string | null;
+  question_type?: string | null;
+  question_key?: string | null;
+  answer: unknown;
+  submitted_at?: string | null;
+  answer_state: ParticipantJourneyAnswerState;
+  options?: unknown;
+  help_text?: string | null;
+  is_required?: boolean;
+  is_read_only?: boolean;
+}
+
+export interface ParticipantJourneyCategoryBlock {
+  category_id: number;
+  display_name?: string | null;
+  category_key?: string | null;
+  questions: ParticipantJourneyQuestionRow[];
+}
+
+export interface ParticipantJourneyDetail {
+  assessment_instance_id: number;
+  user_id: number;
+  status?: string | null;
+  assigned_at?: string | null;
+  completed_at?: string | null;
+  package: {
+    package_id: number;
+    package_code?: string | null;
+    package_display_name?: string | null;
+  };
+  engagement: {
+    engagement_id: number;
+    engagement_name?: string | null;
+    engagement_code?: string | null;
+  };
+  category_progress: ParticipantJourneyCategoryProgress[];
+  categories: ParticipantJourneyCategoryBlock[];
+}
+
+export const participantJourneyApi = {
+  summary: (userId: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: ParticipantJourneySummaryData; meta: { page: number; limit: number; total: number } }>(
+      `/users/${userId}/participant-journey`,
+      { params }
+    ),
+  detail: (userId: number, assessmentInstanceId: number) =>
+    api.get<{ data: ParticipantJourneyDetail }>(
+      `/users/${userId}/participant-journey/${assessmentInstanceId}`
+    ),
+};
+
 // Uploads
 export const uploadsApi = {
   uploadUserProfilePhoto: (file: File) => {

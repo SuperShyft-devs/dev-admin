@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, Plus, Loader2, ListTree } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
@@ -38,6 +39,7 @@ const EMPTY_FORM: UserCreate = {
 };
 
 export function Users() {
+  const navigate = useNavigate();
   const [data, setData] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -318,6 +320,24 @@ export function Users() {
         </span>
       ),
     },
+    {
+      key: "journey",
+      label: "Journey",
+      className: "w-24",
+      render: (row) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/users/${row.user_id}/journey`);
+          }}
+          className="inline-flex items-center gap-1 text-xs font-medium text-zinc-700 hover:text-zinc-900"
+        >
+          <ListTree className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden lg:inline">View</span>
+        </button>
+      ),
+    },
   ];
 
   const handleSort = (key: string) => {
@@ -457,6 +477,17 @@ export function Users() {
             </div>
             {/* Actions in view */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  navigate(`/users/${selected.user_id}/journey`);
+                }}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-800 text-sm font-medium hover:bg-zinc-50 inline-flex items-center justify-center gap-2"
+              >
+                <ListTree className="w-4 h-4 shrink-0" />
+                Participant journey
+              </button>
               <button
                 onClick={() => {
                   setModalOpen(false);

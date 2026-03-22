@@ -8,6 +8,7 @@ import { Engagements } from "./features/engagements/Engagements";
 import { Employees } from "./features/employees/Employees";
 import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 import { Users } from "./features/users/Users";
+import { ParticipantJourneyPage } from "./features/users/ParticipantJourneyPage";
 import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
 import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
 import { SupportTickets } from "./features/support/SupportTickets";
@@ -82,6 +83,7 @@ function AppRoutes() {
           path="assessment-packages/questions"
           element={<Navigate to="/assessments/questions" replace />}
         />
+        <Route path="users/:userId/journey" element={<ParticipantJourneyPage />} />
         <Route path="users" element={<Users />} />
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
