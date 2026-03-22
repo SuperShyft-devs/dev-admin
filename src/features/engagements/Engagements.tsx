@@ -35,6 +35,8 @@ import {
   type EngagementChecklist,
   type ChecklistTemplate,
   type ChecklistTask,
+  type UserListItem,
+  usersApi,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -72,6 +74,19 @@ function dueDateToInput(value?: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+function formatEmployeeAssignLabel(
+  emp: EmployeeListItem,
+  usersById: Record<number, UserListItem>
+): string {
+  const u = usersById[emp.user_id];
+  const name = [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim();
+  if (name) {
+    return emp.role?.trim() ? `${name} · ${emp.role}` : name;
+  }
+  if (emp.role?.trim()) return emp.role.trim();
+  return "Unknown";
+}
+
 function EngagementChecklistModal({
   open,
   onClose,
@@ -95,6 +110,7 @@ function EngagementChecklistModal({
   const [removeLoading, setRemoveLoading] = useState(false);
   const [taskUpdating, setTaskUpdating] = useState<Set<number>>(new Set());
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
+  const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
   const [taskAssigning, setTaskAssigning] = useState<Set<number>>(new Set());
   const [taskEdit, setTaskEdit] = useState<{
     task_id: number;
@@ -112,15 +128,22 @@ function EngagementChecklistModal({
     setLoading(true);
     setError(null);
     try {
-      const [clRes, tRes, empRes] = await Promise.all([
+      const [clRes, tRes, empRes, usersRes] = await Promise.all([
         engagementChecklistsApi.list(engagementId),
         checklistTemplatesApi.list(),
         employeesApi.list({ status: "active", limit: 100 }),
+        usersApi.list({ status: "active", limit: 100 }),
       ]);
       setChecklists(clRes.data.data);
       setTemplates(tRes.data.data);
       const emps = [...empRes.data.data].sort((a, b) => a.employee_id - b.employee_id);
       setEmployees(emps);
+      setUsersById(
+        usersRes.data.data.reduce<Record<number, UserListItem>>((acc, u) => {
+          acc[u.user_id] = u;
+          return acc;
+        }, {})
+      );
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -369,8 +392,7 @@ function EngagementChecklistModal({
                                             <option value="">Unassigned</option>
                                             {employees.map((emp) => (
                                               <option key={emp.employee_id} value={emp.employee_id}>
-                                                #{emp.employee_id}
-                                                {emp.role ? ` · ${emp.role}` : ""}
+                                                {formatEmployeeAssignLabel(emp, usersById)}
                                               </option>
                                             ))}
                                           </select>
