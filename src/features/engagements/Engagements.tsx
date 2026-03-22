@@ -1,5 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Plus, Loader2, Users, UserCog, Trash2, X } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Loader2,
+  Users,
+  UserCog,
+  Trash2,
+  X,
+  ClipboardCheck,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+} from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -17,6 +30,12 @@ import {
   type AssessmentPackage,
   type EmployeeListItem,
   type OnboardingAssistant,
+  engagementChecklistsApi,
+  checklistTemplatesApi,
+  checklistTasksApi,
+  type EngagementChecklist,
+  type ChecklistTemplate,
+  type ChecklistTask,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -32,6 +51,490 @@ function formatDate(value?: string | null) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatTaskDue(value?: string | null) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function dueDateToInput(value?: string | null): string {
+  if (!value) return "";
+  const s = String(value).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+function EngagementChecklistModal({
+  open,
+  onClose,
+  engagement,
+  onChanged,
+}: {
+  open: boolean;
+  onClose: () => void;
+  engagement: EngagementListItem | null;
+  onChanged: () => void;
+}) {
+  const [checklists, setChecklists] = useState<EngagementChecklist[]>([]);
+  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [applyTemplateId, setApplyTemplateId] = useState<string>("");
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<EngagementChecklist | null>(null);
+  const [removeLoading, setRemoveLoading] = useState(false);
+  const [taskUpdating, setTaskUpdating] = useState<Set<number>>(new Set());
+  const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
+  const [taskAssigning, setTaskAssigning] = useState<Set<number>>(new Set());
+  const [taskEdit, setTaskEdit] = useState<{
+    task_id: number;
+    item_title: string;
+    due_date_input: string;
+    notes: string;
+  } | null>(null);
+  const [taskEditSaving, setTaskEditSaving] = useState(false);
+  const [taskEditError, setTaskEditError] = useState<string | null>(null);
+
+  const engagementId = engagement?.engagement_id;
+
+  const loadData = useCallback(async () => {
+    if (engagementId == null) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [clRes, tRes, empRes] = await Promise.all([
+        engagementChecklistsApi.list(engagementId),
+        checklistTemplatesApi.list(),
+        employeesApi.list({ status: "active", limit: 100 }),
+      ]);
+      setChecklists(clRes.data.data);
+      setTemplates(tRes.data.data);
+      const emps = [...empRes.data.data].sort((a, b) => a.employee_id - b.employee_id);
+      setEmployees(emps);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [engagementId]);
+
+  useEffect(() => {
+    if (open && engagementId != null) {
+      setExpanded(new Set());
+      setApplyTemplateId("");
+      setApplyError(null);
+      void loadData();
+    }
+  }, [open, engagementId, loadData]);
+
+  const activeTemplates = templates.filter((t) => (t.status ?? "").toLowerCase() === "active");
+
+  const toggleExpand = (checklistId: number) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(checklistId)) next.delete(checklistId);
+      else next.add(checklistId);
+      return next;
+    });
+  };
+
+  const handleApply = async () => {
+    if (engagementId == null || !applyTemplateId) return;
+    setApplyLoading(true);
+    setApplyError(null);
+    try {
+      await engagementChecklistsApi.apply(engagementId, { template_id: Number(applyTemplateId) });
+      setApplyTemplateId("");
+      await loadData();
+      onChanged();
+    } catch (err) {
+      setApplyError(getApiError(err));
+    } finally {
+      setApplyLoading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    if (engagementId == null || !removeTarget) return;
+    setRemoveLoading(true);
+    try {
+      await engagementChecklistsApi.remove(engagementId, removeTarget.checklist_id);
+      setRemoveTarget(null);
+      await loadData();
+      onChanged();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setRemoveLoading(false);
+    }
+  };
+
+  const toggleTaskStatus = async (taskId: number, currentStatus: string) => {
+    const next = (currentStatus ?? "").toLowerCase() === "done" ? "pending" : "done";
+    setTaskUpdating((prev) => new Set(prev).add(taskId));
+    setError(null);
+    try {
+      await checklistTasksApi.updateStatus(taskId, { status: next });
+      await loadData();
+      onChanged();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setTaskUpdating((prev) => {
+        const n = new Set(prev);
+        n.delete(taskId);
+        return n;
+      });
+    }
+  };
+
+  const assignTask = async (taskId: number, employeeIdStr: string) => {
+    const assigned_employee_id = employeeIdStr === "" ? null : Number(employeeIdStr);
+    setTaskAssigning((prev) => new Set(prev).add(taskId));
+    setError(null);
+    try {
+      await checklistTasksApi.assign(taskId, { assigned_employee_id });
+      await loadData();
+      onChanged();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setTaskAssigning((prev) => {
+        const n = new Set(prev);
+        n.delete(taskId);
+        return n;
+      });
+    }
+  };
+
+  const openTaskEdit = (task: ChecklistTask) => {
+    setTaskEdit({
+      task_id: task.task_id,
+      item_title: task.item_title,
+      due_date_input: dueDateToInput(task.due_date),
+      notes: task.notes ?? "",
+    });
+    setTaskEditError(null);
+  };
+
+  const saveTaskEdit = async () => {
+    if (!taskEdit) return;
+    setTaskEditSaving(true);
+    setTaskEditError(null);
+    try {
+      await checklistTasksApi.update(taskEdit.task_id, {
+        notes: taskEdit.notes.trim() ? taskEdit.notes.trim() : null,
+        due_date: taskEdit.due_date_input.trim() ? taskEdit.due_date_input.trim() : null,
+      });
+      setTaskEdit(null);
+      await loadData();
+      onChanged();
+    } catch (err) {
+      setTaskEditError(getApiError(err));
+    } finally {
+      setTaskEditSaving(false);
+    }
+  };
+
+  if (!open || !engagement) return null;
+
+  const titleName = engagement.engagement_name || engagement.engagement_code || "Engagement";
+
+  return (
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={`Checklists — ${titleName}`}
+        maxWidthClassName="max-w-3xl"
+      >
+        <div className="space-y-6 max-h-[min(70vh,520px)] overflow-y-auto pr-1">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
+          )}
+
+          <section>
+            <h3 className="text-sm font-semibold text-zinc-900 mb-3">Applied checklists</h3>
+            {loading ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="w-7 h-7 animate-spin text-zinc-400" />
+              </div>
+            ) : checklists.length === 0 ? (
+              <p className="text-sm text-zinc-500">No checklists applied yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {checklists.map((cl) => {
+                  const isOpen = expanded.has(cl.checklist_id);
+                  const { done, total, percent } = cl.readiness;
+                  return (
+                    <li
+                      key={cl.checklist_id}
+                      className="rounded-lg border border-zinc-200 bg-white p-3 sm:p-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(cl.checklist_id)}
+                            className="flex items-center gap-2 text-left w-full"
+                          >
+                            {isOpen ? (
+                              <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
+                            )}
+                            <span className="font-semibold text-zinc-900 truncate">{cl.template_name}</span>
+                          </button>
+                          <p className="text-xs text-zinc-600 mt-1 sm:ml-6">
+                            Readiness: {done}/{total} tasks done
+                          </p>
+                          <div className="mt-2 sm:ml-6 h-1.5 w-full max-w-xs bg-zinc-100 rounded overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded transition-all"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRemoveTarget(cl)}
+                          className="self-start sm:self-center p-2 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 shrink-0"
+                          title="Remove checklist"
+                          aria-label="Remove checklist"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {isOpen && (
+                        <ul className="mt-3 pt-3 border-t border-zinc-100 space-y-3 sm:ml-6">
+                          {cl.tasks.map((task) => {
+                            const doneTask = (task.status ?? "").toLowerCase() === "done";
+                            const busy = taskUpdating.has(task.task_id);
+                            const assigning = taskAssigning.has(task.task_id);
+                            const assigneeValue =
+                              task.assigned_employee_id != null ? String(task.assigned_employee_id) : "";
+                            return (
+                              <li key={task.task_id} className="flex gap-3">
+                                <button
+                                  type="button"
+                                  disabled={busy || assigning}
+                                  onClick={() => void toggleTaskStatus(task.task_id, task.status)}
+                                  className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                    doneTask
+                                      ? "bg-emerald-500 border-emerald-500 text-white"
+                                      : "border-zinc-300 bg-white hover:border-zinc-400"
+                                  } disabled:opacity-60`}
+                                  aria-label={doneTask ? "Mark pending" : "Mark done"}
+                                >
+                                  {busy ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+                                  ) : doneTask ? (
+                                    <Check className="w-3.5 h-3.5" />
+                                  ) : null}
+                                </button>
+                                <div className="min-w-0 flex-1 space-y-2">
+                                  <p className="font-medium text-zinc-900">{task.item_title}</p>
+                                  {task.item_description?.trim() ? (
+                                    <p className="text-sm text-zinc-500">{task.item_description}</p>
+                                  ) : null}
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
+                                    <label className="text-xs font-medium text-zinc-600 shrink-0" htmlFor={`assign-${task.task_id}`}>
+                                      Assign to
+                                    </label>
+                                    <div className="flex items-center gap-2 min-w-0 flex-1 sm:max-w-xs">
+                                      <select
+                                        id={`assign-${task.task_id}`}
+                                        value={assigneeValue}
+                                        disabled={busy || assigning}
+                                        onChange={(e) => void assignTask(task.task_id, e.target.value)}
+                                        className="w-full min-w-0 border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                                      >
+                                        <option value="">Unassigned</option>
+                                        {employees.map((emp) => (
+                                          <option key={emp.employee_id} value={emp.employee_id}>
+                                            #{emp.employee_id}
+                                            {emp.role ? ` · ${emp.role}` : ""}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {assigning ? (
+                                        <Loader2 className="w-4 h-4 animate-spin text-zinc-400 shrink-0" aria-hidden />
+                                      ) : null}
+                                    </div>
+                                    {task.due_date ? (
+                                      <span className="text-xs text-zinc-500 sm:ml-auto">
+                                        Due {formatTaskDue(task.due_date)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {task.notes?.trim() ? (
+                                    <p className="text-xs italic text-zinc-500">{task.notes}</p>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => openTaskEdit(task)}
+                                    disabled={busy || assigning}
+                                    className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 disabled:opacity-50"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                    Edit due date and notes
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="border-t border-zinc-200 pt-4">
+            <h3 className="text-sm font-semibold text-zinc-900 mb-3">Apply a template</h3>
+            {applyError && (
+              <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {applyError}
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs font-medium text-zinc-600 mb-1">Template</label>
+                <select
+                  value={applyTemplateId}
+                  onChange={(e) => setApplyTemplateId(e.target.value)}
+                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value="">Select a template…</option>
+                  {activeTemplates.map((t) => (
+                    <option key={t.template_id} value={t.template_id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={!applyTemplateId || applyLoading}
+                onClick={() => void handleApply()}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0"
+              >
+                {applyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Apply
+              </button>
+            </div>
+          </section>
+        </div>
+      </Modal>
+
+      {removeTarget && (
+        <Modal
+          open={!!removeTarget}
+          onClose={() => setRemoveTarget(null)}
+          title="Remove checklist"
+        >
+          <p className="text-sm text-zinc-600 mb-4">
+            Remove this checklist and all its tasks?
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row gap-2">
+            <button
+              type="button"
+              disabled={removeLoading}
+              onClick={() => void handleRemove()}
+              className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {removeLoading ? "Removing…" : "Remove"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRemoveTarget(null)}
+              className="px-4 py-2 rounded-lg border border-zinc-200 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {taskEdit && (
+        <Modal
+          open={!!taskEdit}
+          onClose={() => setTaskEdit(null)}
+          title={`Edit task — ${taskEdit.item_title}`}
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            {taskEditError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {taskEditError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1" htmlFor="task-edit-due">
+                Due date
+              </label>
+              <input
+                id="task-edit-due"
+                type="date"
+                value={taskEdit.due_date_input}
+                onChange={(e) =>
+                  setTaskEdit((prev) => (prev ? { ...prev, due_date_input: e.target.value } : null))
+                }
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Clear the field and save to remove the due date.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1" htmlFor="task-edit-notes">
+                Notes
+              </label>
+              <textarea
+                id="task-edit-notes"
+                value={taskEdit.notes}
+                onChange={(e) =>
+                  setTaskEdit((prev) => (prev ? { ...prev, notes: e.target.value } : null))
+                }
+                rows={4}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="Optional notes…"
+              />
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              <button
+                type="button"
+                disabled={taskEditSaving}
+                onClick={() => void saveTaskEdit()}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              >
+                {taskEditSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setTaskEdit(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-200 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
 }
 
 export function Engagements() {
@@ -98,6 +601,19 @@ export function Engagements() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false);
+  const [checklistEngagement, setChecklistEngagement] = useState<EngagementListItem | null>(null);
+
+  const openChecklistModal = (row: EngagementListItem) => {
+    setChecklistEngagement(row);
+    setChecklistModalOpen(true);
+  };
+
+  const closeChecklistModal = () => {
+    setChecklistModalOpen(false);
+    setChecklistEngagement(null);
+  };
 
   const fetchOrgs = useCallback(async () => {
     try {
@@ -408,6 +924,75 @@ export function Engagements() {
     { key: "start_date", label: "Start", sortable: true, hideOnMobile: true, render: (r) => formatDate(r.start_date) },
     { key: "end_date", label: "End", sortable: true, hideOnTablet: true, render: (r) => formatDate(r.end_date) },
     {
+      key: "participant_count",
+      label: "Participants",
+      sortable: true,
+      hideOnTablet: true,
+      render: (r) => (r.participant_count != null ? String(r.participant_count) : "—"),
+    },
+    {
+      key: "readiness",
+      label: "Readiness",
+      sortable: false,
+      hideOnMobile: true,
+      render: (r) => {
+        const rd = r.readiness;
+        const empty = !rd || rd.total === 0;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openChecklistModal(r);
+            }}
+            className="text-left w-full max-w-[140px] rounded-lg p-1 -m-1 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            {empty ? (
+              <span className="text-zinc-500">—</span>
+            ) : (
+              <>
+                <div className="text-xs font-medium text-zinc-900">
+                  {rd.done}/{rd.total}
+                </div>
+                <div className="mt-1 h-1.5 w-full bg-zinc-100 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded transition-all"
+                    style={{ width: `${rd.percent}%` }}
+                  />
+                </div>
+                {rd.percent === 100 ? (
+                  <span className="inline-flex items-center gap-0.5 mt-1 text-[10px] font-medium bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
+                    <Check className="w-3 h-3 shrink-0" />
+                    Ready
+                  </span>
+                ) : null}
+              </>
+            )}
+          </button>
+        );
+      },
+    },
+    {
+      key: "_checklist_shortcut",
+      label: "",
+      sortable: false,
+      className: "w-12 px-2",
+      render: (r) => (
+        <button
+          type="button"
+          title="Manage checklists"
+          aria-label="Manage checklists"
+          onClick={(e) => {
+            e.stopPropagation();
+            openChecklistModal(r);
+          }}
+          className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 mx-auto block"
+        >
+          <ClipboardCheck className="w-4 h-4" />
+        </button>
+      ),
+    },
+    {
       key: "status",
       label: "Status",
       sortable: true,
@@ -534,6 +1119,8 @@ export function Engagements() {
             onParticipants={openParticipants}
             onOccupiedSlots={openOccupiedSlots}
             onAssistants={openAssistantsModal}
+            onQuestions={(r) => openChecklistModal(r)}
+            onQuestionsLabel="Manage Checklists"
             onDelete={(r) => setDeleteConfirm(r)}
             pagination={{
               page,
@@ -762,6 +1349,13 @@ export function Engagements() {
           source={occupiedSlotsSource}
         />
       )}
+
+      <EngagementChecklistModal
+        open={checklistModalOpen}
+        onClose={closeChecklistModal}
+        engagement={checklistEngagement}
+        onChanged={() => void fetchList()}
+      />
 
       {/* ── Onboarding Assistants Modal ─────────────────────── */}
       <Modal

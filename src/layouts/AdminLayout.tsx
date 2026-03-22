@@ -12,6 +12,8 @@ import {
   LogOut,
   X,
   LifeBuoy,
+  ClipboardCheck,
+  Inbox,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -22,6 +24,8 @@ const navItems = [
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
   { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
+  { to: "/checklists", icon: ClipboardCheck, label: "Checklists" },
+  { to: "/my-tasks", icon: Inbox, label: "My Tasks" },
   { to: "/support", icon: LifeBuoy, label: "Support" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];

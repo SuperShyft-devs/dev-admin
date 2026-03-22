@@ -11,6 +11,8 @@ import { Users } from "./features/users/Users";
 import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
 import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
 import { SupportTickets } from "./features/support/SupportTickets";
+import { ChecklistTemplates } from "./features/checklists/ChecklistTemplates";
+import { MyTasks } from "./features/checklists/MyTasks";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -84,6 +86,8 @@ function AppRoutes() {
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
         <Route path="diagnostics/filters" element={<DiagnosticFilters />} />
+        <Route path="checklists" element={<ChecklistTemplates />} />
+        <Route path="my-tasks" element={<MyTasks />} />
         <Route path="support" element={<SupportTickets />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

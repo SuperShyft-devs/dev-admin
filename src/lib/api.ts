@@ -315,6 +315,13 @@ export const organizationsApi = {
     ),
 };
 
+// Checklists (readiness on engagement list + checklist APIs)
+export interface ChecklistReadiness {
+  done: number;
+  total: number;
+  percent: number;
+}
+
 // Engagements
 export interface Engagement {
   engagement_id: number;
@@ -347,6 +354,7 @@ export interface EngagementListItem {
   end_date?: string | null;
   status?: string | null;
   participant_count?: number | null;
+  readiness?: ChecklistReadiness | null;
 }
 
 export interface EngagementCreate {
@@ -937,4 +945,115 @@ export const diagnosticTestGroupsApi = {
     api.patch<{ data: ReorderGroupTestsResponse }>(`/diagnostic-test-groups/${groupId}/tests/order`, payload),
   removeTest: (groupId: number, testId: number) =>
     api.delete(`/diagnostic-test-groups/${groupId}/tests/${testId}`),
+};
+
+// Checklist templates & tasks (extends ChecklistReadiness above)
+export interface ChecklistTemplateItem {
+  item_id: number;
+  template_id: number;
+  title: string;
+  description?: string | null;
+  display_order?: number | null;
+}
+
+export interface ChecklistTemplate {
+  template_id: number;
+  name: string;
+  description?: string | null;
+  status: string;
+  created_at: string;
+  created_employee_id?: number | null;
+}
+
+export interface ChecklistTemplateDetail extends ChecklistTemplate {
+  items: ChecklistTemplateItem[];
+}
+
+export interface ChecklistTask {
+  task_id: number;
+  checklist_id: number;
+  item_id: number;
+  item_title: string;
+  item_description?: string | null;
+  assigned_employee_id?: number | null;
+  status: string;
+  notes?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  completed_by_employee_id?: number | null;
+}
+
+export interface EngagementChecklist {
+  checklist_id: number;
+  engagement_id: number;
+  template_id: number;
+  template_name: string;
+  created_at: string;
+  readiness: ChecklistReadiness;
+  tasks: ChecklistTask[];
+}
+
+export interface MyTask extends ChecklistTask {
+  engagement_id: number;
+  engagement_name?: string | null;
+}
+
+export const checklistTemplatesApi = {
+  list: () => api.get<{ data: ChecklistTemplate[]; meta: Record<string, unknown> }>("/checklist-templates"),
+  get: (id: number) =>
+    api.get<{ data: ChecklistTemplateDetail; meta: Record<string, unknown> }>(`/checklist-templates/${id}`),
+  create: (body: { name: string; description?: string }) =>
+    api.post<{ data: ChecklistTemplate; meta: Record<string, unknown> }>("/checklist-templates", body),
+  update: (id: number, body: { name?: string; description?: string }) =>
+    api.put<{ data: ChecklistTemplate; meta: Record<string, unknown> }>(`/checklist-templates/${id}`, body),
+  updateStatus: (id: number, body: { status: string }) =>
+    api.patch(`/checklist-templates/${id}/status`, body),
+  addItem: (
+    templateId: number,
+    body: { title: string; description?: string; display_order?: number }
+  ) =>
+    api.post<{ data: ChecklistTemplateItem; meta: Record<string, unknown> }>(
+      `/checklist-templates/${templateId}/items`,
+      body
+    ),
+  updateItem: (
+    templateId: number,
+    itemId: number,
+    body: { title?: string; description?: string; display_order?: number }
+  ) =>
+    api.put<{ data: ChecklistTemplateItem; meta: Record<string, unknown> }>(
+      `/checklist-templates/${templateId}/items/${itemId}`,
+      body
+    ),
+  deleteItem: (templateId: number, itemId: number) =>
+    api.delete(`/checklist-templates/${templateId}/items/${itemId}`),
+};
+
+export const engagementChecklistsApi = {
+  list: (engagementId: number) =>
+    api.get<{ data: EngagementChecklist[]; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/checklists`
+    ),
+  apply: (engagementId: number, body: { template_id: number }) =>
+    api.post<{ data: EngagementChecklist; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/checklists`,
+      body
+    ),
+  remove: (engagementId: number, checklistId: number) =>
+    api.delete(`/engagements/${engagementId}/checklists/${checklistId}`),
+  readiness: (engagementId: number) =>
+    api.get<{ data: ChecklistReadiness; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/readiness`
+    ),
+};
+
+export const checklistTasksApi = {
+  assign: (taskId: number, body: { assigned_employee_id: number | null }) =>
+    api.patch<{ data: ChecklistTask; meta: Record<string, unknown> }>(`/checklist/tasks/${taskId}/assign`, body),
+  updateStatus: (taskId: number, body: { status: string; notes?: string }) =>
+    api.patch<{ data: ChecklistTask; meta: Record<string, unknown> }>(`/checklist/tasks/${taskId}/status`, body),
+  update: (taskId: number, body: { notes?: string | null; due_date?: string | null }) =>
+    api.put<{ data: ChecklistTask; meta: Record<string, unknown> }>(`/checklist/tasks/${taskId}`, body),
+  myTasks: (params?: { status?: string }) =>
+    api.get<{ data: MyTask[]; meta: Record<string, unknown> }>("/checklist/my-tasks", { params }),
 };
