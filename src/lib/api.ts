@@ -573,11 +573,19 @@ export interface QuestionnairePrefillFrom {
   preference_key: "diet_preference" | "allergies";
 }
 
+export type QuestionnaireQuestionType =
+  | "text"
+  | "single_choice"
+  | "multiple_choice"
+  | "multi_choice"
+  | "scale"
+  | string;
+
 export interface QuestionnaireQuestion {
   question_id: number;
   question_key?: string | null;
   question_text?: string | null;
-  question_type?: string | null;
+  question_type?: QuestionnaireQuestionType | null;
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;
@@ -594,7 +602,7 @@ export interface QuestionnaireQuestion {
 export interface QuestionnaireQuestionCreate {
   question_key: string;
   question_text: string;
-  question_type: string;
+  question_type: QuestionnaireQuestionType;
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;
@@ -607,7 +615,7 @@ export interface QuestionnaireQuestionCreate {
 export interface QuestionnaireQuestionUpdate {
   question_key: string;
   question_text: string;
-  question_type: string;
+  question_type: QuestionnaireQuestionType;
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;

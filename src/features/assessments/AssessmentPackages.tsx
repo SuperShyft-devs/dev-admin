@@ -41,6 +41,7 @@ const QUESTION_TYPES = [
   { value: "scale", label: "Scale" },
 ] as const;
 const CHOICE_TYPES = new Set(["single_choice", "multiple_choice"]);
+const OPTION_SUPPORTED_TYPES = new Set(["single_choice", "multiple_choice", "scale"]);
 const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
 
 type TabKey = "packages" | "categories" | "questions";
@@ -124,7 +125,7 @@ function QuestionForm({
     { value: "in", label: "In list" },
     { value: "not_in", label: "Not in list" },
   ] as const;
-  const showOptions = CHOICE_TYPES.has(value.question_type);
+  const showOptions = OPTION_SUPPORTED_TYPES.has(value.question_type);
   const options = value.options ?? [];
   const visibilityRules = value.visibility_rules ?? null;
   const visibilityConditions = Array.isArray(visibilityRules?.conditions) ? visibilityRules.conditions : [];
@@ -384,7 +385,7 @@ function QuestionForm({
             onChange={(e) =>
               setField({
                 question_type: e.target.value,
-                options: CHOICE_TYPES.has(e.target.value)
+                options: OPTION_SUPPORTED_TYPES.has(e.target.value)
                   ? options.length > 0
                     ? options
                     : [{ option_value: "", display_name: "", tooltip_text: "" }]
@@ -402,7 +403,7 @@ function QuestionForm({
             ))}
           </select>
           <p className="mt-1 text-xs text-zinc-500">
-            Choice types need options. Text/scale do not.
+            Choice and scale types need configured values.
           </p>
         </div>
 
@@ -665,10 +666,13 @@ function QuestionForm({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-zinc-900">
-                3) Options <span className="text-red-500">*</span>
+                {value.question_type === "scale" ? "3) Accepted Units" : "3) Options"}{" "}
+                <span className="text-red-500">*</span>
               </h3>
               <p className="text-xs text-zinc-500 mt-0.5">
-                Add answer choices users will see. Internal keys are auto-generated from labels.
+                {value.question_type === "scale"
+                  ? "Add every accepted unit users can submit (for example cm, ft)."
+                  : "Add answer choices users will see. Internal keys are auto-generated from labels."}
               </p>
             </div>
             <button
@@ -693,7 +697,7 @@ function QuestionForm({
                       value={option.display_name}
                       onChange={(e) => updateOption(index, { display_name: e.target.value })}
                       className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                      placeholder="e.g. Coastal"
+                      placeholder={value.question_type === "scale" ? "e.g. Centimeters" : "e.g. Coastal"}
                       required
                     />
                   </label>
@@ -706,7 +710,11 @@ function QuestionForm({
                         value={option.option_value}
                         onChange={(e) => updateOption(index, { option_value: e.target.value })}
                         className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-                        placeholder={`e.g. ${getSuggestedOptionValue(option.display_name, index)}`}
+                        placeholder={
+                          value.question_type === "scale"
+                            ? "e.g. cm"
+                            : `e.g. ${getSuggestedOptionValue(option.display_name, index)}`
+                        }
                         required
                       />
                     </label>
@@ -726,7 +734,11 @@ function QuestionForm({
                     value={option.tooltip_text ?? ""}
                     onChange={(e) => updateOption(index, { tooltip_text: e.target.value })}
                     className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    placeholder="Tooltip text (optional)"
+                    placeholder={
+                      value.question_type === "scale"
+                        ? "Optional note for this unit"
+                        : "Tooltip text (optional)"
+                    }
                   />
                   <button
                     type="button"
@@ -1376,7 +1388,7 @@ export function AssessmentPackages() {
 
   const normalizeQuestionPayload = (form: QuestionnaireQuestionCreate): QuestionnaireQuestionUpdate => {
     const options =
-      CHOICE_TYPES.has(form.question_type)
+      OPTION_SUPPORTED_TYPES.has(form.question_type)
         ? (form.options ?? []).map((option) => ({
             option_value: option.option_value.trim(),
             display_name: option.display_name.trim(),
@@ -1400,12 +1412,18 @@ export function AssessmentPackages() {
     if (!form.question_key.trim()) return "Question key is required.";
     if (!form.question_text.trim()) return "Question text is required.";
     if (!form.question_type) return "Question type is required.";
-    if (CHOICE_TYPES.has(form.question_type)) {
+    if (OPTION_SUPPORTED_TYPES.has(form.question_type)) {
       const options = form.options ?? [];
-      if (options.length === 0) return "At least one option is required.";
+      if (options.length === 0) {
+        return form.question_type === "scale"
+          ? "At least one accepted unit is required."
+          : "At least one option is required.";
+      }
       for (const option of options) {
         if (!option.option_value.trim() || !option.display_name.trim()) {
-          return "Option value and display name are required.";
+          return form.question_type === "scale"
+            ? "Unit key and unit label are required."
+            : "Option value and display name are required.";
         }
       }
     }
@@ -2402,10 +2420,10 @@ export function AssessmentPackages() {
                     </div>
                     {question.help_text && <p className="text-xs text-zinc-500 mt-2">{question.help_text}</p>}
                   </div>
-                  {CHOICE_TYPES.has(question.question_type ?? "") && (question.options?.length ?? 0) > 0 && (
+                  {OPTION_SUPPORTED_TYPES.has(question.question_type ?? "") && (question.options?.length ?? 0) > 0 && (
                     <details className="border-t border-zinc-200">
                       <summary className="cursor-pointer list-none px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
-                        View options
+                        {question.question_type === "scale" ? "View accepted units" : "View options"}
                       </summary>
                       <div className="px-3 pb-3 space-y-2">
                         {question.options?.map((option, index) => (
@@ -2651,7 +2669,9 @@ export function AssessmentPackages() {
               )}
               {selectedQ.options && selectedQ.options.length > 0 && (
                 <div>
-                  <dt className="text-zinc-500 mb-1">Options</dt>
+                  <dt className="text-zinc-500 mb-1">
+                    {selectedQ.question_type === "scale" ? "Accepted Units" : "Options"}
+                  </dt>
                   <dd>
                     <ul className="space-y-2">
                       {selectedQ.options.map((option, index) => (
