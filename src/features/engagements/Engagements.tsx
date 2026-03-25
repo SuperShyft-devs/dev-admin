@@ -20,11 +20,13 @@ import {
   engagementsApi,
   organizationsApi,
   assessmentPackagesApi,
+  diagnosticPackagesApi,
   employeesApi,
   onboardingAssistantsApi,
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
+  type DiagnosticPackageListItem,
   type OrganizationListItem,
   type AssessmentPackage,
   type EmployeeListItem,
@@ -607,6 +609,7 @@ export function Engagements() {
 
   const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
   const [assessmentPackages, setAssessmentPackages] = useState<AssessmentPackage[]>([]);
+  const [diagnosticPackages, setDiagnosticPackages] = useState<DiagnosticPackageListItem[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"view" | "add" | "edit">("view");
@@ -688,6 +691,9 @@ export function Engagements() {
   const fetchPackages = useCallback(() => {
     assessmentPackagesApi.list().then((r) => setAssessmentPackages(r.data.data));
   }, []);
+  const fetchDiagnostics = useCallback(() => {
+    diagnosticPackagesApi.list().then((r) => setDiagnosticPackages(r.data.data));
+  }, []);
 
   useEffect(() => {
     const state = location.state as
@@ -755,7 +761,8 @@ export function Engagements() {
   useEffect(() => {
     fetchOrgs();
     fetchPackages();
-  }, [fetchOrgs, fetchPackages]);
+    fetchDiagnostics();
+  }, [fetchOrgs, fetchPackages, fetchDiagnostics]);
 
   useEffect(() => {
     fetchList();
@@ -834,21 +841,37 @@ export function Engagements() {
       setError("Please fill required fields");
       return;
     }
+
+    const engagementTypeNormalized = (formData.engagement_type ?? "").trim().toLowerCase();
+    const isB2B = engagementTypeNormalized === "b2b";
+
+    const effectiveDiagnosticPackageId = isB2B ? formData.diagnostic_package_id : 1;
+    if (isB2B && (!effectiveDiagnosticPackageId || effectiveDiagnosticPackageId <= 0)) {
+      setError("Please select a diagnostic package for B2B engagements");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
       if (modalMode === "add") {
-        const created = await engagementsApi.create(formData);
+        const createPayload: EngagementCreate = {
+          ...formData,
+          diagnostic_package_id: effectiveDiagnosticPackageId,
+        };
+        const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
         setAddChecklistPromptEngagementId(engagementId);
         setAddChecklistPromptOpen(true);
       } else if (selected) {
+        const payloadDiagnosticPackageId =
+          effectiveDiagnosticPackageId && effectiveDiagnosticPackageId > 0 ? effectiveDiagnosticPackageId : undefined;
         const payload = {
           engagement_name: formData.engagement_name,
           organization_id: formData.organization_id,
           engagement_type: formData.engagement_type,
           assessment_package_id: formData.assessment_package_id,
-          diagnostic_package_id: formData.diagnostic_package_id ?? undefined,
+          diagnostic_package_id: payloadDiagnosticPackageId,
           city: formData.city,
           slot_duration: formData.slot_duration,
           start_date: formData.start_date,
@@ -1334,6 +1357,26 @@ export function Engagements() {
                   ))}
                 </select>
               </div>
+              {formData.engagement_type.trim().toLowerCase() === "b2b" ? (
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic Package *</label>
+                  <select
+                    value={formData.diagnostic_package_id ?? 0}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  >
+                    <option value={0}>Select diagnostic package</option>
+                    {diagnosticPackages.map((p) => (
+                      <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
+                        {p.package_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
                 <input
