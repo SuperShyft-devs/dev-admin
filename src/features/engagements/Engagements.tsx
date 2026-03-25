@@ -40,6 +40,7 @@ import {
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
+import { useLocation } from "react-router-dom";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
@@ -588,6 +589,7 @@ function EngagementChecklistModal({
 }
 
 export function Engagements() {
+  const location = useLocation();
   const [data, setData] = useState<EngagementListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -655,6 +657,16 @@ export function Engagements() {
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [checklistEngagement, setChecklistEngagement] = useState<EngagementListItem | null>(null);
 
+  const [pendingEngagementPreset, setPendingEngagementPreset] = useState<{
+    organization_id: number;
+    orgName?: string;
+    city?: string;
+  } | null>(null);
+
+  const [addChecklistPromptOpen, setAddChecklistPromptOpen] = useState(false);
+  const [addChecklistPromptEngagementId, setAddChecklistPromptEngagementId] = useState<number | null>(null);
+  const [addChecklistPromptBusy, setAddChecklistPromptBusy] = useState(false);
+
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
     setChecklistModalOpen(true);
@@ -676,6 +688,15 @@ export function Engagements() {
   const fetchPackages = useCallback(() => {
     assessmentPackagesApi.list().then((r) => setAssessmentPackages(r.data.data));
   }, []);
+
+  useEffect(() => {
+    const state = location.state as
+      | { createEngagementFromOrg?: { organization_id: number; orgName?: string; city?: string } }
+      | null
+      | undefined;
+    if (!state?.createEngagementFromOrg) return;
+    setPendingEngagementPreset(state.createEngagementFromOrg);
+  }, [location.state]);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -752,24 +773,40 @@ export function Engagements() {
     }).catch((err) => setError(getApiError(err)));
   };
 
-  const openAdd = () => {
+  const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
     const today = new Date().toISOString().slice(0, 10);
+    const nextOrganizationId =
+      preset?.organization_id ?? organizations[0]?.organization_id ?? 0;
+    const nextAssessmentPackageId =
+      preset?.assessment_package_id ?? assessmentPackages[0]?.package_id ?? 0;
     setFormData({
-      engagement_name: "",
-      organization_id: organizations[0]?.organization_id ?? 0,
-      engagement_type: "b2b",
-      engagement_code: "",
-      assessment_package_id: assessmentPackages[0]?.package_id ?? 0,
+      engagement_name: preset?.engagement_name ?? "",
+      organization_id: nextOrganizationId,
+      engagement_type: preset?.engagement_type ?? "b2b",
+      engagement_code: preset?.engagement_code ?? "",
+      assessment_package_id: nextAssessmentPackageId,
       diagnostic_package_id: undefined,
-      city: "",
-      slot_duration: 60,
-      start_date: today,
-      end_date: today,
+      city: preset?.city ?? "",
+      slot_duration: preset?.slot_duration ?? 60,
+      start_date: preset?.start_date ?? today,
+      end_date: preset?.end_date ?? today,
     });
     setModalMode("add");
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!pendingEngagementPreset) return;
+    if (modalOpen) return;
+    if (organizations.length === 0 || assessmentPackages.length === 0) return;
+    openAdd({
+      organization_id: pendingEngagementPreset.organization_id,
+      engagement_name: pendingEngagementPreset.orgName ?? "",
+      city: pendingEngagementPreset.city ?? "",
+    });
+    setPendingEngagementPreset(null);
+  }, [pendingEngagementPreset, organizations, assessmentPackages, modalOpen]);
 
   const openEdit = (row: EngagementListItem) => {
     engagementsApi.get(row.engagement_id).then((res) => {
@@ -801,7 +838,10 @@ export function Engagements() {
     setError(null);
     try {
       if (modalMode === "add") {
-        await engagementsApi.create(formData);
+        const created = await engagementsApi.create(formData);
+        const engagementId = created.data.data.engagement_id;
+        setAddChecklistPromptEngagementId(engagementId);
+        setAddChecklistPromptOpen(true);
       } else if (selected) {
         const payload = {
           engagement_name: formData.engagement_name,
@@ -823,6 +863,33 @@ export function Engagements() {
       setError(getApiError(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openChecklistForEngagementId = async (engagementId: number) => {
+    setAddChecklistPromptBusy(true);
+    setError(null);
+    try {
+      const res = await engagementsApi.get(engagementId);
+      const e = res.data.data;
+      openChecklistModal({
+        engagement_id: e.engagement_id,
+        engagement_name: e.engagement_name ?? "",
+        engagement_code: e.engagement_code ?? "",
+        engagement_type: e.engagement_type ?? "b2b",
+        organization_id: e.organization_id ?? 0,
+        city: e.city ?? "",
+        slot_duration: e.slot_duration ?? null,
+        start_date: e.start_date ?? null,
+        end_date: e.end_date ?? null,
+        status: e.status ?? null,
+        participant_count: e.participant_count ?? null,
+        readiness: null,
+      } as EngagementListItem);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setAddChecklistPromptBusy(false);
     }
   };
 
@@ -1058,7 +1125,7 @@ export function Engagements() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <button
-          onClick={openAdd}
+            onClick={() => openAdd()}
           className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
@@ -1350,6 +1417,48 @@ export function Engagements() {
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
             >
               Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {addChecklistPromptOpen && (
+        <Modal
+          open={addChecklistPromptOpen}
+          onClose={() => {
+            setAddChecklistPromptOpen(false);
+            setAddChecklistPromptEngagementId(null);
+          }}
+          title="Add a checklist?"
+          maxWidthClassName="max-w-md"
+        >
+          <p className="text-zinc-600 text-sm mb-4">
+            Do you want to add a checklist for this engagement?
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const id = addChecklistPromptEngagementId;
+                setAddChecklistPromptOpen(false);
+                setAddChecklistPromptEngagementId(null);
+                if (id != null) void openChecklistForEngagementId(id);
+              }}
+              disabled={addChecklistPromptBusy || addChecklistPromptEngagementId == null}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {addChecklistPromptBusy ? "Opening..." : "Yes"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddChecklistPromptOpen(false);
+                setAddChecklistPromptEngagementId(null);
+              }}
+              disabled={addChecklistPromptBusy}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              No
             </button>
           </div>
         </Modal>

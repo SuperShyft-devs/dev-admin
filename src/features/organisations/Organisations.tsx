@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, Users } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -21,6 +22,7 @@ import { fetchAllPages } from "../../lib/fetchAllPages";
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
 export function Organisations() {
+  const navigate = useNavigate();
   const [data, setData] = useState<OrganizationListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -69,6 +71,13 @@ export function Organisations() {
   const [engagementsOrg, setEngagementsOrg] = useState<{
     orgId: number;
     orgName?: string;
+  } | null>(null);
+
+  const [createEngagementPromptOpen, setCreateEngagementPromptOpen] = useState(false);
+  const [createdOrgForEngagement, setCreatedOrgForEngagement] = useState<{
+    organization_id: number;
+    orgName?: string;
+    city?: string;
   } | null>(null);
 
   const fetchList = useCallback(async () => {
@@ -217,13 +226,28 @@ export function Organisations() {
     if (!formData.name.trim()) return;
     setSubmitting(true);
     try {
+      let createdOrganizationId: number | null = null;
       if (modalMode === "add") {
-        await organizationsApi.create(formData);
+        const created = await organizationsApi.create(formData);
+        createdOrganizationId = created.data.data.organization_id;
       } else if (selected) {
         await organizationsApi.update(selected.organization_id, formData);
       }
-      setModalOpen(false);
-      fetchList();
+      if (modalMode === "add") {
+        setModalOpen(false);
+        fetchList();
+        if (createdOrganizationId != null) {
+          setCreatedOrgForEngagement({
+            organization_id: createdOrganizationId,
+            orgName: formData.name,
+            city: (formData.city ?? "").trim() || undefined,
+          });
+          setCreateEngagementPromptOpen(true);
+        }
+      } else {
+        setModalOpen(false);
+        fetchList();
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -654,6 +678,50 @@ export function Organisations() {
           </form>
         )}
       </Modal>
+
+      {createEngagementPromptOpen && createdOrgForEngagement && (
+        <Modal
+          open={createEngagementPromptOpen}
+          onClose={() => {
+            setCreateEngagementPromptOpen(false);
+            setCreatedOrgForEngagement(null);
+          }}
+          title="Create engagement?"
+          maxWidthClassName="max-w-md"
+        >
+          <p className="text-zinc-600 text-sm mb-4">
+            Want to create an engagement for{" "}
+            <span className="font-medium text-zinc-900">{createdOrgForEngagement.orgName ?? "this organisation"}</span>
+            ?
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const preset = createdOrgForEngagement;
+                setCreateEngagementPromptOpen(false);
+                setCreatedOrgForEngagement(null);
+                navigate("/engagements", { state: { createEngagementFromOrg: preset } });
+              }}
+              disabled={submitting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCreateEngagementPromptOpen(false);
+                setCreatedOrgForEngagement(null);
+              }}
+              disabled={submitting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              No
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {participantsOrg && (
         <ParticipantsModal
