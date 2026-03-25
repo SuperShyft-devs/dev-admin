@@ -92,6 +92,22 @@ export const supportApi = {
     ),
 };
 
+// Platform settings (employee)
+export interface B2cOnboardingDefaults {
+  b2c_default_assessment_package_id: number;
+  b2c_default_diagnostic_package_id: number;
+}
+
+export const platformSettingsApi = {
+  getB2cOnboarding: () =>
+    api.get<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>("/platform-settings/b2c-onboarding"),
+  patchB2cOnboarding: (payload: B2cOnboardingDefaults) =>
+    api.patch<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>(
+      "/platform-settings/b2c-onboarding",
+      payload
+    ),
+};
+
 // Auth
 export interface AuthTokens {
   user_id: number;
