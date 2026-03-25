@@ -781,6 +781,19 @@ export interface DiagnosticTest {
   test_id: number;
   group_id: number;
   test_name: string;
+  parameter_key?: string | null;
+  unit?: string | null;
+  meaning?: string | null;
+  lower_range_male?: number | null;
+  higher_range_male?: number | null;
+  lower_range_female?: number | null;
+  higher_range_female?: number | null;
+  causes_when_high?: string | null;
+  causes_when_low?: string | null;
+  effects_when_high?: string | null;
+  effects_when_low?: string | null;
+  what_to_do_when_low?: string | null;
+  what_to_do_when_high?: string | null;
   display_order?: number | null;
   is_available?: boolean;
 }
@@ -895,7 +908,24 @@ export const diagnosticPackagesApi = {
   addTest: (
     id: number,
     groupId: number,
-    payload: { test_name: string; is_available?: boolean; display_order?: number }
+    payload: {
+      test_name: string;
+      parameter_key?: string | null;
+      unit?: string | null;
+      meaning?: string | null;
+      lower_range_male?: number | null;
+      higher_range_male?: number | null;
+      lower_range_female?: number | null;
+      higher_range_female?: number | null;
+      causes_when_high?: string | null;
+      causes_when_low?: string | null;
+      effects_when_high?: string | null;
+      effects_when_low?: string | null;
+      what_to_do_when_low?: string | null;
+      what_to_do_when_high?: string | null;
+      is_available?: boolean;
+      display_order?: number;
+    }
   ) =>
     api.post<{ data: DiagnosticTest }>(
       `/diagnostic-packages/${id}/test-groups/${groupId}/tests`,
@@ -905,7 +935,24 @@ export const diagnosticPackagesApi = {
     id: number,
     groupId: number,
     testId: number,
-    payload: { test_name?: string; is_available?: boolean; display_order?: number }
+    payload: {
+      test_name?: string;
+      parameter_key?: string | null;
+      unit?: string | null;
+      meaning?: string | null;
+      lower_range_male?: number | null;
+      higher_range_male?: number | null;
+      lower_range_female?: number | null;
+      higher_range_female?: number | null;
+      causes_when_high?: string | null;
+      causes_when_low?: string | null;
+      effects_when_high?: string | null;
+      effects_when_low?: string | null;
+      what_to_do_when_low?: string | null;
+      what_to_do_when_high?: string | null;
+      is_available?: boolean;
+      display_order?: number;
+    }
   ) =>
     api.put<{ data: DiagnosticTest }>(
       `/diagnostic-packages/${id}/test-groups/${groupId}/tests/${testId}`,
@@ -974,6 +1021,19 @@ export const diagnosticFiltersApi = {
 export interface DiagnosticTestStandalone {
   test_id: number;
   test_name: string;
+  parameter_key?: string | null;
+  unit?: string | null;
+  meaning?: string | null;
+  lower_range_male?: number | null;
+  higher_range_male?: number | null;
+  lower_range_female?: number | null;
+  higher_range_female?: number | null;
+  causes_when_high?: string | null;
+  causes_when_low?: string | null;
+  effects_when_high?: string | null;
+  effects_when_low?: string | null;
+  what_to_do_when_low?: string | null;
+  what_to_do_when_high?: string | null;
   is_available: boolean;
   display_order?: number | null;
 }
@@ -1017,11 +1077,45 @@ export const diagnosticTestsApi = {
   list: () => api.get<{ data: DiagnosticTestStandalone[] }>("/diagnostic-tests"),
   get: (testId: number) =>
     api.get<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`),
-  create: (payload: { test_name: string; is_available?: boolean; display_order?: number }) =>
+  create: (payload: {
+    test_name: string;
+    parameter_key?: string | null;
+    unit?: string | null;
+    meaning?: string | null;
+    lower_range_male?: number | null;
+    higher_range_male?: number | null;
+    lower_range_female?: number | null;
+    higher_range_female?: number | null;
+    causes_when_high?: string | null;
+    causes_when_low?: string | null;
+    effects_when_high?: string | null;
+    effects_when_low?: string | null;
+    what_to_do_when_low?: string | null;
+    what_to_do_when_high?: string | null;
+    is_available?: boolean;
+    display_order?: number;
+  }) =>
     api.post<{ data: DiagnosticTestStandalone }>("/diagnostic-tests", payload),
   update: (
     testId: number,
-    payload: { test_name?: string; is_available?: boolean; display_order?: number }
+    payload: {
+      test_name?: string;
+      parameter_key?: string | null;
+      unit?: string | null;
+      meaning?: string | null;
+      lower_range_male?: number | null;
+      higher_range_male?: number | null;
+      lower_range_female?: number | null;
+      higher_range_female?: number | null;
+      causes_when_high?: string | null;
+      causes_when_low?: string | null;
+      effects_when_high?: string | null;
+      effects_when_low?: string | null;
+      what_to_do_when_low?: string | null;
+      what_to_do_when_high?: string | null;
+      is_available?: boolean;
+      display_order?: number;
+    }
   ) => api.put<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`, payload),
   delete: (testId: number) => api.delete(`/diagnostic-tests/${testId}`),
 };

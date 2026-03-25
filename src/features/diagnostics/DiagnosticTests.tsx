@@ -16,10 +16,29 @@ type ModalMode = "add" | "edit";
 type SortKey = "test_id" | "test_name" | "is_available" | "display_order";
 type SortDir = "asc" | "desc";
 
+function toNumberOrUndefined(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 const EMPTY_FORM = {
   test_name: "",
   is_available: true,
-  display_order: "",
+
+  parameter_key: "",
+  unit: "",
+  meaning: "",
+  lower_range_male: "",
+  higher_range_male: "",
+  lower_range_female: "",
+  higher_range_female: "",
+  causes_when_high: "",
+  causes_when_low: "",
+  effects_when_high: "",
+  effects_when_low: "",
+  what_to_do_when_low: "",
+  what_to_do_when_high: "",
 };
 
 export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
@@ -73,7 +92,20 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     setForm({
       test_name: row.test_name,
       is_available: row.is_available,
-      display_order: row.display_order != null ? String(row.display_order) : "",
+
+      parameter_key: row.parameter_key ?? "",
+      unit: row.unit ?? "",
+      meaning: row.meaning ?? "",
+      lower_range_male: row.lower_range_male != null ? String(row.lower_range_male) : "",
+      higher_range_male: row.higher_range_male != null ? String(row.higher_range_male) : "",
+      lower_range_female: row.lower_range_female != null ? String(row.lower_range_female) : "",
+      higher_range_female: row.higher_range_female != null ? String(row.higher_range_female) : "",
+      causes_when_high: row.causes_when_high ?? "",
+      causes_when_low: row.causes_when_low ?? "",
+      effects_when_high: row.effects_when_high ?? "",
+      effects_when_low: row.effects_when_low ?? "",
+      what_to_do_when_low: row.what_to_do_when_low ?? "",
+      what_to_do_when_high: row.what_to_do_when_high ?? "",
     });
     setFormError(null);
     setModalOpen(true);
@@ -126,7 +158,19 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
       const payload = {
         test_name: form.test_name.trim(),
         is_available: form.is_available,
-        display_order: form.display_order.trim() ? Number(form.display_order) : undefined,
+        parameter_key: form.parameter_key.trim() ? form.parameter_key.trim() : undefined,
+        unit: form.unit.trim() ? form.unit.trim() : undefined,
+        meaning: form.meaning.trim() ? form.meaning.trim() : undefined,
+        lower_range_male: toNumberOrUndefined(form.lower_range_male),
+        higher_range_male: toNumberOrUndefined(form.higher_range_male),
+        lower_range_female: toNumberOrUndefined(form.lower_range_female),
+        higher_range_female: toNumberOrUndefined(form.higher_range_female),
+        causes_when_high: form.causes_when_high.trim() ? form.causes_when_high.trim() : undefined,
+        causes_when_low: form.causes_when_low.trim() ? form.causes_when_low.trim() : undefined,
+        effects_when_high: form.effects_when_high.trim() ? form.effects_when_high.trim() : undefined,
+        effects_when_low: form.effects_when_low.trim() ? form.effects_when_low.trim() : undefined,
+        what_to_do_when_low: form.what_to_do_when_low.trim() ? form.what_to_do_when_low.trim() : undefined,
+        what_to_do_when_high: form.what_to_do_when_high.trim() ? form.what_to_do_when_high.trim() : undefined,
       };
       if (modalMode === "add") {
         await diagnosticTestsApi.create(payload);
@@ -238,33 +282,158 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
           className="space-y-4"
         >
           {formError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{formError}</div>}
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Test name</label>
-            <input
-              type="text"
-              value={form.test_name}
-              onChange={(e) => setForm((prev) => ({ ...prev, test_name: e.target.value }))}
-              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-              required
-            />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Test name *</label>
+              <input
+                type="text"
+                value={form.test_name}
+                onChange={(e) => setForm((prev) => ({ ...prev, test_name: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                required
+              />
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none">
+              <input
+                type="checkbox"
+                checked={form.is_available}
+                onChange={(e) => setForm((prev) => ({ ...prev, is_available: e.target.checked }))}
+                className="h-4 w-4"
+              />
+              Available
+            </label>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Parameter key</label>
+              <input
+                type="text"
+                value={form.parameter_key}
+                onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                placeholder="e.g. haemoglobin"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Unit</label>
+              <input
+                type="text"
+                value={form.unit}
+                onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                placeholder="e.g. g/dL"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Meaning</label>
+              <textarea
+                value={form.meaning}
+                onChange={(e) => setForm((prev) => ({ ...prev, meaning: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="What this parameter indicates"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Lower range (male)</label>
+              <input
+                type="number"
+                value={form.lower_range_male}
+                onChange={(e) => setForm((prev) => ({ ...prev, lower_range_male: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Higher range (male)</label>
+              <input
+                type="number"
+                value={form.higher_range_male}
+                onChange={(e) => setForm((prev) => ({ ...prev, higher_range_male: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Lower range (female)</label>
+              <input
+                type="number"
+                value={form.lower_range_female}
+                onChange={(e) => setForm((prev) => ({ ...prev, lower_range_female: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Higher range (female)</label>
+              <input
+                type="number"
+                value={form.higher_range_female}
+                onChange={(e) => setForm((prev) => ({ ...prev, higher_range_female: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Causes when high</label>
+              <textarea
+                value={form.causes_when_high}
+                onChange={(e) => setForm((prev) => ({ ...prev, causes_when_high: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="Possible reasons / conditions"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Causes when low</label>
+              <textarea
+                value={form.causes_when_low}
+                onChange={(e) => setForm((prev) => ({ ...prev, causes_when_low: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="Possible reasons / conditions"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Effects when high</label>
+              <textarea
+                value={form.effects_when_high}
+                onChange={(e) => setForm((prev) => ({ ...prev, effects_when_high: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="What this may lead to"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Effects when low</label>
+              <textarea
+                value={form.effects_when_low}
+                onChange={(e) => setForm((prev) => ({ ...prev, effects_when_low: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="What this may lead to"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">What to do when low</label>
+              <textarea
+                value={form.what_to_do_when_low}
+                onChange={(e) => setForm((prev) => ({ ...prev, what_to_do_when_low: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="Recommended next steps"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">What to do when high</label>
+              <textarea
+                value={form.what_to_do_when_high}
+                onChange={(e) => setForm((prev) => ({ ...prev, what_to_do_when_high: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
+                placeholder="Recommended next steps"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Order</label>
-            <input
-              type="number"
-              value={form.display_order}
-              onChange={(e) => setForm((prev) => ({ ...prev, display_order: e.target.value }))}
-              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-            />
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={form.is_available}
-              onChange={(e) => setForm((prev) => ({ ...prev, is_available: e.target.checked }))}
-            />
-            Available
-          </label>
+
           <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
             <button
               type="submit"
