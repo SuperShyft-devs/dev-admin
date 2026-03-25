@@ -836,8 +836,8 @@ export function AssessmentPackages() {
   const [pkgLimit] = useState(10);
   const [pkgSearch, setPkgSearch] = useState("");
   const [pkgStatusFilter, setPkgStatusFilter] = useState("");
-  const [pkgSortKey, setPkgSortKey] = useState("display_name");
-  const [pkgSortDir, setPkgSortDir] = useState<"asc" | "desc">("asc");
+  const [pkgSortKey, setPkgSortKey] = useState("package_id");
+  const [pkgSortDir, setPkgSortDir] = useState<"asc" | "desc">("desc");
   const [pkgLoading, setPkgLoading] = useState(false);
   const [pkgError, setPkgError] = useState<string | null>(null);
   const [pkgCategoryCounts, setPkgCategoryCounts] = useState<Record<number, number>>({});
@@ -874,8 +874,8 @@ export function AssessmentPackages() {
   const [catLimit] = useState(12);
   const [catSearch, setCatSearch] = useState("");
   const [catStatusFilter, setCatStatusFilter] = useState("");
-  const [catSortKey, setCatSortKey] = useState<"display_name" | "category_key">("display_name");
-  const [catSortDir, setCatSortDir] = useState<"asc" | "desc">("asc");
+  const [catSortKey, setCatSortKey] = useState<"display_name" | "category_key" | "category_id">("category_id");
+  const [catSortDir, setCatSortDir] = useState<"asc" | "desc">("desc");
   const [catLoading, setCatLoading] = useState(false);
   const [catError, setCatError] = useState<string | null>(null);
 
@@ -915,8 +915,8 @@ export function AssessmentPackages() {
   const [qSearch, setQSearch] = useState("");
   const [qStatusFilter, setQStatusFilter] = useState("");
   const [qTypeFilter, setQTypeFilter] = useState("");
-  const [qSortKey, setQSortKey] = useState("question_text");
-  const [qSortDir, setQSortDir] = useState<"asc" | "desc">("asc");
+  const [qSortKey, setQSortKey] = useState("question_id");
+  const [qSortDir, setQSortDir] = useState<"asc" | "desc">("desc");
   const [qLoading, setQLoading] = useState(false);
   const [qError, setQError] = useState<string | null>(null);
 
@@ -1811,11 +1811,12 @@ export function AssessmentPackages() {
               </select>
               <select
                 value={catSortKey}
-                onChange={(e) => setCatSortKey(e.target.value as "display_name" | "category_key")}
+                onChange={(e) => setCatSortKey(e.target.value as "display_name" | "category_key" | "category_id")}
                 className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
               >
                 <option value="display_name">Sort by Name</option>
                 <option value="category_key">Sort by Key</option>
+                <option value="category_id">Sort by Latest</option>
               </select>
               <button
                 onClick={() => setCatSortDir((dir) => (dir === "asc" ? "desc" : "asc"))}

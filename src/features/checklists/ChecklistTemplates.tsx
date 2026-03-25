@@ -61,8 +61,8 @@ export function ChecklistTemplates() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<string>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerDetail, setDrawerDetail] = useState<ChecklistTemplateDetail | null>(null);

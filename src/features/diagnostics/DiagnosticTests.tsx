@@ -13,7 +13,7 @@ interface DiagnosticTestsProps {
 }
 
 type ModalMode = "add" | "edit";
-type SortKey = "test_name" | "is_available" | "display_order";
+type SortKey = "test_id" | "test_name" | "is_available" | "display_order";
 type SortDir = "asc" | "desc";
 
 const EMPTY_FORM = {
@@ -35,8 +35,8 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const [sortKey, setSortKey] = useState<SortKey>("test_name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("test_id");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const fetchTests = useCallback(async () => {
     setLoading(true);
@@ -95,7 +95,10 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     next.sort((a, b) => {
       let left: string | number = "";
       let right: string | number = "";
-      if (sortKey === "test_name") {
+      if (sortKey === "test_id") {
+        left = a.test_id;
+        right = b.test_id;
+      } else if (sortKey === "test_name") {
         left = a.test_name.toLowerCase();
         right = b.test_name.toLowerCase();
       } else if (sortKey === "is_available") {

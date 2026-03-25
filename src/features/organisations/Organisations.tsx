@@ -31,8 +31,8 @@ export function Organisations() {
   const [countryFilter, setCountryFilter] = useState<string>("");
   const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [countryOptions, setCountryOptions] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<string>("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string>("organization_id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

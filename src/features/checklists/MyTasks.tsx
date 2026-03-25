@@ -41,8 +41,8 @@ export function MyTasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabFilter>("");
-  const [sortKey, setSortKey] = useState<string>("item_title");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string>("task_id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const [editRow, setEditRow] = useState<MyTask | null>(null);

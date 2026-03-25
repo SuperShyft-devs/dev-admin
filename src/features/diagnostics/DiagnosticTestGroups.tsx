@@ -25,7 +25,7 @@ interface DiagnosticTestGroupsProps {
 }
 
 type ModalMode = "add" | "edit";
-type SortKey = "group_name" | "test_count" | "display_order";
+type SortKey = "group_id" | "group_name" | "test_count" | "display_order";
 type SortDir = "asc" | "desc";
 
 const EMPTY_FORM = {
@@ -39,8 +39,8 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const [sortKey, setSortKey] = useState<SortKey>("group_name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>("group_id");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("add");
@@ -147,7 +147,10 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     next.sort((a, b) => {
       let left: string | number = "";
       let right: string | number = "";
-      if (sortKey === "group_name") {
+      if (sortKey === "group_id") {
+        left = a.group_id;
+        right = b.group_id;
+      } else if (sortKey === "group_name") {
         left = a.group_name.toLowerCase();
         right = b.group_name.toLowerCase();
       } else if (sortKey === "test_count") {

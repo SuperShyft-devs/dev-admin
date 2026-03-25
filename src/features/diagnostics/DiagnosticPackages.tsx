@@ -140,7 +140,8 @@ export function DiagnosticPackages() {
   );
 
   const filteredRows = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => a.package_name.localeCompare(b.package_name));
+    // Latest created/added packages first (higher id = newer, assuming monotonic ids).
+    const sorted = [...rows].sort((a, b) => b.diagnostic_package_id - a.diagnostic_package_id);
     const q = search.trim().toLowerCase();
 
     return sorted.filter((row) => {

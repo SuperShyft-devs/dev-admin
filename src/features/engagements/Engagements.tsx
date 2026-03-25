@@ -598,8 +598,8 @@ export function Engagements() {
   const [cityFilter, setCityFilter] = useState<string>("");
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [cityOptions, setCityOptions] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<string>("engagement_name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<string>("engagement_id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
