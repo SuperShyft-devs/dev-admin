@@ -40,7 +40,6 @@ const QUESTION_TYPES = [
   { value: "multiple_choice", label: "Multiple Choice" },
   { value: "scale", label: "Scale" },
 ] as const;
-const CHOICE_TYPES = new Set(["single_choice", "multiple_choice"]);
 const OPTION_SUPPORTED_TYPES = new Set(["single_choice", "multiple_choice", "scale"]);
 const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
 
