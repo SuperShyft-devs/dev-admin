@@ -97,10 +97,15 @@ export function SupportTickets() {
     setSortKey(nextKey);
   };
 
-  const formatDateTime = (value: string) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString();
+  const formatDate = (value?: string | null) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const statusPillClass = (status: SupportTicketStatus) => {
@@ -148,7 +153,7 @@ export function SupportTickets() {
       label: "Created",
       sortable: true,
       hideOnMobile: true,
-      render: (row) => <span className="text-zinc-600">{formatDateTime(row.created_at)}</span>,
+      render: (row) => <span className="text-zinc-600">{formatDate(row.created_at)}</span>,
     },
   ];
 
@@ -270,7 +275,7 @@ export function SupportTickets() {
               </div>
               <div>
                 <span className="text-zinc-500 text-xs uppercase tracking-wide">Created</span>
-                <p className="text-zinc-900 mt-0.5">{formatDateTime(selected.created_at)}</p>
+                <p className="text-zinc-900 mt-0.5">{formatDate(selected.created_at)}</p>
               </div>
               <div className="sm:col-span-2">
                 <span className="text-zinc-500 text-xs uppercase tracking-wide">Contact</span>
