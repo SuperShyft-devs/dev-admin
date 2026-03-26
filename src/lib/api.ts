@@ -1169,6 +1169,7 @@ export interface ChecklistTemplate {
   name: string;
   description?: string | null;
   status: string;
+  audience?: "internal" | "user";
   created_at: string;
   created_employee_id?: number | null;
 }
@@ -1210,9 +1211,9 @@ export const checklistTemplatesApi = {
   list: () => api.get<{ data: ChecklistTemplate[]; meta: Record<string, unknown> }>("/checklist-templates"),
   get: (id: number) =>
     api.get<{ data: ChecklistTemplateDetail; meta: Record<string, unknown> }>(`/checklist-templates/${id}`),
-  create: (body: { name: string; description?: string }) =>
+  create: (body: { name: string; description?: string; audience?: "internal" | "user" }) =>
     api.post<{ data: ChecklistTemplate; meta: Record<string, unknown> }>("/checklist-templates", body),
-  update: (id: number, body: { name?: string; description?: string }) =>
+  update: (id: number, body: { name?: string; description?: string; audience?: "internal" | "user" }) =>
     api.put<{ data: ChecklistTemplate; meta: Record<string, unknown> }>(`/checklist-templates/${id}`, body),
   updateStatus: (id: number, body: { status: string }) =>
     api.patch(`/checklist-templates/${id}/status`, body),

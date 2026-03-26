@@ -163,6 +163,11 @@ function EngagementChecklistModal({
     }
   }, [open, engagementId, loadData]);
 
+  const templatesById = templates.reduce<Record<number, ChecklistTemplate>>((acc, t) => {
+    acc[t.template_id] = t;
+    return acc;
+  }, {});
+
   const activeTemplates = templates.filter((t) => (t.status ?? "").toLowerCase() === "active");
 
   const toggleExpand = (checklistId: number) => {
@@ -302,6 +307,8 @@ function EngagementChecklistModal({
                 {checklists.map((cl) => {
                   const isOpen = expanded.has(cl.checklist_id);
                   const { done, total, percent } = cl.readiness;
+                  const audience = templatesById[cl.template_id]?.audience ?? "internal";
+                  const isUserFacing = audience === "user";
                   return (
                     <li
                       key={cl.checklist_id}
@@ -309,27 +316,42 @@ function EngagementChecklistModal({
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(cl.checklist_id)}
-                            className="flex items-center gap-2 text-left w-full"
-                          >
-                            {isOpen ? (
-                              <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
-                            )}
-                            <span className="font-semibold text-zinc-900 truncate">{cl.template_name}</span>
-                          </button>
-                          <p className="text-xs text-zinc-600 mt-1 sm:ml-6">
-                            Readiness: {done}/{total} tasks done
-                          </p>
-                          <div className="mt-2 sm:ml-6 h-1.5 w-full max-w-xs bg-zinc-100 rounded overflow-hidden">
-                            <div
-                              className="h-full bg-emerald-500 rounded transition-all"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
+                          {isUserFacing ? (
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="font-semibold text-zinc-900 truncate block">
+                                  {cl.template_name}
+                                </span>
+                                <span className="text-xs text-zinc-500 mt-1 block">
+                                  User-facing checklist
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(cl.checklist_id)}
+                                className="flex items-center gap-2 text-left w-full"
+                              >
+                                {isOpen ? (
+                                  <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
+                                )}
+                                <span className="font-semibold text-zinc-900 truncate">{cl.template_name}</span>
+                              </button>
+                              <p className="text-xs text-zinc-600 mt-1 sm:ml-6">
+                                Readiness: {done}/{total} tasks done
+                              </p>
+                              <div className="mt-2 sm:ml-6 h-1.5 w-full max-w-xs bg-zinc-100 rounded overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-500 rounded transition-all"
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -341,7 +363,7 @@ function EngagementChecklistModal({
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      {isOpen && (
+                      {!isUserFacing && isOpen && (
                         <ul className="mt-3 pt-3 border-t border-zinc-100 space-y-2 sm:ml-6">
                           {cl.tasks.map((task) => {
                             const doneTask = (task.status ?? "").toLowerCase() === "done";
@@ -451,7 +473,7 @@ function EngagementChecklistModal({
           <section className="border-t border-zinc-200 pt-5">
             <h3 className="text-sm font-semibold text-zinc-900">Add a checklist</h3>
             <p className="text-xs text-zinc-500 mt-1 mb-4">
-              Pick an active template. Tasks are created automatically for this engagement.
+              Pick an active template. Internal templates create tasks automatically; user-facing templates show static instructions.
             </p>
             {applyError && (
               <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">

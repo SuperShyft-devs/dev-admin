@@ -74,6 +74,7 @@ export function ChecklistTemplates() {
   const [editingTemplate, setEditingTemplate] = useState<ChecklistTemplate | null>(null);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formAudience, setFormAudience] = useState<"internal" | "user">("internal");
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -160,6 +161,7 @@ export function ChecklistTemplates() {
     setEditingTemplate(null);
     setFormName("");
     setFormDescription("");
+    setFormAudience("internal");
     setFormError(null);
     setModalOpen(true);
   };
@@ -169,6 +171,7 @@ export function ChecklistTemplates() {
     setEditingTemplate(t);
     setFormName(t.name);
     setFormDescription(t.description ?? "");
+    setFormAudience(t.audience ?? "internal");
     setFormError(null);
     setModalOpen(true);
   };
@@ -183,11 +186,16 @@ export function ChecklistTemplates() {
     setFormError(null);
     try {
       if (modalMode === "add") {
-        await checklistTemplatesApi.create({ name, description: formDescription.trim() || undefined });
+        await checklistTemplatesApi.create({
+          name,
+          description: formDescription.trim() || undefined,
+          audience: formAudience,
+        });
       } else if (editingTemplate) {
         await checklistTemplatesApi.update(editingTemplate.template_id, {
           name,
           description: formDescription.trim() || undefined,
+          audience: formAudience,
         });
       }
       setModalOpen(false);
@@ -500,6 +508,20 @@ export function ChecklistTemplates() {
               className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               required
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Audience *</label>
+            <select
+              value={formAudience}
+              onChange={(e) => setFormAudience(e.target.value === "user" ? "user" : "internal")}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="internal">Internal (employees)</option>
+              <option value="user">User-facing (instructions)</option>
+            </select>
+            <p className="text-xs text-zinc-500 mt-1">
+              Internal templates create assignable tasks. User-facing templates show static instructions to users.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">Description</label>
