@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -7,10 +7,14 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem("access_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Default instance Content-Type is application/json; that breaks multipart uploads (FastAPI sees no file).
+  if (config.data instanceof FormData) {
+    config.headers.delete("Content-Type");
   }
   return config;
 });
@@ -292,16 +296,12 @@ export const uploadsApi = {
   uploadUserProfilePhoto: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return api.post<{ data: { url: string } }>("/uploads/users/profile-photo", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    return api.post<{ data: { url: string } }>("/uploads/users/profile-photo", formData);
   },
   uploadOrganizationLogo: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return api.post<{ data: { url: string } }>("/uploads/organizations/logo", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    return api.post<{ data: { url: string } }>("/uploads/organizations/logo", formData);
   },
 };
 
@@ -476,6 +476,19 @@ export interface EngagementCreate {
   end_date: string;
 }
 
+export interface MetsightsImportRowResult {
+  line: number;
+  status: "imported" | "skipped" | "failed";
+  reason: string;
+}
+
+export interface MetsightsImportResult {
+  imported: number;
+  skipped: number;
+  failed: number;
+  rows: MetsightsImportRowResult[];
+}
+
 export const engagementsApi = {
   list: (params?: {
     page?: number;
@@ -500,6 +513,14 @@ export const engagementsApi = {
       `/engagements/${id}/status`,
       { status }
     ),
+  importMetsightsCsv: (engagementId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: MetsightsImportResult; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/import/metsights-csv`,
+      formData
+    );
+  },
 };
 
 // Assessment packages
