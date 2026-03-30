@@ -528,6 +528,7 @@ export interface AssessmentPackage {
   package_id: number;
   package_code?: string | null;
   display_name?: string | null;
+  assessment_type_code?: string | null;
   status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -536,12 +537,14 @@ export interface AssessmentPackage {
 export interface AssessmentPackageCreate {
   package_code: string;
   display_name: string;
+  assessment_type_code: string;
   status?: string;
 }
 
 export interface AssessmentPackageUpdate {
   package_code?: string;
   display_name?: string;
+  assessment_type_code?: string;
 }
 
 export interface AssessmentPackageCategory {

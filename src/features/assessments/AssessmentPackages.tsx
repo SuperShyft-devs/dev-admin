@@ -849,6 +849,7 @@ export function AssessmentPackages() {
   const [pkgForm, setPkgForm] = useState<AssessmentPackageCreate>({
     package_code: "",
     display_name: "",
+    assessment_type_code: "",
     status: "active",
   });
   const [pkgSubmitting, setPkgSubmitting] = useState(false);
@@ -1072,7 +1073,7 @@ export function AssessmentPackages() {
   const openAddPackage = () => {
     setPkgModalMode("add");
     setSelectedPkg(null);
-    setPkgForm({ package_code: "", display_name: "", status: "active" });
+    setPkgForm({ package_code: "", display_name: "", assessment_type_code: "", status: "active" });
     setPkgFormError(null);
     setPkgModalOpen(true);
   };
@@ -1095,6 +1096,7 @@ export function AssessmentPackages() {
         setPkgForm({
           package_code: item.package_code ?? "",
           display_name: item.display_name ?? "",
+          assessment_type_code: item.assessment_type_code ?? "",
           status: item.status ?? "active",
         });
         setPkgFormError(null);
@@ -1105,8 +1107,8 @@ export function AssessmentPackages() {
   };
 
   const handlePackageSubmit = async () => {
-    if (!pkgForm.package_code.trim() || !pkgForm.display_name.trim()) {
-      setPkgFormError("Code and Name are required.");
+    if (!pkgForm.package_code.trim() || !pkgForm.display_name.trim() || !pkgForm.assessment_type_code.trim()) {
+      setPkgFormError("Code, Name and Assessment Type Code are required.");
       return;
     }
     setPkgSubmitting(true);
@@ -1118,6 +1120,7 @@ export function AssessmentPackages() {
         await assessmentPackagesApi.update(selectedPkg.package_id, {
           package_code: pkgForm.package_code,
           display_name: pkgForm.display_name,
+          assessment_type_code: pkgForm.assessment_type_code,
         });
       }
       setPkgModalOpen(false);
@@ -1586,6 +1589,16 @@ export function AssessmentPackages() {
       ),
     },
     {
+      key: "assessment_type_code",
+      label: "Assessment Type",
+      sortable: true,
+      render: (row) => (
+        <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">
+          {row.assessment_type_code ?? "—"}
+        </span>
+      ),
+    },
+    {
       key: "status",
       label: "Status",
       sortable: true,
@@ -2017,6 +2030,10 @@ export function AssessmentPackages() {
                   <StatusBadge status={selectedPkg.status} />
                 </dd>
               </div>
+              <div>
+                <dt className="text-zinc-500 mb-0.5">Assessment Type Code</dt>
+                <dd className="font-medium text-zinc-900">{selectedPkg.assessment_type_code ?? "—"}</dd>
+              </div>
             </dl>
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
@@ -2072,6 +2089,19 @@ export function AssessmentPackages() {
                 onChange={(e) => setPkgForm({ ...pkgForm, display_name: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 placeholder="e.g. Basic Health"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Assessment Type Code <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={pkgForm.assessment_type_code}
+                onChange={(e) => setPkgForm({ ...pkgForm, assessment_type_code: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="e.g. 1, 2, 7"
                 required
               />
             </div>
