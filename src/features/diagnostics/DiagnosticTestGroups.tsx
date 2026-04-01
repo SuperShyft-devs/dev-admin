@@ -227,7 +227,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     setAssignSearch("");
     try {
       const [allTestsRes, assignedRes] = await Promise.all([
-        diagnosticTestsApi.list(),
+        diagnosticTestsApi.list({ parameter_type: "test" }),
         diagnosticTestGroupsApi.getTests(panelGroup.group_id),
       ]);
       const all = allTestsRes.data.data ?? [];

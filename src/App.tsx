@@ -13,6 +13,7 @@ import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
 import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
 import { SupportTickets } from "./features/support/SupportTickets";
 import { ChecklistTemplates } from "./features/checklists/ChecklistTemplates";
+import { HealthMetrics } from "./features/health-metrics/HealthMetrics";
 import { MyTasks } from "./features/checklists/MyTasks";
 import { Settings } from "./features/settings/Settings";
 
@@ -90,6 +91,11 @@ function AppRoutes() {
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
         <Route path="diagnostics/filters" element={<DiagnosticFilters />} />
         <Route path="checklists" element={<ChecklistTemplates />} />
+        <Route path="library/health-metrics" element={<HealthMetrics />} />
+        <Route
+          path="admin/library/health-metrics"
+          element={<Navigate to="/library/health-metrics" replace />}
+        />
         <Route path="my-tasks" element={<MyTasks />} />
         <Route path="support" element={<SupportTickets />} />
         <Route path="settings" element={<Settings />} />

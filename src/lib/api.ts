@@ -1058,8 +1058,11 @@ export const diagnosticFiltersApi = {
     api.delete<{ data: { filter_id: number; deleted: boolean } }>(`/diagnostic-packages/filters/${filterId}`),
 };
 
+export type HealthParameterType = "test" | "metric";
+
 export interface DiagnosticTestStandalone {
   test_id: number;
+  parameter_type: HealthParameterType;
   test_name: string;
   parameter_key?: string | null;
   unit?: string | null;
@@ -1113,51 +1116,61 @@ export interface PackageTestsResponse {
   groups: DiagnosticTestGroupStandalone[];
 }
 
+export type HealthParameterCreatePayload = {
+  parameter_type: HealthParameterType;
+  test_name: string;
+  parameter_key?: string | null;
+  unit?: string | null;
+  meaning?: string | null;
+  lower_range_male?: number | null;
+  higher_range_male?: number | null;
+  lower_range_female?: number | null;
+  higher_range_female?: number | null;
+  causes_when_high?: string | null;
+  causes_when_low?: string | null;
+  effects_when_high?: string | null;
+  effects_when_low?: string | null;
+  what_to_do_when_low?: string | null;
+  what_to_do_when_high?: string | null;
+  is_available?: boolean;
+  display_order?: number;
+};
+
+export type HealthParameterUpdatePayload = {
+  test_name?: string;
+  parameter_key?: string | null;
+  unit?: string | null;
+  meaning?: string | null;
+  lower_range_male?: number | null;
+  higher_range_male?: number | null;
+  lower_range_female?: number | null;
+  higher_range_female?: number | null;
+  causes_when_high?: string | null;
+  causes_when_low?: string | null;
+  effects_when_high?: string | null;
+  effects_when_low?: string | null;
+  what_to_do_when_low?: string | null;
+  what_to_do_when_high?: string | null;
+  is_available?: boolean;
+  display_order?: number;
+};
+
 export const diagnosticTestsApi = {
-  list: () => api.get<{ data: DiagnosticTestStandalone[] }>("/diagnostic-tests"),
+  list: (params?: { parameter_type?: HealthParameterType }) =>
+    api.get<{ data: DiagnosticTestStandalone[] }>("/diagnostics/health-parameters", {
+      params:
+        params?.parameter_type !== undefined
+          ? { parameter_type: params.parameter_type }
+          : undefined,
+    }),
   get: (testId: number) =>
-    api.get<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`),
-  create: (payload: {
-    test_name: string;
-    parameter_key?: string | null;
-    unit?: string | null;
-    meaning?: string | null;
-    lower_range_male?: number | null;
-    higher_range_male?: number | null;
-    lower_range_female?: number | null;
-    higher_range_female?: number | null;
-    causes_when_high?: string | null;
-    causes_when_low?: string | null;
-    effects_when_high?: string | null;
-    effects_when_low?: string | null;
-    what_to_do_when_low?: string | null;
-    what_to_do_when_high?: string | null;
-    is_available?: boolean;
-    display_order?: number;
-  }) =>
-    api.post<{ data: DiagnosticTestStandalone }>("/diagnostic-tests", payload),
-  update: (
-    testId: number,
-    payload: {
-      test_name?: string;
-      parameter_key?: string | null;
-      unit?: string | null;
-      meaning?: string | null;
-      lower_range_male?: number | null;
-      higher_range_male?: number | null;
-      lower_range_female?: number | null;
-      higher_range_female?: number | null;
-      causes_when_high?: string | null;
-      causes_when_low?: string | null;
-      effects_when_high?: string | null;
-      effects_when_low?: string | null;
-      what_to_do_when_low?: string | null;
-      what_to_do_when_high?: string | null;
-      is_available?: boolean;
-      display_order?: number;
-    }
-  ) => api.put<{ data: DiagnosticTestStandalone }>(`/diagnostic-tests/${testId}`, payload),
-  delete: (testId: number) => api.delete(`/diagnostic-tests/${testId}`),
+    api.get<{ data: DiagnosticTestStandalone }>(`/diagnostics/health-parameters/${testId}`),
+  create: (payload: HealthParameterCreatePayload) =>
+    api.post<{ data: DiagnosticTestStandalone }>("/diagnostics/health-parameters", payload),
+  update: (testId: number, payload: HealthParameterUpdatePayload) =>
+    api.put<{ data: DiagnosticTestStandalone }>(`/diagnostics/health-parameters/${testId}`, payload),
+  delete: (testId: number) =>
+    api.delete<{ data: { deleted: boolean } }>(`/diagnostics/health-parameters/${testId}`),
 };
 
 export const diagnosticTestGroupsApi = {

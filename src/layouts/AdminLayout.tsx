@@ -13,6 +13,7 @@ import {
   X,
   LifeBuoy,
   ClipboardCheck,
+  Activity,
   Inbox,
   Library,
   ChevronDown,
@@ -35,13 +36,15 @@ const libraryNavItems = [
   { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
   { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
   { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates" },
+  { to: "/library/health-metrics", icon: Activity, label: "Health Metrics" },
 ];
 
 function isLibraryPath(pathname: string) {
   return (
     pathname.startsWith("/assessments") ||
     pathname.startsWith("/diagnostics") ||
-    pathname.startsWith("/checklists")
+    pathname.startsWith("/checklists") ||
+    pathname.startsWith("/library")
   );
 }
 

@@ -8,10 +8,6 @@ import {
   type DiagnosticTestStandalone,
 } from "../../lib/api";
 
-interface DiagnosticTestsProps {
-  onRequestCreate?: (trigger: () => void) => void;
-}
-
 type ModalMode = "add" | "edit";
 type SortKey = "test_id" | "test_name" | "is_available" | "display_order";
 type SortDir = "asc" | "desc";
@@ -41,10 +37,11 @@ const EMPTY_FORM = {
   what_to_do_when_high: "",
 };
 
-export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
+export function HealthMetrics() {
   const [rows, setRows] = useState<DiagnosticTestStandalone[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -57,11 +54,11 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
   const [sortKey, setSortKey] = useState<SortKey>("test_id");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const fetchTests = useCallback(async () => {
+  const fetchRows = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await diagnosticTestsApi.list({ parameter_type: "test" });
+      const res = await diagnosticTestsApi.list({ parameter_type: "metric" });
       setRows(res.data.data ?? []);
     } catch (err) {
       setError(getApiError(err));
@@ -71,8 +68,14 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
   }, []);
 
   useEffect(() => {
-    void fetchTests();
-  }, [fetchTests]);
+    void fetchRows();
+  }, [fetchRows]);
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const t = window.setTimeout(() => setSuccessMessage(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [successMessage]);
 
   const openCreate = useCallback(() => {
     setModalMode("add");
@@ -81,10 +84,6 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     setFormError(null);
     setModalOpen(true);
   }, []);
-
-  useEffect(() => {
-    onRequestCreate?.(openCreate);
-  }, [onRequestCreate, openCreate]);
 
   const openEdit = (row: DiagnosticTestStandalone) => {
     setModalMode("edit");
@@ -123,7 +122,12 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const next = rows.filter((row) => !q || row.test_name.toLowerCase().includes(q));
+    const next = rows.filter(
+      (row) =>
+        !q ||
+        row.test_name.toLowerCase().includes(q) ||
+        (row.parameter_key ?? "").toLowerCase().includes(q)
+    );
     next.sort((a, b) => {
       let left: string | number = "";
       let right: string | number = "";
@@ -149,7 +153,11 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
 
   const handleSubmit = async () => {
     if (!form.test_name.trim()) {
-      setFormError("Test name is required.");
+      setFormError("Display name is required.");
+      return;
+    }
+    if (modalMode === "add" && !form.parameter_key.trim()) {
+      setFormError("Metric key is required.");
       return;
     }
     setSubmitting(true);
@@ -158,7 +166,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
       const payload = {
         test_name: form.test_name.trim(),
         is_available: form.is_available,
-        ...(modalMode === "add" ? { parameter_type: "test" as const } : {}),
+        ...(modalMode === "add" ? { parameter_type: "metric" as const } : {}),
         parameter_key: form.parameter_key.trim() ? form.parameter_key.trim() : undefined,
         unit: form.unit.trim() ? form.unit.trim() : undefined,
         meaning: form.meaning.trim() ? form.meaning.trim() : undefined,
@@ -175,11 +183,13 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
       };
       if (modalMode === "add") {
         await diagnosticTestsApi.create(payload);
+        setSuccessMessage("Health metric created.");
       } else if (editing) {
         await diagnosticTestsApi.update(editing.test_id, payload);
+        setSuccessMessage("Health metric updated.");
       }
       setModalOpen(false);
-      await fetchTests();
+      await fetchRows();
     } catch (err) {
       setFormError(getApiError(err));
     } finally {
@@ -188,10 +198,11 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
   };
 
   const handleDelete = async (row: DiagnosticTestStandalone) => {
-    if (!window.confirm(`Delete test "${row.test_name}"?`)) return;
+    if (!window.confirm(`Delete health metric "${row.test_name}"?`)) return;
     try {
       await diagnosticTestsApi.delete(row.test_id);
-      await fetchTests();
+      setSuccessMessage("Health metric deleted.");
+      await fetchRows();
     } catch (err) {
       setError(getApiError(err));
     }
@@ -200,13 +211,24 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
   const columns: Column<DiagnosticTestStandalone>[] = [
     {
       key: "test_name",
-      label: "Test name",
+      label: "Display name",
       sortable: true,
       render: (row) => <span className="font-medium text-zinc-900">{row.test_name}</span>,
     },
     {
+      key: "parameter_key",
+      label: "Metric key",
+      sortable: false,
+      render: (row) =>
+        row.parameter_key ? (
+          <code className="text-xs bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-700">{row.parameter_key}</code>
+        ) : (
+          "—"
+        ),
+    },
+    {
       key: "is_available",
-      label: "Available",
+      label: "Status",
       sortable: true,
       render: (row) => (
         <span
@@ -214,7 +236,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
             row.is_available ? "bg-green-50 text-green-700" : "bg-zinc-100 text-zinc-500"
           }`}
         >
-          {row.is_available ? "Yes" : "No"}
+          {row.is_available ? "active" : "inactive"}
         </span>
       ),
     },
@@ -226,8 +248,27 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     },
   ];
 
+  const hasFilters = Boolean(search.trim());
+  const showEmpty = !loading && filteredRows.length === 0;
+
   return (
     <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Health Metrics</h1>
+        <button
+          type="button"
+          onClick={openCreate}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Add Health Metric
+        </button>
+      </div>
+
+      {successMessage ? (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{successMessage}</div>
+      ) : null}
+
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
 
       <div className="mb-4 flex flex-col sm:flex-row gap-3">
@@ -238,23 +279,19 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-zinc-900"
-            placeholder="Search tests..."
+            placeholder="Search by display name or metric key..."
           />
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
-        >
-          <Plus className="w-4 h-4" />
-          Add Test
-        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
         {loading ? (
           <div className="py-12 flex justify-center">
             <Loader2 className="w-7 h-7 animate-spin text-zinc-400" />
+          </div>
+        ) : showEmpty ? (
+          <div className="py-12 text-center text-sm text-zinc-500">
+            {hasFilters ? "No health metrics match your search." : "No health metrics yet."}
           </div>
         ) : (
           <DataTable
@@ -273,7 +310,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={modalMode === "add" ? "Add Test" : "Edit Test"}
+        title={modalMode === "add" ? "Add Health Metric" : "Edit Health Metric"}
       >
         <form
           onSubmit={(event) => {
@@ -286,7 +323,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Test name *</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Display name *</label>
               <input
                 type="text"
                 value={form.test_name}
@@ -295,26 +332,43 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
                 required
               />
             </div>
-            <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none">
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Metric key {modalMode === "add" ? "*" : ""}
+              </label>
+              {modalMode === "add" ? (
+                <>
+                  <input
+                    type="text"
+                    value={form.parameter_key}
+                    onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
+                    className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                    placeholder="oxidative_stress"
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">Use snake_case, e.g. oxidative_stress</p>
+                </>
+              ) : (
+                <input
+                  type="text"
+                  value={form.parameter_key}
+                  readOnly
+                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 bg-zinc-50 text-zinc-600 cursor-not-allowed"
+                />
+              )}
+            </div>
+
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none sm:col-span-2">
               <input
                 type="checkbox"
                 checked={form.is_available}
                 onChange={(e) => setForm((prev) => ({ ...prev, is_available: e.target.checked }))}
                 className="h-4 w-4"
               />
-              Available
+              Active (available)
             </label>
 
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Parameter key</label>
-              <input
-                type="text"
-                value={form.parameter_key}
-                onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
-                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                placeholder="e.g. haemoglobin"
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Unit</label>
               <input
@@ -322,17 +376,18 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
                 value={form.unit}
                 onChange={(e) => setForm((prev) => ({ ...prev, unit: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                placeholder="e.g. g/dL"
+                placeholder="e.g. score"
               />
             </div>
+            <div className="hidden sm:block" aria-hidden />
 
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Meaning</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Description</label>
               <textarea
                 value={form.meaning}
                 onChange={(e) => setForm((prev) => ({ ...prev, meaning: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-20 focus:ring-2 focus:ring-zinc-900"
-                placeholder="What this parameter indicates"
+                placeholder="Optional description"
               />
             </div>
 
@@ -441,7 +496,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
               disabled={submitting}
               className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
             >
-              {submitting ? "Saving..." : modalMode === "add" ? "Create Test" : "Save Changes"}
+              {submitting ? "Saving..." : modalMode === "add" ? "Create" : "Save Changes"}
             </button>
             <button
               type="button"
