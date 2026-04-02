@@ -59,7 +59,7 @@ export function DiagnosticFilters({ embedded = false }: DiagnosticFiltersProps) 
 
   const fetchTagOptions = useCallback(async () => {
     try {
-      const res = await diagnosticPackagesApi.list();
+      const res = await diagnosticPackagesApi.list({ include_inactive: true });
       const options = Array.from(
         new Set(
           (res.data.data ?? []).flatMap((row) =>

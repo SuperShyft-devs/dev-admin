@@ -911,7 +911,7 @@ export interface DiagnosticFilter {
 }
 
 export const diagnosticPackagesApi = {
-  list: (params?: { gender?: string; tag?: string }) =>
+  list: (params?: { gender?: string; tag?: string; include_inactive?: boolean }) =>
     api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
   get: (id: number) =>
     api.get<{ data: DiagnosticPackageDetail }>(`/diagnostic-packages/${id}`),

@@ -64,7 +64,7 @@ export function DiagnosticPackages() {
     setLoading(true);
     setError(null);
     try {
-      const res = await diagnosticPackagesApi.list();
+      const res = await diagnosticPackagesApi.list({ include_inactive: true });
       const baseRows = res.data.data ?? [];
       const providerMissing = baseRows.some((row) => !row.diagnostic_provider);
 
