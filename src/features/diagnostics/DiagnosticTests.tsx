@@ -6,6 +6,8 @@ import {
   diagnosticTestsApi,
   getApiError,
   type DiagnosticTestStandalone,
+  type HealthParameterCreatePayload,
+  type HealthParameterUpdatePayload,
 } from "../../lib/api";
 
 interface DiagnosticTestsProps {
@@ -155,10 +157,9 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     setSubmitting(true);
     setFormError(null);
     try {
-      const payload = {
+      const fields: HealthParameterUpdatePayload = {
         test_name: form.test_name.trim(),
         is_available: form.is_available,
-        ...(modalMode === "add" ? { parameter_type: "test" as const } : {}),
         parameter_key: form.parameter_key.trim() ? form.parameter_key.trim() : undefined,
         unit: form.unit.trim() ? form.unit.trim() : undefined,
         meaning: form.meaning.trim() ? form.meaning.trim() : undefined,
@@ -174,9 +175,14 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
         what_to_do_when_high: form.what_to_do_when_high.trim() ? form.what_to_do_when_high.trim() : undefined,
       };
       if (modalMode === "add") {
-        await diagnosticTestsApi.create(payload);
+        const createPayload: HealthParameterCreatePayload = {
+          ...fields,
+          parameter_type: "test",
+          test_name: form.test_name.trim(),
+        };
+        await diagnosticTestsApi.create(createPayload);
       } else if (editing) {
-        await diagnosticTestsApi.update(editing.test_id, payload);
+        await diagnosticTestsApi.update(editing.test_id, fields);
       }
       setModalOpen(false);
       await fetchTests();
