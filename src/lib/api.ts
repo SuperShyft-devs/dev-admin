@@ -664,6 +664,34 @@ export interface QuestionnaireQuestionUpdate {
   prefill_from?: QuestionnairePrefillFrom | null;
 }
 
+export interface QuestionnaireHealthyHabitRule {
+  rule_id: number;
+  question_id: number;
+  habit_key?: string | null;
+  habit_label: string;
+  display_order?: number | null;
+  condition_type: string;
+  matched_option_values?: string[] | null;
+  scale_min?: number | null;
+  scale_max?: number | null;
+  scale_unit?: string | null;
+  status: string;
+  created_at?: string | null;
+  updated_employee_id?: number | null;
+}
+
+export type QuestionnaireHealthyHabitRulePayload = {
+  habit_key?: string | null;
+  habit_label: string;
+  display_order?: number | null;
+  condition_type: string;
+  matched_option_values?: string[] | null;
+  scale_min?: number | null;
+  scale_max?: number | null;
+  scale_unit?: string | null;
+  status: string;
+};
+
 export interface QuestionnaireCategory {
   category_id: number;
   category_key: string;
@@ -767,6 +795,27 @@ export const questionnaireQuestionsApi = {
     api.patch<{ data: { question_id: number; status: string } }>(
       `/questionnaire/questions/${id}/status`,
       { status }
+    ),
+};
+
+export const questionnaireHealthyHabitRulesApi = {
+  list: (questionId: number) =>
+    api.get<{ data: QuestionnaireHealthyHabitRule[] }>(
+      `/questionnaire/questions/${questionId}/healthy-habit-rules`
+    ),
+  create: (questionId: number, payload: QuestionnaireHealthyHabitRulePayload) =>
+    api.post<{ data: QuestionnaireHealthyHabitRule }>(
+      `/questionnaire/questions/${questionId}/healthy-habit-rules`,
+      payload
+    ),
+  update: (questionId: number, ruleId: number, payload: QuestionnaireHealthyHabitRulePayload) =>
+    api.put<{ data: QuestionnaireHealthyHabitRule }>(
+      `/questionnaire/questions/${questionId}/healthy-habit-rules/${ruleId}`,
+      payload
+    ),
+  delete: (questionId: number, ruleId: number) =>
+    api.delete<{ data: { deleted: boolean } }>(
+      `/questionnaire/questions/${questionId}/healthy-habit-rules/${ruleId}`
     ),
 };
 

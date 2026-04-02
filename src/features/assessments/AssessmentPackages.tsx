@@ -16,12 +16,15 @@ import { Modal } from "../../shared/ui/Modal";
 import {
   assessmentPackagesApi,
   questionnaireCategoriesApi,
+  questionnaireHealthyHabitRulesApi,
   questionnaireQuestionsApi,
   type AssessmentPackage,
   type AssessmentPackageCategory,
   type AssessmentPackageCreate,
   type QuestionnaireCategory,
   type QuestionnaireCategoryCreate,
+  type QuestionnaireHealthyHabitRule,
+  type QuestionnaireHealthyHabitRulePayload,
   type QuestionnaireOption,
   type QuestionnaireQuestion,
   type QuestionnaireQuestionCreate,
@@ -930,6 +933,81 @@ export function AssessmentPackages() {
   const [qFormError, setQFormError] = useState<string | null>(null);
   const [qTogglingStatus, setQTogglingStatus] = useState(false);
 
+  const [habitRules, setHabitRules] = useState<QuestionnaireHealthyHabitRule[]>([]);
+  const [habitRulesLoading, setHabitRulesLoading] = useState(false);
+  const [habitRulesError, setHabitRulesError] = useState<string | null>(null);
+  const [habitRuleSaving, setHabitRuleSaving] = useState(false);
+  const [habitRuleFormError, setHabitRuleFormError] = useState<string | null>(null);
+  const [habitRuleEditingId, setHabitRuleEditingId] = useState<number | null>(null);
+  const [habitRuleForm, setHabitRuleForm] = useState({
+    habit_key: "",
+    habit_label: "",
+    display_order: "",
+    condition_type: "option_match" as "option_match" | "scale_range",
+    matched_option_values: [] as string[],
+    scale_min: "",
+    scale_max: "",
+    scale_unit: "",
+    status: "active",
+  });
+
+  const fetchHabitRulesForQuestion = useCallback(async (questionId: number) => {
+    setHabitRulesLoading(true);
+    setHabitRulesError(null);
+    try {
+      const res = await questionnaireHealthyHabitRulesApi.list(questionId);
+      setHabitRules(res.data.data ?? []);
+    } catch (error) {
+      setHabitRulesError(getApiError(error));
+      setHabitRules([]);
+    } finally {
+      setHabitRulesLoading(false);
+    }
+  }, []);
+
+  const resetHabitRuleForm = useCallback((questionType?: string | null) => {
+    setHabitRuleEditingId(null);
+    setHabitRuleFormError(null);
+    setHabitRuleForm({
+      habit_key: "",
+      habit_label: "",
+      display_order: "",
+      condition_type: questionType === "scale" ? "scale_range" : "option_match",
+      matched_option_values: [],
+      scale_min: "",
+      scale_max: "",
+      scale_unit: "",
+      status: "active",
+    });
+  }, []);
+
+  const closeQuestionModal = useCallback(() => {
+    setQModalOpen(false);
+    setHabitRules([]);
+    setHabitRulesError(null);
+    resetHabitRuleForm();
+  }, [resetHabitRuleForm]);
+
+  useEffect(() => {
+    if (!qModalOpen || qModalMode !== "view" || !selectedQ?.question_id) {
+      return;
+    }
+    if (selectedQ.question_type === "text") {
+      setHabitRules([]);
+      resetHabitRuleForm("text");
+      return;
+    }
+    resetHabitRuleForm(selectedQ.question_type);
+    void fetchHabitRulesForQuestion(selectedQ.question_id);
+  }, [
+    qModalOpen,
+    qModalMode,
+    selectedQ?.question_id,
+    selectedQ?.question_type,
+    fetchHabitRulesForQuestion,
+    resetHabitRuleForm,
+  ]);
+
   const fetchPackages = useCallback(async () => {
     setPkgLoading(true);
     setPkgError(null);
@@ -1388,6 +1466,110 @@ export function AssessmentPackages() {
       .catch((error) => setQError(getApiError(error)));
   };
 
+  const buildHealthyHabitPayload = (): QuestionnaireHealthyHabitRulePayload => {
+    const displayRaw = habitRuleForm.display_order.trim();
+    let displayOrder: number | null = null;
+    if (displayRaw !== "") {
+      const n = Number.parseInt(displayRaw, 10);
+      if (Number.isNaN(n)) {
+        throw new Error("Display order must be a whole number.");
+      }
+      displayOrder = n;
+    }
+    const base: QuestionnaireHealthyHabitRulePayload = {
+      habit_key: habitRuleForm.habit_key.trim() || null,
+      habit_label: habitRuleForm.habit_label.trim(),
+      display_order: displayOrder,
+      condition_type: habitRuleForm.condition_type,
+      status: habitRuleForm.status,
+      matched_option_values: null,
+      scale_min: null,
+      scale_max: null,
+      scale_unit: null,
+    };
+    if (!base.habit_label) {
+      throw new Error("Habit label is required.");
+    }
+    if (habitRuleForm.condition_type === "option_match") {
+      if (habitRuleForm.matched_option_values.length === 0) {
+        throw new Error("Select at least one option that counts as this habit.");
+      }
+      base.matched_option_values = [...habitRuleForm.matched_option_values];
+      return base;
+    }
+    const lo = Number.parseFloat(habitRuleForm.scale_min);
+    const hi = Number.parseFloat(habitRuleForm.scale_max);
+    if (Number.isNaN(lo) || Number.isNaN(hi)) {
+      throw new Error("Scale min and max must be valid numbers.");
+    }
+    if (!habitRuleForm.scale_unit.trim()) {
+      throw new Error("Select the unit for the scale range.");
+    }
+    base.scale_min = lo;
+    base.scale_max = hi;
+    base.scale_unit = habitRuleForm.scale_unit.trim();
+    return base;
+  };
+
+  const handleSaveHabitRule = async () => {
+    if (!selectedQ?.question_id) return;
+    setHabitRuleFormError(null);
+    let payload: QuestionnaireHealthyHabitRulePayload;
+    try {
+      payload = buildHealthyHabitPayload();
+    } catch (e) {
+      setHabitRuleFormError(e instanceof Error ? e.message : "Invalid form.");
+      return;
+    }
+    setHabitRuleSaving(true);
+    try {
+      if (habitRuleEditingId != null) {
+        await questionnaireHealthyHabitRulesApi.update(selectedQ.question_id, habitRuleEditingId, payload);
+      } else {
+        await questionnaireHealthyHabitRulesApi.create(selectedQ.question_id, payload);
+      }
+      await fetchHabitRulesForQuestion(selectedQ.question_id);
+      resetHabitRuleForm(selectedQ.question_type);
+    } catch (error) {
+      setHabitRuleFormError(getApiError(error));
+    } finally {
+      setHabitRuleSaving(false);
+    }
+  };
+
+  const handleDeleteHabitRule = async (ruleId: number) => {
+    if (!selectedQ?.question_id) return;
+    setHabitRuleSaving(true);
+    setHabitRuleFormError(null);
+    try {
+      await questionnaireHealthyHabitRulesApi.delete(selectedQ.question_id, ruleId);
+      await fetchHabitRulesForQuestion(selectedQ.question_id);
+      if (habitRuleEditingId === ruleId) {
+        resetHabitRuleForm(selectedQ.question_type);
+      }
+    } catch (error) {
+      setHabitRuleFormError(getApiError(error));
+    } finally {
+      setHabitRuleSaving(false);
+    }
+  };
+
+  const startEditHabitRule = (rule: QuestionnaireHealthyHabitRule) => {
+    setHabitRuleEditingId(rule.rule_id);
+    setHabitRuleFormError(null);
+    setHabitRuleForm({
+      habit_key: rule.habit_key ?? "",
+      habit_label: rule.habit_label,
+      display_order: rule.display_order != null ? String(rule.display_order) : "",
+      condition_type: rule.condition_type === "scale_range" ? "scale_range" : "option_match",
+      matched_option_values: rule.matched_option_values ? [...rule.matched_option_values] : [],
+      scale_min: rule.scale_min != null ? String(rule.scale_min) : "",
+      scale_max: rule.scale_max != null ? String(rule.scale_max) : "",
+      scale_unit: rule.scale_unit ?? "",
+      status: rule.status ?? "active",
+    });
+  };
+
   const normalizeQuestionPayload = (form: QuestionnaireQuestionCreate): QuestionnaireQuestionUpdate => {
     const options =
       OPTION_SUPPORTED_TYPES.has(form.question_type)
@@ -1467,7 +1649,7 @@ export function AssessmentPackages() {
       } else if (selectedQ) {
         await questionnaireQuestionsApi.update(selectedQ.question_id, payload);
       }
-      setQModalOpen(false);
+      closeQuestionModal();
       fetchQuestions();
     } catch (error) {
       setQFormError(getApiError(error));
@@ -2639,9 +2821,9 @@ export function AssessmentPackages() {
 
       <Modal
         open={qModalOpen}
-        onClose={() => setQModalOpen(false)}
+        onClose={closeQuestionModal}
         title={qModalMode === "add" ? "Add Question" : qModalMode === "edit" ? "Edit Question" : "Question Details"}
-        maxWidthClassName="max-w-2xl"
+        maxWidthClassName="max-w-3xl"
       >
         {qModalMode === "view" && selectedQ ? (
           <div className="space-y-4">
@@ -2719,6 +2901,212 @@ export function AssessmentPackages() {
                 </div>
               )}
             </dl>
+            {selectedQ.question_type !== "text" && (
+              <div className="border border-emerald-200 bg-emerald-50/40 rounded-lg p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-zinc-900">Healthy habit rules</h3>
+                <p className="text-xs text-zinc-600">
+                  When a participant&apos;s answer matches a rule, the habit can appear in their report overview (top
+                  three by display order).
+                </p>
+                {habitRulesLoading ? (
+                  <p className="text-sm text-zinc-500">Loading rules…</p>
+                ) : habitRulesError ? (
+                  <p className="text-sm text-red-600">{habitRulesError}</p>
+                ) : habitRules.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No rules yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {habitRules.map((rule) => (
+                      <li
+                        key={rule.rule_id}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 rounded border border-zinc-200 bg-white text-sm"
+                      >
+                        <div>
+                          <span className="font-medium text-zinc-900">{rule.habit_label}</span>
+                          {rule.habit_key && (
+                            <span className="ml-2 font-mono text-xs text-zinc-500">{rule.habit_key}</span>
+                          )}
+                          <div className="text-xs text-zinc-500 mt-0.5">
+                            {rule.condition_type}
+                            {rule.condition_type === "option_match" && rule.matched_option_values?.length
+                              ? ` · ${rule.matched_option_values.join(", ")}`
+                              : ""}
+                            {rule.condition_type === "scale_range"
+                              ? ` · ${rule.scale_unit ?? ""} ${rule.scale_min ?? ""}–${rule.scale_max ?? ""}`
+                              : ""}
+                            {" · "}
+                            order {rule.display_order ?? "—"} · {rule.status}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => startEditHabitRule(rule)}
+                            className="px-2 py-1 text-xs rounded border border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteHabitRule(rule.rule_id)}
+                            disabled={habitRuleSaving}
+                            className="px-2 py-1 text-xs rounded border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {habitRuleFormError && <p className="text-sm text-red-600">{habitRuleFormError}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-emerald-200 pt-3">
+                  <label className="block text-xs text-zinc-600 sm:col-span-2">
+                    Habit label *
+                    <input
+                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                      value={habitRuleForm.habit_label}
+                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, habit_label: e.target.value }))}
+                      placeholder="e.g. No Alcohol"
+                    />
+                  </label>
+                  <label className="block text-xs text-zinc-600">
+                    Habit key (optional)
+                    <input
+                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm font-mono"
+                      value={habitRuleForm.habit_key}
+                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, habit_key: e.target.value }))}
+                      placeholder="slug_for_app"
+                    />
+                  </label>
+                  <label className="block text-xs text-zinc-600">
+                    Display order
+                    <input
+                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                      value={habitRuleForm.display_order}
+                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, display_order: e.target.value }))}
+                      placeholder="lower first"
+                    />
+                  </label>
+                  <label className="block text-xs text-zinc-600 sm:col-span-2">
+                    Condition
+                    <select
+                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                      value={habitRuleForm.condition_type}
+                      onChange={(e) =>
+                        setHabitRuleForm((p) => ({
+                          ...p,
+                          condition_type: e.target.value as "option_match" | "scale_range",
+                          matched_option_values: [],
+                          scale_min: "",
+                          scale_max: "",
+                          scale_unit: "",
+                        }))
+                      }
+                    >
+                      <option value="option_match">Option match (single / multiple choice)</option>
+                      {selectedQ.question_type === "scale" && <option value="scale_range">Scale range</option>}
+                    </select>
+                  </label>
+                  {habitRuleForm.condition_type === "option_match" &&
+                    selectedQ.options &&
+                    selectedQ.options.length > 0 && (
+                      <div className="sm:col-span-2">
+                        <p className="text-xs text-zinc-600 mb-1">Matching option values</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedQ.options.map((opt) => {
+                            const v = opt.option_value ?? "";
+                            const checked = habitRuleForm.matched_option_values.includes(v);
+                            return (
+                              <label key={v} className="inline-flex items-center gap-1 text-xs text-zinc-800">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    setHabitRuleForm((p) => ({
+                                      ...p,
+                                      matched_option_values: checked
+                                        ? p.matched_option_values.filter((x) => x !== v)
+                                        : [...p.matched_option_values, v],
+                                    }))
+                                  }
+                                />
+                                <span className="font-mono">{v}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  {habitRuleForm.condition_type === "scale_range" && (
+                    <>
+                      <label className="block text-xs text-zinc-600 sm:col-span-2">
+                        Unit
+                        <select
+                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                          value={habitRuleForm.scale_unit}
+                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_unit: e.target.value }))}
+                        >
+                          <option value="">Select unit</option>
+                          {(selectedQ.options ?? []).map((opt) => (
+                            <option key={opt.option_value} value={opt.option_value ?? ""}>
+                              {opt.option_value} — {opt.display_name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs text-zinc-600">
+                        Min (inclusive)
+                        <input
+                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                          value={habitRuleForm.scale_min}
+                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_min: e.target.value }))}
+                        />
+                      </label>
+                      <label className="block text-xs text-zinc-600">
+                        Max (inclusive)
+                        <input
+                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                          value={habitRuleForm.scale_max}
+                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_max: e.target.value }))}
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label className="block text-xs text-zinc-600 sm:col-span-2">
+                    Rule status
+                    <select
+                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+                      value={habitRuleForm.status}
+                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, status: e.target.value }))}
+                    >
+                      <option value="active">active</option>
+                      <option value="inactive">inactive</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveHabitRule()}
+                    disabled={habitRuleSaving}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 disabled:opacity-50"
+                  >
+                    {habitRuleSaving ? "Saving…" : habitRuleEditingId != null ? "Update rule" : "Add rule"}
+                  </button>
+                  {habitRuleEditingId != null && (
+                    <button
+                      type="button"
+                      onClick={() => resetHabitRuleForm(selectedQ.question_type)}
+                      disabled={habitRuleSaving}
+                      className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      Cancel edit
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => openEditQuestion(selectedQ)}
@@ -2761,7 +3149,7 @@ export function AssessmentPackages() {
             togglingStatus={qTogglingStatus}
             onToggleStatus={handleToggleQuestionStatus}
             onSubmit={handleQuestionSubmit}
-            onCancel={() => setQModalOpen(false)}
+            onCancel={closeQuestionModal}
           />
         )}
       </Modal>
