@@ -20,15 +20,18 @@ import {
   X,
 } from "lucide-react";
 import {
+  diagnosticFilterChipsApi,
   diagnosticPackagesApi,
   diagnosticTestGroupsApi,
   getApiError,
+  type DiagnosticFilterChip,
   type DiagnosticPackageDetail,
   type DiagnosticPreparation,
   type DiagnosticReason,
   type DiagnosticSample,
   type DiagnosticTag,
   type DiagnosticTestGroupStandalone,
+  type PackageFilterChip,
 } from "../../lib/api";
 import { SortableItem } from "../../components/SortableItem";
 import { Modal } from "../../shared/ui/Modal";
@@ -51,6 +54,8 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
 
   const [tagInput, setTagInput] = useState("");
+  const [filterChipCatalog, setFilterChipCatalog] = useState<DiagnosticFilterChip[]>([]);
+  const [selectedFilterChipId, setSelectedFilterChipId] = useState<string>("");
   const [reasonInput, setReasonInput] = useState("");
   const [editingReasonId, setEditingReasonId] = useState<number | null>(null);
   const [editingReasonText, setEditingReasonText] = useState("");
@@ -101,6 +106,19 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
     [detail?.preparations]
   );
 
+  const packageFilterChips = useMemo(
+    () =>
+      [...(detail?.filter_chips ?? [])].sort(
+        (a, b) => (a.display_order ?? Number.MAX_SAFE_INTEGER) - (b.display_order ?? Number.MAX_SAFE_INTEGER)
+      ),
+    [detail?.filter_chips]
+  );
+
+  const assignableFilterChips = useMemo(() => {
+    const assigned = new Set((detail?.filter_chips ?? []).map((c) => c.filter_chip_id));
+    return filterChipCatalog.filter((c) => !assigned.has(c.filter_chip_id));
+  }, [filterChipCatalog, detail?.filter_chips]);
+
   const fetchData = useCallback(async () => {
     if (!packageId) return;
     setLoading(true);
@@ -128,6 +146,14 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
     }
   }, [fetchData, open, packageId]);
 
+  useEffect(() => {
+    if (!open || !packageId) return;
+    void diagnosticFilterChipsApi
+      .list()
+      .then((res) => setFilterChipCatalog(res.data.data ?? []))
+      .catch(() => setFilterChipCatalog([]));
+  }, [open, packageId]);
+
   const withBusy = async (key: string, fn: () => Promise<void>) => {
     setBusyKey(key);
     setError(null);
@@ -154,6 +180,23 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
     if (!packageId) return;
     await withBusy(`delete-tag-${tag.tag_id}`, async () => {
       await diagnosticPackagesApi.deleteTag(packageId, tag.tag_id);
+    });
+  };
+
+  const addFilterChipToPackage = async () => {
+    if (!packageId || !selectedFilterChipId) return;
+    const id = Number(selectedFilterChipId);
+    if (!Number.isFinite(id)) return;
+    await withBusy(`add-filter-chip-${id}`, async () => {
+      await diagnosticPackagesApi.addFilterChip(packageId, { filter_chip_id: id });
+      setSelectedFilterChipId("");
+    });
+  };
+
+  const removeFilterChipFromPackage = async (chip: PackageFilterChip) => {
+    if (!packageId) return;
+    await withBusy(`delete-filter-chip-${chip.filter_chip_id}`, async () => {
+      await diagnosticPackagesApi.removeFilterChip(packageId, chip.filter_chip_id);
     });
   };
 
@@ -492,6 +535,56 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                   />
                   <button type="button" onClick={() => void addTag()} className="px-3 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 text-sm">
                     Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white border border-zinc-200 rounded-xl p-4">
+                <h3 className="text-sm font-medium text-zinc-900 mb-2">Filter chips</h3>
+                <p className="text-xs text-zinc-500 mb-3">
+                  Assign catalog chips to this package for pill-bar filtering ({packageFilterChips.length} assigned).
+                </p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {packageFilterChips.map((chip) => (
+                    <span
+                      key={chip.filter_chip_id}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-50 text-indigo-800 text-xs"
+                    >
+                      {chip.display_name}
+                      <button
+                        type="button"
+                        onClick={() => void removeFilterChipFromPackage(chip)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                        disabled={busyKey === `delete-filter-chip-${chip.filter_chip_id}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {packageFilterChips.length === 0 && (
+                    <span className="text-xs text-zinc-400">No filter chips assigned.</span>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedFilterChipId}
+                    onChange={(e) => setSelectedFilterChipId(e.target.value)}
+                    className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 bg-white text-sm focus:ring-2 focus:ring-zinc-900"
+                  >
+                    <option value="">Select a filter chip…</option>
+                    {assignableFilterChips.map((c) => (
+                      <option key={c.filter_chip_id} value={c.filter_chip_id}>
+                        {c.display_name} ({c.chip_key})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void addFilterChipToPackage()}
+                    disabled={!selectedFilterChipId || busyKey?.startsWith("add-filter-chip-")}
+                    className="px-3 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 text-sm disabled:opacity-50"
+                  >
+                    Add chip
                   </button>
                 </div>
               </div>

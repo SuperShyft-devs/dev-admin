@@ -8,12 +8,12 @@ import {
   type DiagnosticPackageCreate,
   type DiagnosticPackageListItem,
 } from "../../lib/api";
-import { DiagnosticFilters } from "./DiagnosticFilters";
+import { DiagnosticFilterChips } from "./DiagnosticFilterChips";
 import { DiagnosticPackageDrawer } from "./DiagnosticPackageDrawer";
 import { DiagnosticTests } from "./DiagnosticTests";
 import { DiagnosticTestGroups } from "./DiagnosticTestGroups";
 
-type TabKey = "packages" | "test-groups" | "tests" | "filters";
+type TabKey = "packages" | "test-groups" | "tests" | "filter-chips";
 type ModalMode = "add" | "edit";
 
 const EMPTY_FORM: DiagnosticPackageCreate = {
@@ -379,14 +379,14 @@ export function DiagnosticPackages() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("filters")}
+          onClick={() => setActiveTab("filter-chips")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-            activeTab === "filters"
+            activeTab === "filter-chips"
               ? "border-zinc-900 text-zinc-900"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
           }`}
         >
-          Filters
+          Filter chips
         </button>
       </div>
 
@@ -476,7 +476,7 @@ export function DiagnosticPackages() {
       ) : activeTab === "tests" ? (
         <DiagnosticTests onRequestCreate={(trigger) => setOpenCreateTest(() => trigger)} />
       ) : (
-        <DiagnosticFilters embedded />
+        <DiagnosticFilterChips embedded />
       )}
 
       <Modal

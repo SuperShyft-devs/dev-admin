@@ -912,6 +912,13 @@ export interface DiagnosticPreparation {
   display_order?: number | null;
 }
 
+export interface PackageFilterChip {
+  filter_chip_id: number;
+  chip_key: string;
+  display_name: string;
+  display_order?: number | null;
+}
+
 export interface DiagnosticPackageListItem {
   diagnostic_package_id: number;
   package_name: string;
@@ -926,6 +933,7 @@ export interface DiagnosticPackageListItem {
   gender_suitability?: string | null;
   status?: string | null;
   tags?: DiagnosticTag[];
+  filter_chips?: PackageFilterChip[];
 }
 
 export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
@@ -950,18 +958,21 @@ export interface DiagnosticPackageCreate {
   gender_suitability?: string | null;
 }
 
-export interface DiagnosticFilter {
-  filter_id: number;
-  filter_key: string;
+export interface DiagnosticFilterChip {
+  filter_chip_id: number;
+  chip_key: string;
   display_name: string;
   display_order?: number | null;
-  filter_type?: string | null;
   status?: string | null;
 }
 
 export const diagnosticPackagesApi = {
-  list: (params?: { gender?: string; tag?: string; include_inactive?: boolean }) =>
-    api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
+  list: (params?: {
+    gender?: string;
+    tag?: string;
+    filter_chip_key?: string;
+    include_inactive?: boolean;
+  }) => api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
   get: (id: number) =>
     api.get<{ data: DiagnosticPackageDetail }>(`/diagnostic-packages/${id}`),
   getTests: (id: number) =>
@@ -985,6 +996,12 @@ export const diagnosticPackagesApi = {
     api.post<{ data: DiagnosticTag }>(`/diagnostic-packages/${id}/tags`, payload),
   deleteTag: (id: number, tagId: number) =>
     api.delete<{ data: { tag_id: number; deleted: boolean } }>(`/diagnostic-packages/${id}/tags/${tagId}`),
+  addFilterChip: (id: number, payload: { filter_chip_id: number; display_order?: number }) =>
+    api.post<{ data: PackageFilterChip }>(`/diagnostic-packages/${id}/filter-chips`, payload),
+  removeFilterChip: (id: number, filterChipId: number) =>
+    api.delete<{ data: { filter_chip_id: number; deleted: boolean } }>(
+      `/diagnostic-packages/${id}/filter-chips/${filterChipId}`
+    ),
   addTestGroup: (id: number, payload: { group_name: string; test_count?: number; display_order?: number }) =>
     api.post<{ data: DiagnosticTestGroup }>(`/diagnostic-packages/${id}/test-groups`, payload),
   updateTestGroup: (
@@ -1085,26 +1102,23 @@ export const diagnosticPackagesApi = {
     api.delete(`/diagnostic-packages/${id}/test-groups/${groupId}`),
 };
 
-export const diagnosticFiltersApi = {
-  list: () => api.get<{ data: DiagnosticFilter[] }>("/diagnostic-packages/filters"),
-  create: (payload: {
-    display_name: string;
-    filter_key: string;
-    filter_type?: string;
-    display_order?: number;
-  }) => api.post<{ data: DiagnosticFilter }>("/diagnostic-packages/filters", payload),
+export const diagnosticFilterChipsApi = {
+  list: () => api.get<{ data: DiagnosticFilterChip[] }>("/diagnostic-packages/filters-chips"),
+  create: (payload: { display_name: string; chip_key: string; display_order?: number }) =>
+    api.post<{ data: DiagnosticFilterChip }>("/diagnostic-packages/filters-chips", payload),
   update: (
-    filterId: number,
+    filterChipId: number,
     payload: {
       display_name?: string;
-      filter_key?: string;
-      filter_type?: string;
+      chip_key?: string;
       display_order?: number;
       status?: string;
     }
-  ) => api.put<{ data: DiagnosticFilter }>(`/diagnostic-packages/filters/${filterId}`, payload),
-  delete: (filterId: number) =>
-    api.delete<{ data: { filter_id: number; deleted: boolean } }>(`/diagnostic-packages/filters/${filterId}`),
+  ) => api.put<{ data: DiagnosticFilterChip }>(`/diagnostic-packages/filters-chips/${filterChipId}`, payload),
+  delete: (filterChipId: number) =>
+    api.delete<{ data: { filter_chip_id: number; deleted: boolean } }>(
+      `/diagnostic-packages/filters-chips/${filterChipId}`
+    ),
 };
 
 export type HealthParameterType = "test" | "metric";
