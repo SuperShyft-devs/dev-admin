@@ -970,7 +970,7 @@ export const diagnosticPackagesApi = {
   list: (params?: {
     gender?: string;
     tag?: string;
-    filter_chip_key?: string;
+    filter_chip?: string;
     include_inactive?: boolean;
   }) => api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
   get: (id: number) =>
