@@ -10,6 +10,7 @@ import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 import { Users } from "./features/users/Users";
 import { ParticipantJourneyPage } from "./features/users/ParticipantJourneyPage";
 import { DiagnosticPackages } from "./features/diagnostics/DiagnosticPackages";
+import { Bookings } from "./features/payments/Bookings";
 import { DiagnosticFilters } from "./features/diagnostics/DiagnosticFilters";
 import { SupportTickets } from "./features/support/SupportTickets";
 import { ChecklistTemplates } from "./features/checklists/ChecklistTemplates";
@@ -90,6 +91,8 @@ function AppRoutes() {
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
         <Route path="diagnostics/filters" element={<DiagnosticFilters />} />
+        <Route path="payments" element={<Navigate to="/payments/bookings" replace />} />
+        <Route path="payments/bookings" element={<Bookings />} />
         <Route path="checklists" element={<ChecklistTemplates />} />
         <Route path="library/health-metrics" element={<HealthMetrics />} />
         <Route

@@ -17,6 +17,7 @@ import {
   Inbox,
   Library,
   ChevronDown,
+  CreditCard,
   // Settings,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -35,6 +36,7 @@ const primaryNavItems = [
 const libraryNavItems = [
   { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
   { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
+  { to: "/payments/bookings", icon: CreditCard, label: "Payments" },
   { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates" },
   { to: "/library/health-metrics", icon: Activity, label: "Health Metrics" },
 ];
@@ -43,6 +45,7 @@ function isLibraryPath(pathname: string) {
   return (
     pathname.startsWith("/assessments") ||
     pathname.startsWith("/diagnostics") ||
+    pathname.startsWith("/payments") ||
     pathname.startsWith("/checklists") ||
     pathname.startsWith("/library")
   );

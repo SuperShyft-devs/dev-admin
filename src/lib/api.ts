@@ -1241,6 +1241,57 @@ export const diagnosticTestGroupsApi = {
     api.delete(`/diagnostic-test-groups/${groupId}/tests/${testId}`),
 };
 
+// Payments / bookings (employee)
+export interface BookingListItem {
+  booking_id: number;
+  user_id: number;
+  user_name: string;
+  entity_type: string;
+  entity_name: string;
+  amount_paise: number;
+  currency: string;
+  status: string;
+  payment_status: string | null;
+  payment_method: string | null;
+  booked_at: string;
+}
+
+export interface BookingDetail {
+  booking_id: number;
+  user_id: number;
+  user_name: string;
+  entity_type: string;
+  entity_name: string;
+  amount_paise: number;
+  currency: string;
+  booking_status: string;
+  payment_status: string | null;
+  payment_method: string | null;
+  razorpay_payment_id: string | null;
+  signature_verified: boolean | null;
+  failure_reason: string | null;
+  paid_at: string | null;
+  booked_at: string;
+}
+
+export const paymentsApi = {
+  listBookings: (params: {
+    page: number;
+    limit: number;
+    search?: string;
+    status?: string;
+    sort_key?: string;
+    sort_dir?: "asc" | "desc";
+  }) =>
+    api.get<{ data: { items: BookingListItem[]; total: number }; meta: Record<string, unknown> }>(
+      "/payments/bookings",
+      { params }
+    ),
+
+  getBooking: (bookingId: number) =>
+    api.get<BookingDetail>(`/payments/booking/${bookingId}/status`),
+};
+
 // Checklist templates & tasks (extends ChecklistReadiness above)
 export interface ChecklistTemplateItem {
   item_id: number;
