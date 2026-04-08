@@ -156,6 +156,20 @@ export function BookingDetailModal({ open, onClose, bookingId }: BookingDetailMo
                 Checkout (same payment)
               </h3>
               <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 space-y-2 text-sm">
+                <div className="pb-2 mb-1 border-b border-zinc-200/80">
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold mb-0.5">
+                    Booked by (payer)
+                  </div>
+                  <div className="text-zinc-900 font-semibold">{detail.checkout.payer_user_name}</div>
+                  <div className="text-xs text-zinc-600 mt-1">
+                    Paying for{" "}
+                    <span className="font-semibold text-zinc-800 tabular-nums">
+                      {detail.checkout.checkout_line_count}
+                    </span>{" "}
+                    {detail.checkout.checkout_line_count === 1 ? "member" : "members"} in this
+                    order
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   <span className="text-zinc-500">Order ID</span>
                   <span className="text-zinc-900 font-medium tabular-nums">
@@ -173,12 +187,11 @@ export function BookingDetailModal({ open, onClose, bookingId }: BookingDetailMo
                   <span className="text-zinc-900 font-medium">
                     {formatAmount(detail.checkout.order_amount_paise)}
                   </span>
-                  <span className="text-zinc-400 text-xs">
-                    ({detail.checkout.checkout_line_count} line
-                    {detail.checkout.checkout_line_count === 1 ? "" : "s"})
-                  </span>
                 </div>
-                <ul className="mt-2 pt-2 border-t border-zinc-200 space-y-2">
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold pt-1">
+                  Members &amp; packages
+                </div>
+                <ul className="mt-1 pt-2 border-t border-zinc-200 space-y-2">
                   {detail.checkout.lines.map((line: BookingCheckoutLine) => (
                     <li
                       key={line.booking_id}
@@ -210,7 +223,7 @@ export function BookingDetailModal({ open, onClose, bookingId }: BookingDetailMo
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {field("Booking ID", String(detail.booking_id))}
-              {field("User name", detail.user_name ?? "—")}
+              {field("Member (package for)", detail.user_name ?? "—")}
               {field("Package name", detail.entity_name)}
               {field("Amount", formatAmount(detail.amount_paise))}
               {field("Currency", detail.currency || "INR")}

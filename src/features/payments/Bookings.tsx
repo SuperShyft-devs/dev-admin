@@ -98,6 +98,28 @@ function paymentStatusBadge(status: string | null) {
   );
 }
 
+function bookedByCell(row: BookingListItem) {
+  const name = row.payer_user_name;
+  if (name == null || name === "" || name === "—") {
+    return <span className="text-zinc-400">—</span>;
+  }
+  const n = row.checkout_line_count ?? 1;
+  const selfPay = row.payer_user_id != null && row.payer_user_id === row.user_id;
+  return (
+    <div className="flex flex-col gap-0.5 max-w-[200px]">
+      <span className="font-medium text-zinc-900 leading-tight">{name}</span>
+      <span className="text-xs text-zinc-600 leading-snug">
+        Paying for{" "}
+        <span className="font-semibold text-zinc-800 tabular-nums">{n}</span>{" "}
+        {n === 1 ? "member" : "members"}
+        {selfPay && n === 1 ? (
+          <span className="text-zinc-500 font-normal"> (self)</span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 export function Bookings() {
   const [data, setData] = useState<BookingListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -165,8 +187,20 @@ export function Bookings() {
     },
     {
       key: "user_name",
-      label: "User",
-      render: (row) => <span className="text-zinc-800">{row.user_name}</span>,
+      label: "Member",
+      render: (row) => (
+        <div className="flex flex-col gap-0.5 max-w-[160px]">
+          <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold">
+            Package for
+          </span>
+          <span className="text-zinc-900 font-medium leading-tight">{row.user_name}</span>
+        </div>
+      ),
+    },
+    {
+      key: "payer_user_name",
+      label: "Booked by",
+      render: (row) => bookedByCell(row),
     },
     {
       key: "entity_name",
@@ -175,7 +209,7 @@ export function Bookings() {
     },
     {
       key: "razorpay_order_id",
-      label: "Checkout",
+      label: "Razorpay order",
       hideOnMobile: true,
       render: (row) => {
         const multi =
@@ -185,12 +219,15 @@ export function Bookings() {
         }
         return (
           <div className="flex flex-col gap-0.5">
-            <span className="text-zinc-700 font-mono text-xs truncate max-w-[140px]" title={row.razorpay_order_id}>
+            <span
+              className="text-zinc-700 font-mono text-xs truncate max-w-[140px]"
+              title={row.razorpay_order_id}
+            >
               {row.razorpay_order_id}
             </span>
             {multi ? (
               <span className="text-[10px] uppercase tracking-wide text-teal-700 font-medium">
-                {row.checkout_line_count} lines
+                Same checkout · {row.checkout_line_count} members
               </span>
             ) : null}
           </div>
@@ -235,8 +272,12 @@ export function Bookings() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col gap-1 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Bookings</h1>
+        <p className="text-sm text-zinc-600 max-w-3xl">
+          Each row is one member&apos;s package. <strong className="text-zinc-800">Booked by</strong>{" "}
+          shows who paid and how many members are included in that Razorpay checkout.
+        </p>
       </div>
 
       {error && (

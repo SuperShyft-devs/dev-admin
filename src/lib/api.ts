@@ -1273,6 +1273,9 @@ export interface BookingListItem {
   razorpay_order_id?: string | null;
   order_amount_paise?: number | null;
   checkout_line_count?: number | null;
+  /** Razorpay order payer (who paid); null if no order row */
+  payer_user_id?: number | null;
+  payer_user_name?: string | null;
 }
 
 export interface BookingCheckoutLine {
@@ -1291,6 +1294,8 @@ export interface BookingCheckoutSummary {
   order_amount_paise: number;
   order_amount_rupees: number;
   checkout_line_count: number;
+  payer_user_id: number;
+  payer_user_name: string;
   lines: BookingCheckoutLine[];
 }
 
