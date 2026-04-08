@@ -1268,6 +1268,30 @@ export interface BookingListItem {
   payment_status: string | null;
   payment_method: string | null;
   booked_at: string;
+  /** Present when this booking is linked to a Razorpay order */
+  order_id?: number | null;
+  razorpay_order_id?: string | null;
+  order_amount_paise?: number | null;
+  checkout_line_count?: number | null;
+}
+
+export interface BookingCheckoutLine {
+  booking_id: number;
+  user_id: number;
+  user_name: string;
+  entity_name: string;
+  amount_paise: number;
+  amount_rupees: number;
+  booking_status: string;
+}
+
+export interface BookingCheckoutSummary {
+  order_id: number;
+  razorpay_order_id: string;
+  order_amount_paise: number;
+  order_amount_rupees: number;
+  checkout_line_count: number;
+  lines: BookingCheckoutLine[];
 }
 
 export interface BookingDetail {
@@ -1286,6 +1310,8 @@ export interface BookingDetail {
   failure_reason: string | null;
   paid_at: string | null;
   booked_at: string;
+  /** Employee views only: same checkout (multi-line) context */
+  checkout?: BookingCheckoutSummary | null;
 }
 
 export const paymentsApi = {

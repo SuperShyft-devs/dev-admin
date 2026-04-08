@@ -1,7 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
-import { paymentsApi, type BookingDetail, getApiError } from "../../lib/api";
+import {
+  paymentsApi,
+  type BookingDetail,
+  type BookingCheckoutLine,
+  getApiError,
+} from "../../lib/api";
 
 function formatAmount(paise: number): string {
   const rupees = paise / 100;
@@ -145,6 +150,60 @@ export function BookingDetailModal({ open, onClose, bookingId }: BookingDetailMo
       )}
       {!loading && !error && detail && (
         <div className="space-y-6">
+          {detail.checkout && detail.checkout.lines.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+                Checkout (same payment)
+              </h3>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 space-y-2 text-sm">
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="text-zinc-500">Order ID</span>
+                  <span className="text-zinc-900 font-medium tabular-nums">
+                    {detail.checkout.order_id}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="text-zinc-500">Razorpay order</span>
+                  <span className="text-zinc-900 font-mono text-xs break-all">
+                    {detail.checkout.razorpay_order_id}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="text-zinc-500">Order total</span>
+                  <span className="text-zinc-900 font-medium">
+                    {formatAmount(detail.checkout.order_amount_paise)}
+                  </span>
+                  <span className="text-zinc-400 text-xs">
+                    ({detail.checkout.checkout_line_count} line
+                    {detail.checkout.checkout_line_count === 1 ? "" : "s"})
+                  </span>
+                </div>
+                <ul className="mt-2 pt-2 border-t border-zinc-200 space-y-2">
+                  {detail.checkout.lines.map((line: BookingCheckoutLine) => (
+                    <li
+                      key={line.booking_id}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs sm:text-sm"
+                    >
+                      <div>
+                        <span className="font-medium text-zinc-800">{line.user_name}</span>
+                        <span className="text-zinc-500 mx-1">·</span>
+                        <span className="text-zinc-600">{line.entity_name}</span>
+                        <span className="text-zinc-400 ml-1 tabular-nums">
+                          (#{line.booking_id})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="tabular-nums text-zinc-900">
+                          {formatAmount(line.amount_paise)}
+                        </span>
+                        {bookingStatusBadge(line.booking_status)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
           <div>
             <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
               Booking info

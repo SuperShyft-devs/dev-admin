@@ -174,6 +174,30 @@ export function Bookings() {
       render: (row) => <span className="text-zinc-700">{row.entity_name}</span>,
     },
     {
+      key: "razorpay_order_id",
+      label: "Checkout",
+      hideOnMobile: true,
+      render: (row) => {
+        const multi =
+          row.checkout_line_count != null && row.checkout_line_count > 1;
+        if (!row.razorpay_order_id) {
+          return <span className="text-zinc-400">—</span>;
+        }
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-zinc-700 font-mono text-xs truncate max-w-[140px]" title={row.razorpay_order_id}>
+              {row.razorpay_order_id}
+            </span>
+            {multi ? (
+              <span className="text-[10px] uppercase tracking-wide text-teal-700 font-medium">
+                {row.checkout_line_count} lines
+              </span>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
       key: "amount_paise",
       label: "Amount",
       render: (row) => (
