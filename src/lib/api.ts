@@ -951,7 +951,8 @@ export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
 export interface DiagnosticPackageCreate {
   package_name: string;
   diagnostic_provider?: string | null;
-  created_by_user_id?: number | null;
+  /** Public (false) vs custom/owned (true). Non-staff must use true; staff may use either. */
+  custom?: boolean;
   report_duration_hours?: number | null;
   collection_type?: string | null;
   about_text?: string | null;
