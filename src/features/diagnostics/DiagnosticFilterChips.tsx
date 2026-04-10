@@ -123,15 +123,19 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
     }
   };
 
-  const handleDelete = async (row: DiagnosticFilterChip) => {
+  const openDeleteConfirm = (row: DiagnosticFilterChip) => {
     setDeletingId(row.filter_chip_id);
+  };
+
+  const confirmDelete = async () => {
+    if (deletingId == null) return;
+    const id = deletingId;
     try {
-      await diagnosticFilterChipsApi.delete(row.filter_chip_id);
+      await diagnosticFilterChipsApi.delete(id);
+      setDeletingId(null);
       await fetchChips();
     } catch (err) {
       setError(getApiError(err));
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -259,7 +263,7 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
             data={filteredRows}
             keyExtractor={(row) => row.filter_chip_id}
             onEdit={openEdit}
-            onDelete={handleDelete}
+            onDelete={openDeleteConfirm}
           />
         )}
       </div>
@@ -377,12 +381,7 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
           <div className="flex flex-col-reverse sm:flex-row gap-2">
             <button
               type="button"
-              onClick={() => {
-                const target = chips.find((item) => item.filter_chip_id === deletingId);
-                if (target) {
-                  void handleDelete(target);
-                }
-              }}
+              onClick={() => void confirmDelete()}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 text-sm font-medium"
             >
               <Trash2 className="w-4 h-4" />
