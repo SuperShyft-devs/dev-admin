@@ -919,10 +919,14 @@ export interface PackageFilterChip {
   display_order?: number | null;
 }
 
+export type DiagnosticPackageListType = "public_package" | "custom_package";
+export type DiagnosticFilterChipFor = "public_package" | "custom_package";
+
 export interface DiagnosticPackageListItem {
   diagnostic_package_id: number;
   package_name: string;
   diagnostic_provider?: string | null;
+  created_by_user_id?: number | null;
   no_of_tests?: number | null;
   report_duration_hours?: number | null;
   collection_type?: string | null;
@@ -947,7 +951,7 @@ export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
 export interface DiagnosticPackageCreate {
   package_name: string;
   diagnostic_provider?: string | null;
-  no_of_tests?: number | null;
+  created_by_user_id?: number | null;
   report_duration_hours?: number | null;
   collection_type?: string | null;
   about_text?: string | null;
@@ -963,6 +967,7 @@ export interface DiagnosticFilterChip {
   chip_key: string;
   display_name: string;
   display_order?: number | null;
+  chip_for?: DiagnosticFilterChipFor | string;
   status?: string | null;
 }
 
@@ -971,6 +976,7 @@ export const diagnosticPackagesApi = {
     gender?: string;
     tag?: string;
     filter_chip?: string;
+    type?: DiagnosticPackageListType;
     include_inactive?: boolean;
   }) => api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
   get: (id: number) =>
@@ -1103,9 +1109,16 @@ export const diagnosticPackagesApi = {
 };
 
 export const diagnosticFilterChipsApi = {
-  list: () => api.get<{ data: DiagnosticFilterChip[] }>("/diagnostic-packages/filters-chips"),
-  create: (payload: { display_name: string; chip_key: string; display_order?: number }) =>
-    api.post<{ data: DiagnosticFilterChip }>("/diagnostic-packages/filters-chips", payload),
+  list: (forScope: DiagnosticFilterChipFor = "public_package") =>
+    api.get<{ data: DiagnosticFilterChip[] }>("/diagnostic-packages/filters-chips", {
+      params: { for: forScope },
+    }),
+  create: (payload: {
+    display_name: string;
+    chip_key: string;
+    display_order?: number;
+    chip_for?: DiagnosticFilterChipFor;
+  }) => api.post<{ data: DiagnosticFilterChip }>("/diagnostic-packages/filters-chips", payload),
   update: (
     filterChipId: number,
     payload: {
@@ -1113,6 +1126,7 @@ export const diagnosticFilterChipsApi = {
       chip_key?: string;
       display_order?: number;
       status?: string;
+      chip_for?: DiagnosticFilterChipFor;
     }
   ) => api.put<{ data: DiagnosticFilterChip }>(`/diagnostic-packages/filters-chips/${filterChipId}`, payload),
   delete: (filterChipId: number) =>
@@ -1142,6 +1156,10 @@ export interface DiagnosticTestStandalone {
   what_to_do_when_high?: string | null;
   is_available: boolean;
   display_order?: number | null;
+  price?: number | null;
+  original_price?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
 }
 
 export interface DiagnosticTestGroupStandalone {
@@ -1149,7 +1167,13 @@ export interface DiagnosticTestGroupStandalone {
   group_name: string;
   display_order?: number | null;
   test_count: number;
+  price?: number | null;
+  discount?: string | null;
+  original_price?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
   tests?: DiagnosticTestStandalone[];
+  filter_chips?: PackageFilterChip[];
 }
 
 export interface AssignTestsToGroupResponse {
@@ -1197,6 +1221,10 @@ export type HealthParameterCreatePayload = {
   what_to_do_when_high?: string | null;
   is_available?: boolean;
   display_order?: number;
+  price?: number | null;
+  original_price?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
 };
 
 export type HealthParameterUpdatePayload = {
@@ -1216,6 +1244,10 @@ export type HealthParameterUpdatePayload = {
   what_to_do_when_high?: string | null;
   is_available?: boolean;
   display_order?: number;
+  price?: number | null;
+  original_price?: number | null;
+  is_most_popular?: boolean | null;
+  gender_suitability?: string | null;
 };
 
 export const diagnosticTestsApi = {
@@ -1237,13 +1269,29 @@ export const diagnosticTestsApi = {
 };
 
 export const diagnosticTestGroupsApi = {
-  list: () => api.get<{ data: DiagnosticTestGroupStandalone[] }>("/diagnostic-test-groups"),
+  list: (params?: { filter_chip?: string }) =>
+    api.get<{ data: DiagnosticTestGroupStandalone[] }>("/diagnostic-test-groups", { params }),
   get: (groupId: number) =>
     api.get<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`),
-  create: (payload: { group_name: string; display_order?: number }) =>
-    api.post<{ data: DiagnosticTestGroupStandalone }>("/diagnostic-test-groups", payload),
-  update: (groupId: number, payload: { group_name?: string; display_order?: number }) =>
-    api.put<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`, payload),
+  create: (payload: {
+    group_name: string;
+    display_order?: number;
+    price?: number | null;
+    original_price?: number | null;
+    is_most_popular?: boolean | null;
+    gender_suitability?: string | null;
+  }) => api.post<{ data: DiagnosticTestGroupStandalone }>("/diagnostic-test-groups", payload),
+  update: (
+    groupId: number,
+    payload: {
+      group_name?: string;
+      display_order?: number;
+      price?: number | null;
+      original_price?: number | null;
+      is_most_popular?: boolean | null;
+      gender_suitability?: string | null;
+    }
+  ) => api.put<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`, payload),
   delete: (groupId: number) => api.delete(`/diagnostic-test-groups/${groupId}`),
   getTests: (groupId: number) =>
     api.get<{ data: DiagnosticTestStandalone[] }>(`/diagnostic-test-groups/${groupId}/tests`),
@@ -1253,6 +1301,12 @@ export const diagnosticTestGroupsApi = {
     api.patch<{ data: ReorderGroupTestsResponse }>(`/diagnostic-test-groups/${groupId}/tests/order`, payload),
   removeTest: (groupId: number, testId: number) =>
     api.delete(`/diagnostic-test-groups/${groupId}/tests/${testId}`),
+  addFilterChip: (groupId: number, payload: { filter_chip_id: number; display_order?: number }) =>
+    api.post<{ data: PackageFilterChip }>(`/diagnostic-test-groups/${groupId}/filter-chips`, payload),
+  removeFilterChip: (groupId: number, filterChipId: number) =>
+    api.delete<{ data: { filter_chip_id: number; deleted: boolean } }>(
+      `/diagnostic-test-groups/${groupId}/filter-chips/${filterChipId}`
+    ),
 };
 
 // Payments / bookings (employee)

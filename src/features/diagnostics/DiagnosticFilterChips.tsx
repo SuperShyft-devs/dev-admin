@@ -9,6 +9,7 @@ import {
   diagnosticFilterChipsApi,
   getApiError,
   type DiagnosticFilterChip,
+  type DiagnosticFilterChipFor,
 } from "../../lib/api";
 
 interface DiagnosticFilterChipsProps {
@@ -21,9 +22,11 @@ const EMPTY_FORM = {
   display_name: "",
   chip_key: "",
   display_order: "",
+  chip_for: "public_package" as DiagnosticFilterChipFor,
 };
 
 export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChipsProps) {
+  const [chipScope, setChipScope] = useState<DiagnosticFilterChipFor>("public_package");
   const [chips, setChips] = useState<DiagnosticFilterChip[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +47,14 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
     setLoading(true);
     setError(null);
     try {
-      const res = await diagnosticFilterChipsApi.list();
+      const res = await diagnosticFilterChipsApi.list(chipScope);
       setChips(res.data.data ?? []);
     } catch (err) {
       setError(getApiError(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [chipScope]);
 
   useEffect(() => {
     void fetchChips();
@@ -73,7 +76,7 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
   const openAdd = () => {
     setModalMode("add");
     setEditingChip(null);
-    setFormData(EMPTY_FORM);
+    setFormData({ ...EMPTY_FORM, chip_for: chipScope });
     setFormError(null);
     setModalOpen(true);
   };
@@ -81,10 +84,12 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
   const openEdit = (row: DiagnosticFilterChip) => {
     setModalMode("edit");
     setEditingChip(row);
+    const cf = (row.chip_for as DiagnosticFilterChipFor) || "public_package";
     setFormData({
       display_name: row.display_name ?? "",
       chip_key: row.chip_key ?? "",
       display_order: row.display_order != null ? String(row.display_order) : "",
+      chip_for: cf === "custom_package" ? "custom_package" : "public_package",
     });
     setFormError(null);
     setModalOpen(true);
@@ -102,9 +107,10 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
         display_name: formData.display_name.trim(),
         chip_key: formData.chip_key.trim(),
         display_order: formData.display_order ? Number(formData.display_order) : undefined,
+        chip_for: formData.chip_for,
       };
       if (modalMode === "add") {
-        await diagnosticFilterChipsApi.create(payload);
+        await diagnosticFilterChipsApi.create({ ...payload, chip_for: chipScope });
       } else if (editingChip) {
         await diagnosticFilterChipsApi.update(editingChip.filter_chip_id, payload);
       }
@@ -168,6 +174,13 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
     { key: "chip_key", label: "Chip key", sortable: true },
     { key: "display_order", label: "Order", sortable: true },
     {
+      key: "chip_for",
+      label: "Scope",
+      render: (row) => (
+        <span className="text-xs text-zinc-600">{(row.chip_for as string) || "public_package"}</span>
+      ),
+    },
+    {
       key: "status",
       label: "Status",
       render: (row) => (
@@ -185,7 +198,29 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
   ];
 
   return (
-    <div>
+    <div className="flex gap-4">
+      <aside className="w-44 shrink-0 border border-zinc-200 rounded-xl bg-white p-2 space-y-1 self-start">
+        <p className="text-xs font-medium text-zinc-500 px-2 py-1">Package chips</p>
+        <button
+          type="button"
+          onClick={() => setChipScope("public_package")}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium ${
+            chipScope === "public_package" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+          }`}
+        >
+          Public packages
+        </button>
+        <button
+          type="button"
+          onClick={() => setChipScope("custom_package")}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium ${
+            chipScope === "custom_package" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+          }`}
+        >
+          Custom packages
+        </button>
+      </aside>
+      <div className="min-w-0 flex-1">
       {!embedded && (
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900 mb-6">Diagnostics filter chips</h1>
       )}
@@ -302,6 +337,21 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
               className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
             />
           </div>
+          {modalMode === "edit" && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Scope</label>
+              <select
+                value={formData.chip_for}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, chip_for: e.target.value as DiagnosticFilterChipFor }))
+                }
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="public_package">Public packages</option>
+                <option value="custom_package">Custom packages</option>
+              </select>
+            </div>
+          )}
           <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
             <button
               type="submit"
@@ -348,6 +398,7 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
           </div>
         </Modal>
       )}
+      </div>
     </div>
   );
 }

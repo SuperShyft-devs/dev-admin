@@ -21,7 +21,6 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   diagnostic_provider: "",
   collection_type: "",
   gender_suitability: "",
-  no_of_tests: null,
   report_duration_hours: null,
   price: null,
   original_price: null,
@@ -64,7 +63,7 @@ export function DiagnosticPackages() {
     setLoading(true);
     setError(null);
     try {
-      const res = await diagnosticPackagesApi.list({ include_inactive: true });
+      const res = await diagnosticPackagesApi.list({ include_inactive: true, type: "public_package" });
       const baseRows = res.data.data ?? [];
       const providerMissing = baseRows.some((row) => !row.diagnostic_provider);
 
@@ -100,6 +99,34 @@ export function DiagnosticPackages() {
       void fetchPackages();
     }
   }, [activeTab, fetchPackages]);
+
+  useEffect(() => {
+    if (!modalOpen || modalMode !== "edit" || !editing) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await diagnosticPackagesApi.getTests(editing.diagnostic_package_id);
+        const groups = res.data.data?.groups ?? [];
+        const seen = new Set<number>();
+        let sum = 0;
+        for (const g of groups) {
+          for (const t of g.tests ?? []) {
+            if (t.test_id == null || seen.has(t.test_id)) continue;
+            seen.add(t.test_id);
+            if (t.original_price != null && Number.isFinite(t.original_price)) sum += t.original_price;
+          }
+        }
+        if (!cancelled && sum > 0) {
+          setForm((f) => ({ ...f, original_price: sum }));
+        }
+      } catch {
+        /* keep existing form */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, modalMode, editing?.diagnostic_package_id]);
 
   const tagOptions = useMemo(
     () =>
@@ -170,7 +197,6 @@ export function DiagnosticPackages() {
       diagnostic_provider: row.diagnostic_provider ?? "",
       collection_type: row.collection_type ?? "",
       gender_suitability: row.gender_suitability ?? "",
-      no_of_tests: row.no_of_tests ?? null,
       report_duration_hours: row.report_duration_hours ?? null,
       price: row.price ?? null,
       original_price: row.original_price ?? null,
@@ -213,7 +239,6 @@ export function DiagnosticPackages() {
         diagnostic_provider: form.diagnostic_provider?.trim() || null,
         collection_type: form.collection_type?.trim() || null,
         gender_suitability: form.gender_suitability?.trim() || null,
-        no_of_tests: form.no_of_tests ?? null,
         report_duration_hours: form.report_duration_hours ?? null,
         price: form.price ?? null,
         original_price: form.original_price ?? null,
@@ -537,15 +562,6 @@ export function DiagnosticPackages() {
                 <option value="female">female</option>
                 <option value="both">both</option>
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">No. of tests</label>
-              <input
-                type="number"
-                value={form.no_of_tests ?? ""}
-                onChange={(e) => setForm((prev) => ({ ...prev, no_of_tests: toNumberOrNull(e.target.value) }))}
-                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-              />
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Report duration hours</label>

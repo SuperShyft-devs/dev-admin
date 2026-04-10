@@ -13,9 +13,11 @@ import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
+  diagnosticFilterChipsApi,
   diagnosticTestGroupsApi,
   diagnosticTestsApi,
   getApiError,
+  type DiagnosticFilterChip,
   type DiagnosticTestGroupStandalone,
   type DiagnosticTestStandalone,
 } from "../../lib/api";
@@ -28,9 +30,19 @@ type ModalMode = "add" | "edit";
 type SortKey = "group_id" | "group_name" | "test_count" | "display_order";
 type SortDir = "asc" | "desc";
 
+function toNumberOrNull(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 const EMPTY_FORM = {
   group_name: "",
   display_order: "",
+  price: "",
+  original_price: "",
+  is_most_popular: false,
+  gender_suitability: "",
 };
 
 export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsProps) {
@@ -63,6 +75,9 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
   const [selectedTestIds, setSelectedTestIds] = useState<number[]>([]);
   const [assignNote, setAssignNote] = useState<string | null>(null);
   const [reorderingTests, setReorderingTests] = useState(false);
+  const [panelGroupDetail, setPanelGroupDetail] = useState<DiagnosticTestGroupStandalone | null>(null);
+  const [groupFilterChipCatalog, setGroupFilterChipCatalog] = useState<DiagnosticFilterChip[]>([]);
+  const [selectedGroupFilterChipId, setSelectedGroupFilterChipId] = useState<string>("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const fetchGroups = useCallback(async () => {
@@ -92,9 +107,41 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     }
   }, []);
 
+  const fetchPanelGroupDetail = useCallback(async (groupId: number) => {
+    try {
+      const res = await diagnosticTestGroupsApi.get(groupId);
+      setPanelGroupDetail(res.data.data ?? null);
+    } catch {
+      setPanelGroupDetail(null);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchGroups();
   }, [fetchGroups]);
+
+  useEffect(() => {
+    if (!modalOpen || modalMode !== "edit" || !editing) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await diagnosticTestGroupsApi.getTests(editing.group_id);
+        const tests = res.data.data ?? [];
+        let sum = 0;
+        for (const t of tests) {
+          if (t.original_price != null && Number.isFinite(t.original_price)) sum += t.original_price;
+        }
+        if (!cancelled && sum > 0) {
+          setForm((f) => ({ ...f, original_price: String(sum) }));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, modalMode, editing?.group_id]);
 
   const openCreate = useCallback(() => {
     setModalMode("add");
@@ -114,6 +161,10 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     setForm({
       group_name: row.group_name,
       display_order: row.display_order != null ? String(row.display_order) : "",
+      price: row.price != null ? String(row.price) : "",
+      original_price: row.original_price != null ? String(row.original_price) : "",
+      is_most_popular: !!row.is_most_popular,
+      gender_suitability: row.gender_suitability ?? "",
     });
     setFormError(null);
     setModalOpen(true);
@@ -121,12 +172,20 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
 
   const openPanel = (row: DiagnosticTestGroupStandalone) => {
     setPanelGroup(row);
+    setPanelGroupDetail(null);
+    setSelectedGroupFilterChipId("");
     setAssignNote(null);
     void fetchPanelTests(row.group_id);
+    void fetchPanelGroupDetail(row.group_id);
+    void diagnosticFilterChipsApi
+      .list("public_package")
+      .then((res) => setGroupFilterChipCatalog(res.data.data ?? []))
+      .catch(() => setGroupFilterChipCatalog([]));
   };
 
   const closePanel = () => {
     setPanelGroup(null);
+    setPanelGroupDetail(null);
     setGroupTests([]);
     setGroupTestsError(null);
   };
@@ -178,6 +237,10 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
       const payload = {
         group_name: form.group_name.trim(),
         display_order: form.display_order.trim() ? Number(form.display_order) : undefined,
+        price: toNumberOrNull(form.price),
+        original_price: toNumberOrNull(form.original_price),
+        is_most_popular: form.is_most_popular,
+        gender_suitability: form.gender_suitability.trim() || undefined,
       };
       if (modalMode === "add") {
         await diagnosticTestGroupsApi.create(payload);
@@ -316,6 +379,47 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     }
   };
 
+  const groupAssignedFilterChips = useMemo(
+    () =>
+      [...(panelGroupDetail?.filter_chips ?? [])].sort(
+        (a, b) => (a.display_order ?? Number.MAX_SAFE_INTEGER) - (b.display_order ?? Number.MAX_SAFE_INTEGER)
+      ),
+    [panelGroupDetail?.filter_chips]
+  );
+
+  const assignableGroupFilterChips = useMemo(() => {
+    const assigned = new Set(groupAssignedFilterChips.map((c) => c.filter_chip_id));
+    return groupFilterChipCatalog.filter((c) => !assigned.has(c.filter_chip_id));
+  }, [groupAssignedFilterChips, groupFilterChipCatalog]);
+
+  const addGroupFilterChip = async () => {
+    if (!panelGroup || !selectedGroupFilterChipId) return;
+    setGroupTestsError(null);
+    try {
+      await diagnosticTestGroupsApi.addFilterChip(panelGroup.group_id, {
+        filter_chip_id: Number(selectedGroupFilterChipId),
+      });
+      setSelectedGroupFilterChipId("");
+      await fetchPanelGroupDetail(panelGroup.group_id);
+      await fetchGroups();
+    } catch (err) {
+      setGroupTestsError(getApiError(err));
+    }
+  };
+
+  const removeGroupFilterChip = async (filterChipId: number) => {
+    if (!panelGroup) return;
+    if (!window.confirm("Remove this filter chip from the group?")) return;
+    setGroupTestsError(null);
+    try {
+      await diagnosticTestGroupsApi.removeFilterChip(panelGroup.group_id, filterChipId);
+      await fetchPanelGroupDetail(panelGroup.group_id);
+      await fetchGroups();
+    } catch (err) {
+      setGroupTestsError(getApiError(err));
+    }
+  };
+
   const columns: Column<DiagnosticTestGroupStandalone>[] = [
     {
       key: "group_name",
@@ -415,6 +519,45 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
               className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Price</label>
+            <input
+              type="number"
+              value={form.price}
+              onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Original price</label>
+            <input
+              type="number"
+              value={form.original_price}
+              onChange={(e) => setForm((prev) => ({ ...prev, original_price: e.target.value }))}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Gender suitability</label>
+            <select
+              value={form.gender_suitability}
+              onChange={(e) => setForm((prev) => ({ ...prev, gender_suitability: e.target.value }))}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="">Select</option>
+              <option value="male">male</option>
+              <option value="female">female</option>
+              <option value="both">both</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={form.is_most_popular}
+              onChange={(e) => setForm((prev) => ({ ...prev, is_most_popular: e.target.checked }))}
+            />
+            Most popular
+          </label>
           <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
             <button
               type="submit"
@@ -461,6 +604,53 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
               {groupTestsError && (
                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{groupTestsError}</div>
               )}
+              <div className="bg-white border border-zinc-200 rounded-xl p-4">
+                <h3 className="text-sm font-medium text-zinc-900 mb-3">Filter chips</h3>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {groupAssignedFilterChips.length === 0 ? (
+                    <p className="text-sm text-zinc-500">No chips assigned.</p>
+                  ) : (
+                    groupAssignedFilterChips.map((chip) => (
+                      <span
+                        key={chip.filter_chip_id}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-zinc-100 text-zinc-800"
+                      >
+                        {chip.display_name}
+                        <button
+                          type="button"
+                          onClick={() => void removeGroupFilterChip(chip.filter_chip_id)}
+                          className="p-0.5 rounded hover:bg-zinc-200 text-zinc-600"
+                          aria-label={`Remove ${chip.display_name}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <select
+                    value={selectedGroupFilterChipId}
+                    onChange={(e) => setSelectedGroupFilterChipId(e.target.value)}
+                    className="flex-1 min-w-0 border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white"
+                  >
+                    <option value="">Select chip to add…</option>
+                    {assignableGroupFilterChips.map((c) => (
+                      <option key={c.filter_chip_id} value={c.filter_chip_id}>
+                        {c.display_name} ({c.chip_key})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void addGroupFilterChip()}
+                    disabled={!selectedGroupFilterChipId}
+                    className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    Add chip
+                  </button>
+                </div>
+              </div>
               <div className="bg-white border border-zinc-200 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-zinc-900">Tests in this group</h3>

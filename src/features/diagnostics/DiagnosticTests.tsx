@@ -27,6 +27,10 @@ function toNumberOrUndefined(value: string): number | undefined {
 const EMPTY_FORM = {
   test_name: "",
   is_available: true,
+  price: "",
+  original_price: "",
+  is_most_popular: false,
+  gender_suitability: "",
 
   parameter_key: "",
   unit: "",
@@ -94,6 +98,10 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     setForm({
       test_name: row.test_name,
       is_available: row.is_available,
+      price: row.price != null ? String(row.price) : "",
+      original_price: row.original_price != null ? String(row.original_price) : "",
+      is_most_popular: !!row.is_most_popular,
+      gender_suitability: row.gender_suitability ?? "",
 
       parameter_key: row.parameter_key ?? "",
       unit: row.unit ?? "",
@@ -173,6 +181,10 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
         effects_when_low: form.effects_when_low.trim() ? form.effects_when_low.trim() : undefined,
         what_to_do_when_low: form.what_to_do_when_low.trim() ? form.what_to_do_when_low.trim() : undefined,
         what_to_do_when_high: form.what_to_do_when_high.trim() ? form.what_to_do_when_high.trim() : undefined,
+        price: toNumberOrUndefined(form.price),
+        original_price: toNumberOrUndefined(form.original_price),
+        is_most_popular: form.is_most_popular,
+        gender_suitability: form.gender_suitability.trim() || undefined,
       };
       if (modalMode === "add") {
         const createPayload: HealthParameterCreatePayload = {
@@ -309,6 +321,49 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
                 className="h-4 w-4"
               />
               Available
+            </label>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Price</label>
+              <input
+                type="number"
+                value={form.price}
+                onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Original price</label>
+              <input
+                type="number"
+                value={form.original_price}
+                onChange={(e) => setForm((prev) => ({ ...prev, original_price: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                step="any"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Gender suitability</label>
+              <select
+                value={form.gender_suitability}
+                onChange={(e) => setForm((prev) => ({ ...prev, gender_suitability: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">Select</option>
+                <option value="male">male</option>
+                <option value="female">female</option>
+                <option value="both">both</option>
+              </select>
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.is_most_popular}
+                onChange={(e) => setForm((prev) => ({ ...prev, is_most_popular: e.target.checked }))}
+                className="h-4 w-4"
+              />
+              Most popular
             </label>
 
             <div>

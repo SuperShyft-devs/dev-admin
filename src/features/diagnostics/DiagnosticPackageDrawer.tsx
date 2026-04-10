@@ -149,7 +149,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
   useEffect(() => {
     if (!open || !packageId) return;
     void diagnosticFilterChipsApi
-      .list()
+      .list("public_package")
       .then((res) => setFilterChipCatalog(res.data.data ?? []))
       .catch(() => setFilterChipCatalog([]));
   }, [open, packageId]);
