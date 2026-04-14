@@ -21,6 +21,7 @@ const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 type ModalMode = "view" | "add" | "edit";
 
 const EMPTY_FORM: UserCreate = {
+  age: 0,
   first_name: "",
   last_name: "",
   phone: "",
@@ -138,6 +139,7 @@ export function Users() {
         const u = res.data.data;
         setSelected(u);
         setFormData({
+          age: u.age ?? 0,
           first_name: u.first_name ?? "",
           last_name: u.last_name ?? "",
           phone: u.phone ?? "",
@@ -165,11 +167,16 @@ export function Users() {
       setError("Phone number is required");
       return;
     }
+    if (!Number.isFinite(formData.age) || formData.age < 1 || formData.age > 120) {
+      setError("Age must be between 1 and 120");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const payload = {
         ...formData,
+        age: Math.trunc(formData.age),
         first_name: formData.first_name || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
@@ -278,9 +285,14 @@ export function Users() {
                 setError("Cannot update status: phone number is missing for this user.");
                 return;
               }
+              if (!Number.isFinite(row.age) || (row.age ?? 0) < 1 || (row.age ?? 0) > 120) {
+                setError("Cannot update status: age is missing or invalid for this user.");
+                return;
+              }
               const nextStatus = isActive ? "inactive" : "active";
               usersApi
                 .update(row.user_id, {
+                  age: Number(row.age),
                   first_name: row.first_name ?? null,
                   last_name: row.last_name ?? null,
                   phone,
@@ -345,7 +357,7 @@ export function Users() {
     setSortKey(key);
   };
 
-  const field = (label: string, value?: string | null | boolean) => (
+  const field = (label: string, value?: string | number | null | boolean) => (
     <div>
       <span className="text-zinc-500 text-xs uppercase tracking-wide">{label}</span>
       <p className="text-zinc-900 mt-0.5">{value === null || value === undefined ? "—" : String(value)}</p>
@@ -442,6 +454,7 @@ export function Users() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 {field("First Name", selected.first_name)}
                 {field("Last Name", selected.last_name)}
+                {field("Age", selected.age)}
                 {field("Phone", selected.phone)}
                 {field("Email", selected.email)}
                 {field("Profile Photo URL", selected.profile_photo)}
@@ -541,6 +554,24 @@ export function Users() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Age *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={formData.age > 0 ? formData.age : ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        age: e.target.value === "" ? 0 : Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    placeholder="18"
+                    required
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-1">Phone *</label>
                   <input
                     type="tel"
@@ -583,15 +614,6 @@ export function Users() {
                   {photoUploading && (
                     <p className="mt-1 text-xs text-zinc-500">Uploading profile photo...</p>
                   )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Date of Birth</label>
-                  <input
-                    type="date"
-                    value={formData.date_of_birth ?? ""}
-                    onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-1">Gender</label>

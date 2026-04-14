@@ -41,6 +41,7 @@ export interface UserProfile {
   user_id: number;
   first_name?: string | null;
   last_name?: string | null;
+  age?: number;
   phone: string;
   email?: string | null;
   profile_photo?: string | null;
@@ -50,6 +51,7 @@ export interface UserListItem {
   user_id: number;
   first_name?: string | null;
   last_name?: string | null;
+  age?: number;
   phone?: string | null;
   email?: string | null;
   profile_photo?: string | null;
@@ -140,6 +142,7 @@ export interface UserDetail {
   user_id: number;
   first_name?: string | null;
   last_name?: string | null;
+  age?: number;
   phone: string;
   email?: string | null;
   profile_photo?: string | null;
@@ -158,6 +161,7 @@ export interface UserDetail {
 }
 
 export interface UserCreate {
+  age: number;
   first_name?: string | null;
   last_name?: string | null;
   phone: string;
