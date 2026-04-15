@@ -307,6 +307,11 @@ export const uploadsApi = {
     formData.append("file", file);
     return api.post<{ data: { url: string } }>("/uploads/organizations/logo", formData);
   },
+  uploadExpertProfilePhoto: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: { url: string } }>("/uploads/experts/profile-photo", formData);
+  },
 };
 
 // Employees
@@ -422,6 +427,97 @@ export const organizationsApi = {
     api.patch<{ data: { organization_id: number; status: string } }>(
       `/organizations/${id}/status`,
       { status }
+    ),
+};
+
+// Experts (doctors & nutritionists)
+export type ExpertType = "doctor" | "nutritionist";
+export type ConsultationMode = "video" | "voice" | "chat";
+
+export interface ExpertTag {
+  tag_id: number;
+  expert_id: number;
+  tag_name: string;
+  display_order?: number | null;
+}
+
+export interface ExpertListItem {
+  expert_id: number;
+  user_id?: number | null;
+  expert_type: ExpertType | string;
+  display_name: string;
+  profile_photo?: string | null;
+  rating: number;
+  review_count: number;
+  patient_count: number;
+  experience_years?: number | null;
+  qualifications?: string | null;
+  about_text?: string | null;
+  consultation_modes?: ConsultationMode[] | string[] | null;
+  languages?: string[] | null;
+  session_duration_mins?: number | null;
+  appointment_fee_paise?: number | null;
+  original_fee_paise?: number | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ExpertDetail extends ExpertListItem {
+  expertise_tags: ExpertTag[];
+}
+
+export interface ExpertPayload {
+  user_id: number;
+  expert_type: ExpertType;
+  display_name: string;
+  profile_photo?: string | null;
+  experience_years?: number | null;
+  qualifications?: string | null;
+  about_text?: string | null;
+  consultation_modes?: ConsultationMode[] | null;
+  languages?: string[] | null;
+  session_duration_mins?: number | null;
+  appointment_fee_paise?: number | null;
+  original_fee_paise?: number | null;
+  patient_count?: number | null;
+}
+
+export interface ExpertReview {
+  review_id: number;
+  expert_id: number;
+  user_id: number;
+  rating: number;
+  review_text?: string | null;
+  created_at: string;
+}
+
+export const expertsApi = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    expert_type?: string;
+    status?: string;
+  }) =>
+    api.get<{ data: ExpertListItem[]; meta: { page: number; limit: number; total: number } }>("/experts", {
+      params,
+    }),
+  get: (expertId: number) =>
+    api.get<{ data: ExpertDetail }>(`/experts/${expertId}`),
+  create: (payload: ExpertPayload) =>
+    api.post<{ data: { expert_id: number } }>("/experts", payload),
+  update: (expertId: number, payload: ExpertPayload) =>
+    api.put<{ data: { expert_id: number } }>(`/experts/${expertId}`, payload),
+  updateStatus: (expertId: number, status: "active" | "inactive") =>
+    api.patch<{ data: { expert_id: number; status: string } }>(`/experts/${expertId}/status`, { status }),
+  addTag: (expertId: number, payload: { tag_name: string; display_order?: number | null }) =>
+    api.post<{ data: ExpertTag }>(`/experts/${expertId}/tags`, payload),
+  deleteTag: (expertId: number, tagId: number) =>
+    api.delete<{ data: { tag_id: number } }>(`/experts/${expertId}/tags/${tagId}`),
+  listReviews: (expertId: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: ExpertReview[]; meta: { page: number; limit: number; total: number } }>(
+      `/experts/${expertId}/reviews`,
+      { params }
     ),
 };
 

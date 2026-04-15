@@ -18,6 +18,7 @@ import {
   Library,
   ChevronDown,
   CreditCard,
+  Stethoscope,
   // Settings,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -26,6 +27,7 @@ import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
 const primaryNavItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true as const },
   { to: "/users", icon: UserRound, label: "Users" },
+  { to: "/experts", icon: Stethoscope, label: "Experts" },
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/support", icon: LifeBuoy, label: "Support" },

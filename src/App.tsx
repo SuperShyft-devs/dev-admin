@@ -17,6 +17,7 @@ import { ChecklistTemplates } from "./features/checklists/ChecklistTemplates";
 import { HealthMetrics } from "./features/health-metrics/HealthMetrics";
 import { MyTasks } from "./features/checklists/MyTasks";
 import { Settings } from "./features/settings/Settings";
+import { Experts } from "./features/experts/Experts";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -88,6 +89,7 @@ function AppRoutes() {
         />
         <Route path="users/:userId/journey" element={<ParticipantJourneyPage />} />
         <Route path="users" element={<Users />} />
+        <Route path="experts" element={<Experts />} />
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
         <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
         <Route path="diagnostics/filters-chips" element={<DiagnosticFilterChips />} />
