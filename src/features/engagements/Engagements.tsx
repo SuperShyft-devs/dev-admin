@@ -1094,8 +1094,7 @@ export function Engagements() {
     : availableEmployees;
 
   const openParticipants = (row: EngagementListItem) => {
-    const orgId = row.organization_id;
-    if (orgId != null && orgId > 0 && row.engagement_code) {
+    if (row.engagement_code) {
       setParticipantsSource({
         kind: "engagement-code",
         code: row.engagement_code,
@@ -1336,7 +1335,7 @@ export function Engagements() {
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
-                  if ((selected.organization_id ?? 0) > 0 && selected.engagement_code) {
+                  if (selected.engagement_code) {
                     setParticipantsSource({
                       kind: "engagement-code",
                       code: selected.engagement_code,
