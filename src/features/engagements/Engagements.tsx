@@ -1442,7 +1442,7 @@ export function Engagements() {
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
                 <select
-                  value={formData.assessment_package_id}
+                  value={formData.assessment_package_id ?? 0}
                   onChange={(e) => setFormData({ ...formData, assessment_package_id: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 >
