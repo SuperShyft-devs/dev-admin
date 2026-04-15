@@ -433,16 +433,20 @@ export interface ChecklistReadiness {
 }
 
 // Engagements
+export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
+
 export interface Engagement {
   engagement_id: number;
   engagement_name?: string | null;
   metsights_engagement_id?: string | null;
   organization_id?: number | null;
   engagement_code?: string | null;
-  engagement_type?: string | null;
+  engagement_type?: EngagementKind | string | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
+  address?: string | null;
+  pincode?: string | null;
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -455,10 +459,12 @@ export interface EngagementListItem {
   engagement_name?: string | null;
   organization_id?: number | null;
   engagement_code?: string | null;
-  engagement_type?: string | null;
+  engagement_type?: EngagementKind | string | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
+  address?: string | null;
+  pincode?: string | null;
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -470,11 +476,13 @@ export interface EngagementListItem {
 export interface EngagementCreate {
   engagement_name?: string | null;
   organization_id: number;
-  engagement_type: string;
+  engagement_type: EngagementKind;
   engagement_code?: string | null;
-  assessment_package_id: number;
+  assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
+  address?: string | null;
+  pincode?: string | null;
   slot_duration: number;
   start_date: string;
   end_date: string;

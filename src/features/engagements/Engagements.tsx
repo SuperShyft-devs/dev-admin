@@ -27,6 +27,7 @@ import {
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
+  type EngagementKind,
   type DiagnosticPackageListItem,
   type OrganizationListItem,
   type AssessmentPackage,
@@ -45,6 +46,8 @@ import {
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 import { useLocation } from "react-router-dom";
+
+const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
@@ -641,11 +644,13 @@ export function Engagements() {
   const [formData, setFormData] = useState<EngagementCreate>({
     engagement_name: "",
     organization_id: 0,
-    engagement_type: "b2b",
+    engagement_type: "doctor",
     engagement_code: "",
     assessment_package_id: 0,
     diagnostic_package_id: undefined,
     city: "",
+    address: "",
+    pincode: "",
     slot_duration: 60,
     start_date: "",
     end_date: "",
@@ -819,11 +824,13 @@ export function Engagements() {
     setFormData({
       engagement_name: preset?.engagement_name ?? "",
       organization_id: nextOrganizationId,
-      engagement_type: preset?.engagement_type ?? "b2b",
+      engagement_type: (preset?.engagement_type as EngagementKind | undefined) ?? "doctor",
       engagement_code: preset?.engagement_code ?? "",
       assessment_package_id: nextAssessmentPackageId,
       diagnostic_package_id: undefined,
       city: preset?.city ?? "",
+      address: preset?.address ?? "",
+      pincode: preset?.pincode ?? "",
       slot_duration: preset?.slot_duration ?? 60,
       start_date: preset?.start_date ?? today,
       end_date: preset?.end_date ?? today,
@@ -851,11 +858,13 @@ export function Engagements() {
       setFormData({
         engagement_name: e.engagement_name ?? "",
         organization_id: e.organization_id ?? 0,
-        engagement_type: e.engagement_type ?? "b2b",
+        engagement_type: (e.engagement_type as EngagementKind | undefined) ?? "doctor",
         engagement_code: e.engagement_code ?? "",
         assessment_package_id: e.assessment_package_id ?? 0,
         diagnostic_package_id: e.diagnostic_package_id ?? undefined,
         city: e.city ?? "",
+        address: e.address ?? "",
+        pincode: e.pincode ?? "",
         slot_duration: e.slot_duration ?? 60,
         start_date: (e.start_date ?? "").toString().slice(0, 10),
         end_date: (e.end_date ?? "").toString().slice(0, 10),
@@ -866,17 +875,8 @@ export function Engagements() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.organization_id || !formData.assessment_package_id || !formData.start_date || !formData.end_date) {
+    if (!formData.organization_id || !formData.start_date || !formData.end_date) {
       setError("Please fill required fields");
-      return;
-    }
-
-    const engagementTypeNormalized = (formData.engagement_type ?? "").trim().toLowerCase();
-    const isB2B = engagementTypeNormalized === "b2b";
-
-    const effectiveDiagnosticPackageId = isB2B ? formData.diagnostic_package_id : 1;
-    if (isB2B && (!effectiveDiagnosticPackageId || effectiveDiagnosticPackageId <= 0)) {
-      setError("Please select a diagnostic package for B2B engagements");
       return;
     }
 
@@ -886,22 +886,35 @@ export function Engagements() {
       if (modalMode === "add") {
         const createPayload: EngagementCreate = {
           ...formData,
-          diagnostic_package_id: effectiveDiagnosticPackageId,
+          assessment_package_id:
+            formData.assessment_package_id && formData.assessment_package_id > 0
+              ? formData.assessment_package_id
+              : null,
+          diagnostic_package_id:
+            formData.diagnostic_package_id && formData.diagnostic_package_id > 0
+              ? formData.diagnostic_package_id
+              : null,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
         setAddChecklistPromptEngagementId(engagementId);
         setAddChecklistPromptOpen(true);
       } else if (selected) {
-        const payloadDiagnosticPackageId =
-          effectiveDiagnosticPackageId && effectiveDiagnosticPackageId > 0 ? effectiveDiagnosticPackageId : undefined;
         const payload = {
           engagement_name: formData.engagement_name,
           organization_id: formData.organization_id,
           engagement_type: formData.engagement_type,
-          assessment_package_id: formData.assessment_package_id,
-          diagnostic_package_id: payloadDiagnosticPackageId,
+          assessment_package_id:
+            formData.assessment_package_id && formData.assessment_package_id > 0
+              ? formData.assessment_package_id
+              : null,
+          diagnostic_package_id:
+            formData.diagnostic_package_id && formData.diagnostic_package_id > 0
+              ? formData.diagnostic_package_id
+              : null,
           city: formData.city,
+          address: formData.address,
+          pincode: formData.pincode,
           slot_duration: formData.slot_duration,
           start_date: formData.start_date,
           end_date: formData.end_date,
@@ -928,7 +941,7 @@ export function Engagements() {
         engagement_id: e.engagement_id,
         engagement_name: e.engagement_name ?? "",
         engagement_code: e.engagement_code ?? "",
-        engagement_type: e.engagement_type ?? "b2b",
+        engagement_type: (e.engagement_type as EngagementKind | undefined) ?? "doctor",
         organization_id: e.organization_id ?? 0,
         city: e.city ?? "",
         slot_duration: e.slot_duration ?? null,
@@ -1081,7 +1094,8 @@ export function Engagements() {
     : availableEmployees;
 
   const openParticipants = (row: EngagementListItem) => {
-    if (row.engagement_type === "b2b" && row.engagement_code) {
+    const orgId = row.organization_id;
+    if (orgId != null && orgId > 0 && row.engagement_code) {
       setParticipantsSource({
         kind: "engagement-code",
         code: row.engagement_code,
@@ -1310,6 +1324,8 @@ export function Engagements() {
             <div><span className="text-zinc-500">Organisation:</span> {getOrgName(selected.organization_id ?? 0)}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.engagement_type ?? "—"}</div>
             <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
+            <div><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
+            <div><span className="text-zinc-500">Pincode:</span> {selected.pincode ?? "—"}</div>
             <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
             <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
             <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
@@ -1320,7 +1336,7 @@ export function Engagements() {
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
-                  if (selected.engagement_type === "b2b" && selected.engagement_code) {
+                  if ((selected.organization_id ?? 0) > 0 && selected.engagement_code) {
                     setParticipantsSource({
                       kind: "engagement-code",
                       code: selected.engagement_code,
@@ -1409,23 +1425,29 @@ export function Engagements() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
-                <input
-                  type="text"
+                <select
                   value={formData.engagement_type}
-                  onChange={(e) => setFormData({ ...formData, engagement_type: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, engagement_type: e.target.value as EngagementKind })
+                  }
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   required
-                />
+                >
+                  {ENGAGEMENT_KIND_OPTIONS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment Package *</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
                 <select
                   value={formData.assessment_package_id}
                   onChange={(e) => setFormData({ ...formData, assessment_package_id: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required
                 >
-                  <option value={0}>Select package</option>
+                  <option value={0}>None</option>
                   {assessmentPackages.map((p) => (
                     <option key={p.package_id} value={p.package_id}>
                       {p.display_name ?? p.package_code ?? p.package_id}
@@ -1433,26 +1455,42 @@ export function Engagements() {
                   ))}
                 </select>
               </div>
-              {formData.engagement_type.trim().toLowerCase() === "b2b" ? (
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic Package *</label>
-                  <select
-                    value={formData.diagnostic_package_id ?? 0}
-                    onChange={(e) => {
-                      const next = Number(e.target.value);
-                      setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  >
-                    <option value={0}>Select diagnostic package</option>
-                    {diagnosticPackages.map((p) => (
-                      <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
-                        {p.package_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic package</label>
+                <select
+                  value={formData.diagnostic_package_id ?? 0}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value={0}>None</option>
+                  {diagnosticPackages.map((p) => (
+                    <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
+                      {p.package_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={formData.address ?? ""}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Pincode</label>
+                <input
+                  type="text"
+                  value={formData.pincode ?? ""}
+                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
                 <input
