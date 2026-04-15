@@ -178,7 +178,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     void fetchPanelTests(row.group_id);
     void fetchPanelGroupDetail(row.group_id);
     void diagnosticFilterChipsApi
-      .list("public_package")
+      .list("custom_package")
       .then((res) => setGroupFilterChipCatalog(res.data.data ?? []))
       .catch(() => setGroupFilterChipCatalog([]));
   };
