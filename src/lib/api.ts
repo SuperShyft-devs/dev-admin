@@ -445,7 +445,7 @@ export interface ExpertListItem {
   expert_id: number;
   user_id?: number | null;
   expert_type: ExpertType | string;
-  display_name: string;
+  specialization: string;
   profile_photo?: string | null;
   rating: number;
   review_count: number;
@@ -470,7 +470,7 @@ export interface ExpertDetail extends ExpertListItem {
 export interface ExpertPayload {
   user_id: number;
   expert_type: ExpertType;
-  display_name: string;
+  specialization: string;
   profile_photo?: string | null;
   experience_years?: number | null;
   qualifications?: string | null;

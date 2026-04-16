@@ -35,7 +35,7 @@ function formatViewUserId(userId: number | null | undefined, users: UserListItem
 const emptyPayload = (): ExpertPayload => ({
   user_id: 0,
   expert_type: "doctor",
-  display_name: "",
+  specialization: "",
   profile_photo: "",
   experience_years: undefined,
   qualifications: "",
@@ -115,7 +115,7 @@ export function Experts() {
         const q = search.toLowerCase();
         items = items.filter(
           (e) =>
-            (e.display_name ?? "").toLowerCase().includes(q) ||
+            (e.specialization ?? "").toLowerCase().includes(q) ||
             (e.qualifications ?? "").toLowerCase().includes(q)
         );
       }
@@ -204,7 +204,7 @@ export function Experts() {
         setFormData({
           user_id: e.user_id && e.user_id > 0 ? e.user_id : 0,
           expert_type: (e.expert_type as ExpertType) || "doctor",
-          display_name: e.display_name ?? "",
+          specialization: e.specialization ?? "",
           profile_photo: e.profile_photo ?? "",
           experience_years: e.experience_years ?? undefined,
           qualifications: e.qualifications ?? "",
@@ -227,7 +227,7 @@ export function Experts() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.display_name.trim()) return;
+    if (!formData.specialization.trim()) return;
     if (!formData.user_id || formData.user_id <= 0) {
       setError("User Id is required");
       return;
@@ -296,7 +296,7 @@ export function Experts() {
   };
 
   const columns: Column<ExpertListItem>[] = [
-    { key: "display_name", label: "Name", sortable: true },
+    { key: "specialization", label: "Specialization", sortable: true },
     { key: "expert_type", label: "Type", sortable: true, hideOnMobile: true },
     {
       key: "rating",
@@ -327,7 +327,7 @@ export function Experts() {
               isActive ? "bg-emerald-500" : "bg-zinc-300"
             }`}
             aria-pressed={isActive}
-            aria-label={`Set ${row.display_name} ${isActive ? "inactive" : "active"}`}
+            aria-label={`Set ${row.specialization} ${isActive ? "inactive" : "active"}`}
           >
             <span
               className={`h-5 w-5 bg-white rounded-full shadow transform transition translate-x-0.5 ${
@@ -368,7 +368,7 @@ export function Experts() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
-            placeholder="Search by name or qualifications..."
+            placeholder="Search by specialization or qualifications..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
@@ -431,7 +431,7 @@ export function Experts() {
       >
         {modalMode === "view" && selected ? (
           <div className="space-y-3 text-sm">
-            <div className="font-medium text-zinc-900">{selected.display_name}</div>
+            <div className="font-medium text-zinc-900">{selected.specialization}</div>
             <div className="text-zinc-600">
               <span className="text-zinc-500">User Id:</span>{" "}
               {formatViewUserId(selected.user_id, usersList)}
@@ -494,11 +494,11 @@ export function Experts() {
                 </select>
               </label>
               <label className="block">
-                <span className="text-zinc-600 text-xs">Display name *</span>
+                <span className="text-zinc-600 text-xs">Specialization *</span>
                 <input
                   className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
-                  value={formData.display_name}
-                  onChange={(e) => setFormData((p) => ({ ...p, display_name: e.target.value }))}
+                  value={formData.specialization}
+                  onChange={(e) => setFormData((p) => ({ ...p, specialization: e.target.value }))}
                 />
               </label>
               <label className="block">
