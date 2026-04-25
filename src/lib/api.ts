@@ -1043,6 +1043,7 @@ export interface DiagnosticPackageListItem {
   discount_percent?: number | null;
   is_most_popular?: boolean | null;
   gender_suitability?: string | null;
+  package_for?: "public" | "camp" | null;
   status?: string | null;
   tags?: DiagnosticTag[];
   filter_chips?: PackageFilterChip[];
@@ -1069,6 +1070,7 @@ export interface DiagnosticPackageCreate {
   original_price?: number | null;
   is_most_popular?: boolean | null;
   gender_suitability?: string | null;
+  package_for?: "public" | "camp" | null;
 }
 
 export interface DiagnosticFilterChip {
@@ -1087,6 +1089,7 @@ export const diagnosticPackagesApi = {
     filter_chip?: string;
     type?: DiagnosticPackageListType;
     include_inactive?: boolean;
+    package_for?: string;
   }) => api.get<{ data: DiagnosticPackageListItem[] }>("/diagnostic-packages", { params }),
   get: (id: number) =>
     api.get<{ data: DiagnosticPackageDetail }>(`/diagnostic-packages/${id}`),
@@ -1101,6 +1104,7 @@ export const diagnosticPackagesApi = {
       `/diagnostic-packages/${id}/status`,
       { status }
     ),
+  delete: (id: number) => api.delete(`/diagnostic-packages/${id}`),
   addReason: (id: number, payload: { reason_text: string; display_order?: number }) =>
     api.post<{ data: DiagnosticReason }>(`/diagnostic-packages/${id}/reasons`, payload),
   updateReason: (id: number, reasonId: number, payload: { reason_text?: string; display_order?: number }) =>
@@ -1281,6 +1285,7 @@ export interface DiagnosticTestGroupStandalone {
   original_price?: number | null;
   is_most_popular?: boolean | null;
   gender_suitability?: string | null;
+  package_for?: "public" | "camp" | null;
   tests?: DiagnosticTestStandalone[];
   filter_chips?: PackageFilterChip[];
 }
@@ -1378,7 +1383,7 @@ export const diagnosticTestsApi = {
 };
 
 export const diagnosticTestGroupsApi = {
-  list: (params?: { filter_chip?: string }) =>
+  list: (params?: { filter_chip?: string; package_for?: string }) =>
     api.get<{ data: DiagnosticTestGroupStandalone[] }>("/diagnostic-test-groups", { params }),
   get: (groupId: number) =>
     api.get<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`),
@@ -1389,6 +1394,7 @@ export const diagnosticTestGroupsApi = {
     original_price?: number | null;
     is_most_popular?: boolean | null;
     gender_suitability?: string | null;
+    package_for?: "public" | "camp" | null;
   }) => api.post<{ data: DiagnosticTestGroupStandalone }>("/diagnostic-test-groups", payload),
   update: (
     groupId: number,
@@ -1399,6 +1405,7 @@ export const diagnosticTestGroupsApi = {
       original_price?: number | null;
       is_most_popular?: boolean | null;
       gender_suitability?: string | null;
+      package_for?: "public" | "camp" | null;
     }
   ) => api.put<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`, payload),
   delete: (groupId: number) => api.delete(`/diagnostic-test-groups/${groupId}`),

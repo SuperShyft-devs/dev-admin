@@ -43,6 +43,7 @@ const EMPTY_FORM = {
   original_price: "",
   is_most_popular: false,
   gender_suitability: "",
+  package_for: "public" as "public" | "camp",
 };
 
 export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsProps) {
@@ -165,6 +166,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
       original_price: row.original_price != null ? String(row.original_price) : "",
       is_most_popular: !!row.is_most_popular,
       gender_suitability: row.gender_suitability ?? "",
+      package_for: row.package_for ?? "public",
     });
     setFormError(null);
     setModalOpen(true);
@@ -241,6 +243,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
         original_price: toNumberOrNull(form.original_price),
         is_most_popular: form.is_most_popular,
         gender_suitability: form.gender_suitability.trim() || undefined,
+        package_for: form.package_for || "public",
       };
       if (modalMode === "add") {
         await diagnosticTestGroupsApi.create(payload);
@@ -548,6 +551,17 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
               <option value="male">male</option>
               <option value="female">female</option>
               <option value="both">both</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Package for</label>
+            <select
+              value={form.package_for}
+              onChange={(e) => setForm((prev) => ({ ...prev, package_for: e.target.value as "public" | "camp" }))}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="public">public</option>
+              <option value="camp">camp</option>
             </select>
           </div>
           <label className="flex items-center gap-2 text-sm text-zinc-700">

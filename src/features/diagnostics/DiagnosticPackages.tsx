@@ -21,6 +21,7 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   diagnostic_provider: "",
   collection_type: "",
   gender_suitability: "",
+  package_for: "public",
   report_duration_hours: null,
   price: null,
   original_price: null,
@@ -197,6 +198,7 @@ export function DiagnosticPackages() {
       diagnostic_provider: row.diagnostic_provider ?? "",
       collection_type: row.collection_type ?? "",
       gender_suitability: row.gender_suitability ?? "",
+      package_for: row.package_for ?? "public",
       report_duration_hours: row.report_duration_hours ?? null,
       price: row.price ?? null,
       original_price: row.original_price ?? null,
@@ -226,6 +228,16 @@ export function DiagnosticPackages() {
     }
   };
 
+  const handleDeletePackage = async (row: DiagnosticPackageListItem) => {
+    if (!window.confirm(`Delete package "${row.package_name}"? This action cannot be undone.`)) return;
+    try {
+      await diagnosticPackagesApi.delete(row.diagnostic_package_id);
+      await fetchPackages();
+    } catch (err) {
+      setError(getApiError(err));
+    }
+  };
+
   const handleSubmit = async () => {
     if (!form.package_name.trim()) {
       setFormError("Package name is required.");
@@ -239,6 +251,7 @@ export function DiagnosticPackages() {
         diagnostic_provider: form.diagnostic_provider?.trim() || null,
         collection_type: form.collection_type?.trim() || null,
         gender_suitability: form.gender_suitability?.trim() || null,
+        package_for: (form.package_for as "public" | "camp") || "public",
         report_duration_hours: form.report_duration_hours ?? null,
         price: form.price ?? null,
         original_price: form.original_price ?? null,
@@ -491,6 +504,7 @@ export function DiagnosticPackages() {
                 keyExtractor={(row) => row.diagnostic_package_id}
                 onView={openDrawer}
                 onEdit={openEdit}
+                onDelete={handleDeletePackage}
                 firstColumnClickableView
               />
             )}
@@ -561,6 +575,17 @@ export function DiagnosticPackages() {
                 <option value="male">male</option>
                 <option value="female">female</option>
                 <option value="both">both</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Package for</label>
+              <select
+                value={form.package_for ?? "public"}
+                onChange={(e) => setForm((prev) => ({ ...prev, package_for: e.target.value as "public" | "camp" }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="public">public</option>
+                <option value="camp">camp</option>
               </select>
             </div>
             <div>
