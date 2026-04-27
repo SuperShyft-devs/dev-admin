@@ -27,10 +27,10 @@ const EMPTY_FORM = {
   parameter_key: "",
   unit: "",
   meaning: "",
-  lower_range_male: "",
-  higher_range_male: "",
-  lower_range_female: "",
-  higher_range_female: "",
+  low_risk_lower_range_male: "",
+  low_risk_higher_range_male: "",
+  low_risk_lower_range_female: "",
+  low_risk_higher_range_female: "",
   causes_when_high: "",
   causes_when_low: "",
   effects_when_high: "",
@@ -97,10 +97,10 @@ export function HealthMetrics() {
       parameter_key: row.parameter_key ?? "",
       unit: row.unit ?? "",
       meaning: row.meaning ?? "",
-      lower_range_male: row.lower_range_male != null ? String(row.lower_range_male) : "",
-      higher_range_male: row.higher_range_male != null ? String(row.higher_range_male) : "",
-      lower_range_female: row.lower_range_female != null ? String(row.lower_range_female) : "",
-      higher_range_female: row.higher_range_female != null ? String(row.higher_range_female) : "",
+      low_risk_lower_range_male: row.low_risk_lower_range_male != null ? String(row.low_risk_lower_range_male) : "",
+      low_risk_higher_range_male: row.low_risk_higher_range_male != null ? String(row.low_risk_higher_range_male) : "",
+      low_risk_lower_range_female: row.low_risk_lower_range_female != null ? String(row.low_risk_lower_range_female) : "",
+      low_risk_higher_range_female: row.low_risk_higher_range_female != null ? String(row.low_risk_higher_range_female) : "",
       causes_when_high: row.causes_when_high ?? "",
       causes_when_low: row.causes_when_low ?? "",
       effects_when_high: row.effects_when_high ?? "",
@@ -171,10 +171,10 @@ export function HealthMetrics() {
         parameter_key: form.parameter_key.trim() ? form.parameter_key.trim() : undefined,
         unit: form.unit.trim() ? form.unit.trim() : undefined,
         meaning: form.meaning.trim() ? form.meaning.trim() : undefined,
-        lower_range_male: toNumberOrUndefined(form.lower_range_male),
-        higher_range_male: toNumberOrUndefined(form.higher_range_male),
-        lower_range_female: toNumberOrUndefined(form.lower_range_female),
-        higher_range_female: toNumberOrUndefined(form.higher_range_female),
+        low_risk_lower_range_male: toNumberOrUndefined(form.low_risk_lower_range_male),
+        low_risk_higher_range_male: toNumberOrUndefined(form.low_risk_higher_range_male),
+        low_risk_lower_range_female: toNumberOrUndefined(form.low_risk_lower_range_female),
+        low_risk_higher_range_female: toNumberOrUndefined(form.low_risk_higher_range_female),
         causes_when_high: form.causes_when_high.trim() ? form.causes_when_high.trim() : undefined,
         causes_when_low: form.causes_when_low.trim() ? form.causes_when_low.trim() : undefined,
         effects_when_high: form.effects_when_high.trim() ? form.effects_when_high.trim() : undefined,
@@ -401,8 +401,8 @@ export function HealthMetrics() {
               <label className="block text-sm font-medium text-zinc-700 mb-1">Lower range (male)</label>
               <input
                 type="number"
-                value={form.lower_range_male}
-                onChange={(e) => setForm((prev) => ({ ...prev, lower_range_male: e.target.value }))}
+                value={form.low_risk_lower_range_male}
+                onChange={(e) => setForm((prev) => ({ ...prev, low_risk_lower_range_male: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
                 step="any"
               />
@@ -411,8 +411,8 @@ export function HealthMetrics() {
               <label className="block text-sm font-medium text-zinc-700 mb-1">Higher range (male)</label>
               <input
                 type="number"
-                value={form.higher_range_male}
-                onChange={(e) => setForm((prev) => ({ ...prev, higher_range_male: e.target.value }))}
+                value={form.low_risk_higher_range_male}
+                onChange={(e) => setForm((prev) => ({ ...prev, low_risk_higher_range_male: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
                 step="any"
               />
@@ -421,8 +421,8 @@ export function HealthMetrics() {
               <label className="block text-sm font-medium text-zinc-700 mb-1">Lower range (female)</label>
               <input
                 type="number"
-                value={form.lower_range_female}
-                onChange={(e) => setForm((prev) => ({ ...prev, lower_range_female: e.target.value }))}
+                value={form.low_risk_lower_range_female}
+                onChange={(e) => setForm((prev) => ({ ...prev, low_risk_lower_range_female: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
                 step="any"
               />
@@ -431,8 +431,8 @@ export function HealthMetrics() {
               <label className="block text-sm font-medium text-zinc-700 mb-1">Higher range (female)</label>
               <input
                 type="number"
-                value={form.higher_range_female}
-                onChange={(e) => setForm((prev) => ({ ...prev, higher_range_female: e.target.value }))}
+                value={form.low_risk_higher_range_female}
+                onChange={(e) => setForm((prev) => ({ ...prev, low_risk_higher_range_female: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
                 step="any"
               />
