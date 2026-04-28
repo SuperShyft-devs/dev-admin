@@ -643,6 +643,7 @@ export function Engagements() {
   const [selected, setSelected] = useState<Engagement | null>(null);
   const [formData, setFormData] = useState<EngagementCreate>({
     engagement_name: "",
+    metsights_engagement_id: "",
     organization_id: 0,
     engagement_type: "doctor",
     engagement_code: "",
@@ -823,6 +824,7 @@ export function Engagements() {
       preset?.assessment_package_id ?? assessmentPackages[0]?.package_id ?? 0;
     setFormData({
       engagement_name: preset?.engagement_name ?? "",
+      metsights_engagement_id: preset?.metsights_engagement_id ?? "",
       organization_id: nextOrganizationId,
       engagement_type: (preset?.engagement_type as EngagementKind | undefined) ?? "doctor",
       engagement_code: preset?.engagement_code ?? "",
@@ -857,6 +859,7 @@ export function Engagements() {
       setSelected(e);
       setFormData({
         engagement_name: e.engagement_name ?? "",
+        metsights_engagement_id: e.metsights_engagement_id ?? "",
         organization_id: e.organization_id ?? 0,
         engagement_type: (e.engagement_type as EngagementKind | undefined) ?? "doctor",
         engagement_code: e.engagement_code ?? "",
@@ -886,6 +889,7 @@ export function Engagements() {
       if (modalMode === "add") {
         const createPayload: EngagementCreate = {
           ...formData,
+          metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
           assessment_package_id:
             formData.assessment_package_id && formData.assessment_package_id > 0
               ? formData.assessment_package_id
@@ -902,6 +906,7 @@ export function Engagements() {
       } else if (selected) {
         const payload = {
           engagement_name: formData.engagement_name,
+          metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
           organization_id: formData.organization_id,
           engagement_type: formData.engagement_type,
           assessment_package_id:
@@ -918,7 +923,6 @@ export function Engagements() {
           slot_duration: formData.slot_duration,
           start_date: formData.start_date,
           end_date: formData.end_date,
-          metsights_engagement_id: (selected as Engagement & { metsights_engagement_id?: string }).metsights_engagement_id ?? undefined,
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1319,6 +1323,7 @@ export function Engagements() {
         {modalMode === "view" && selected ? (
           <div className="space-y-3 text-sm">
             <div><span className="text-zinc-500">Name:</span> {selected.engagement_name ?? "—"}</div>
+            <div><span className="text-zinc-500">Metsights Engagement ID:</span> {selected.metsights_engagement_id ?? "—"}</div>
             <div><span className="text-zinc-500">Code:</span> {selected.engagement_code ?? "—"}</div>
             <div><span className="text-zinc-500">Organisation:</span> {getOrgName(selected.organization_id ?? 0)}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.engagement_type ?? "—"}</div>
@@ -1395,6 +1400,16 @@ export function Engagements() {
                   value={formData.engagement_name ?? ""}
                   onChange={(e) => setFormData({ ...formData, engagement_name: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Metsights Engagement ID</label>
+                <input
+                  type="text"
+                  value={formData.metsights_engagement_id ?? ""}
+                  onChange={(e) => setFormData({ ...formData, metsights_engagement_id: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder="Optional external Metsights ID"
                 />
               </div>
               <div>
