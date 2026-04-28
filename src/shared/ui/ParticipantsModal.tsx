@@ -33,6 +33,12 @@ function modalTitle(source: Source): string {
   }
 }
 
+function formatBool(value: boolean | null | undefined): string {
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return "—";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ParticipantsModal({ open, onClose, source }: ParticipantsModalProps) {
@@ -151,23 +157,56 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
           {/* Scrollable table wrapper */}
           <div className="overflow-x-auto rounded-lg border border-zinc-200">
-            <table className="w-full text-sm min-w-[480px]">
+            <table className="w-full text-sm min-w-[1600px]">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Name
                   </th>
-                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap hidden sm:table-cell">
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Phone
                   </th>
-                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap hidden md:table-cell">
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Email
                   </th>
                   {showEngagement && (
-                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap hidden md:table-cell">
+                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Engagement
                     </th>
                   )}
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Enrollment ID
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Engagement ID
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Engagement Date
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Slot Start Time
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Employee ID
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Department
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Blood Group
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Doctor Consultation
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Nutritionist Consultation
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Doctor + Nutritionist
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    Metsights Profile
+                  </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Status
                   </th>
@@ -176,33 +215,59 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               <tbody>
                 {filtered.map((p, idx) => (
                   <tr
-                    key={`${p.user_id}-${idx}`}
+                    key={`${p.engagement_participant_id ?? p.user_id}-${idx}`}
                     className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                   >
-                    {/* Name + phone (stacked on mobile) */}
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-800">
-                      <div className="font-medium leading-tight">{fullName(p)}</div>
-                      {/* Show phone inline on mobile since phone col is hidden */}
-                      {p.phone && (
-                        <div className="text-xs text-zinc-400 mt-0.5 sm:hidden">
-                          {p.phone}
-                        </div>
-                      )}
+                      <div className="font-medium leading-tight whitespace-nowrap">{fullName(p)}</div>
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.phone || "—"}
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden md:table-cell">
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.email || "—"}
                     </td>
                     {showEngagement && (
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden md:table-cell whitespace-nowrap">
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                         <div>{p.engagement_name || p.engagement_code || "—"}</div>
                         {p.engagement_code && p.engagement_name && (
                           <div className="text-xs text-zinc-400">{p.engagement_code}</div>
                         )}
                       </td>
                     )}
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.engagement_participant_id ?? "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.engagement_id ?? "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.engagement_date || "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.slot_start_time || "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.participants_employee_id || "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.participant_department || "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {p.participant_blood_group || "—"}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.want_doctor_consultation)}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.want_nutritionist_consultation)}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.want_doctor_and_nutritionist_consultation)}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.is_metsights_profile_created)}
+                    </td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3">
                       <StatusBadge status={p.status} />
                     </td>

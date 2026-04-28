@@ -820,12 +820,23 @@ export interface QuestionnaireCategoryUpdate {
 
 // Participants
 export interface Participant {
+  engagement_participant_id?: number;
+  engagement_id?: number;
   user_id: number;
   first_name?: string | null;
   last_name?: string | null;
   phone?: string | null;
   email?: string | null;
   status?: string | null;
+  slot_start_time?: string | null;
+  engagement_date?: string | null;
+  participants_employee_id?: string | null;
+  participant_department?: string | null;
+  participant_blood_group?: string | null;
+  want_doctor_consultation?: boolean | null;
+  want_nutritionist_consultation?: boolean | null;
+  want_doctor_and_nutritionist_consultation?: boolean | null;
+  is_metsights_profile_created?: boolean | null;
   engagement_name?: string | null;
   engagement_code?: string | null;
   engagement_type?: string | null;
