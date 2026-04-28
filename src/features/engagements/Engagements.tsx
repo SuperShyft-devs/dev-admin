@@ -655,6 +655,8 @@ export function Engagements() {
     slot_duration: 60,
     start_date: "",
     end_date: "",
+    create_profile_on_metsights: false,
+    enroll_for_fitprint_full: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -836,6 +838,8 @@ export function Engagements() {
       slot_duration: preset?.slot_duration ?? 60,
       start_date: preset?.start_date ?? today,
       end_date: preset?.end_date ?? today,
+      create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
+      enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -871,6 +875,8 @@ export function Engagements() {
         slot_duration: e.slot_duration ?? 60,
         start_date: (e.start_date ?? "").toString().slice(0, 10),
         end_date: (e.end_date ?? "").toString().slice(0, 10),
+        create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
+        enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -898,6 +904,8 @@ export function Engagements() {
             formData.diagnostic_package_id && formData.diagnostic_package_id > 0
               ? formData.diagnostic_package_id
               : null,
+          create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
+          enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -923,6 +931,8 @@ export function Engagements() {
           slot_duration: formData.slot_duration,
           start_date: formData.start_date,
           end_date: formData.end_date,
+          create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
+          enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1333,6 +1343,8 @@ export function Engagements() {
             <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
             <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
             <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
+            <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
+            <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-zinc-500">Participants:</span>
               <span>{selected.participant_count ?? 0}</span>
@@ -1513,6 +1525,52 @@ export function Engagements() {
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Create Profile On Metsights</label>
+                <div className="flex gap-5 py-2">
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="create_profile_on_metsights"
+                      checked={Boolean(formData.create_profile_on_metsights)}
+                      onChange={() => setFormData({ ...formData, create_profile_on_metsights: true })}
+                    />
+                    Yes
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="create_profile_on_metsights"
+                      checked={!formData.create_profile_on_metsights}
+                      onChange={() => setFormData({ ...formData, create_profile_on_metsights: false })}
+                    />
+                    No
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Enroll For FitPrint Full</label>
+                <div className="flex gap-5 py-2">
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="enroll_for_fitprint_full"
+                      checked={Boolean(formData.enroll_for_fitprint_full)}
+                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
+                    />
+                    Yes
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="enroll_for_fitprint_full"
+                      checked={!formData.enroll_for_fitprint_full}
+                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
+                    />
+                    No
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>

@@ -548,6 +548,8 @@ export interface Engagement {
   end_date?: string | null;
   status?: string | null;
   participant_count?: number | null;
+  create_profile_on_metsights?: boolean | null;
+  enroll_for_fitprint_full?: boolean | null;
 }
 
 export interface EngagementListItem {
@@ -566,6 +568,8 @@ export interface EngagementListItem {
   end_date?: string | null;
   status?: string | null;
   participant_count?: number | null;
+  create_profile_on_metsights?: boolean | null;
+  enroll_for_fitprint_full?: boolean | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -583,6 +587,8 @@ export interface EngagementCreate {
   slot_duration: number;
   start_date: string;
   end_date: string;
+  create_profile_on_metsights?: boolean;
+  enroll_for_fitprint_full?: boolean;
 }
 
 export interface MetsightsImportRowResult {
@@ -837,6 +843,9 @@ export interface Participant {
   want_nutritionist_consultation?: boolean | null;
   want_doctor_and_nutritionist_consultation?: boolean | null;
   is_metsights_profile_created?: boolean | null;
+  is_profile_created_on_metsights?: boolean | null;
+  is_primary_record_id_synced?: boolean | null;
+  is_fitprint_record_id_synced?: boolean | null;
   engagement_name?: string | null;
   engagement_code?: string | null;
   engagement_type?: string | null;

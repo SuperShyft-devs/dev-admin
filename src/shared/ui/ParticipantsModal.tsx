@@ -88,9 +88,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       })
     : participants;
 
-  // Whether to show engagement columns (org view has multiple engagements)
-  const showEngagement = source.kind === "organization";
-
   return (
     <Modal
       open={open}
@@ -157,7 +154,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
           {/* Scrollable table wrapper */}
           <div className="overflow-x-auto rounded-lg border border-zinc-200">
-            <table className="w-full text-sm min-w-[1600px]">
+            <table className="w-full text-sm min-w-[1400px]">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
@@ -169,14 +166,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Email
                   </th>
-                  {showEngagement && (
-                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Engagement
-                    </th>
-                  )}
-                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                    Enrollment ID
-                  </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Engagement ID
                   </th>
@@ -185,9 +174,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Slot Start Time
-                  </th>
-                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                    Employee ID
                   </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     Department
@@ -205,10 +191,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     Doctor + Nutritionist
                   </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                    Metsights Profile
+                    Profile Created On Metsights
                   </th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                    Status
+                    Primary Record Synced
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    FitPrint Record Synced
                   </th>
                 </tr>
               </thead>
@@ -227,17 +216,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.email || "—"}
                     </td>
-                    {showEngagement && (
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                        <div>{p.engagement_name || p.engagement_code || "—"}</div>
-                        {p.engagement_code && p.engagement_name && (
-                          <div className="text-xs text-zinc-400">{p.engagement_code}</div>
-                        )}
-                      </td>
-                    )}
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                      {p.engagement_participant_id ?? "—"}
-                    </td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.engagement_id ?? "—"}
                     </td>
@@ -246,9 +224,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.slot_start_time || "—"}
-                    </td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                      {p.participants_employee_id || "—"}
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {p.participant_department || "—"}
@@ -266,10 +241,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       {formatBool(p.want_doctor_and_nutritionist_consultation)}
                     </td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                      {formatBool(p.is_metsights_profile_created)}
+                      {formatBool(p.is_profile_created_on_metsights)}
                     </td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3">
-                      <StatusBadge status={p.status} />
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.is_primary_record_id_synced)}
+                    </td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                      {formatBool(p.is_fitprint_record_id_synced)}
                     </td>
                   </tr>
                 ))}
@@ -279,22 +257,5 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         </>
       )}
     </Modal>
-  );
-}
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ status }: { status?: string | null }) {
-  const s = (status ?? "").toLowerCase();
-  const cls =
-    s === "active"
-      ? "bg-emerald-50 text-emerald-700"
-      : s === "inactive"
-      ? "bg-zinc-100 text-zinc-500"
-      : "bg-amber-50 text-amber-700";
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-      {status || "—"}
-    </span>
   );
 }
