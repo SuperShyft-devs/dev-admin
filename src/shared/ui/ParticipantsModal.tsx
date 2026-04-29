@@ -51,15 +51,29 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     setLoading(true);
     setError(null);
     try {
-      let res;
-      if (source.kind === "engagement-code") {
-        res = await participantsApi.byEngagementCode(source.code);
-      } else if (source.kind === "public") {
-        res = await participantsApi.public();
+      if (source.kind === "organization") {
+        const res = await participantsApi.byOrganization(source.orgId);
+        setParticipants(res.data.data ?? []);
       } else {
-        res = await participantsApi.byOrganization(source.orgId);
+        const limit = 100;
+        let page = 1;
+        let total = 0;
+        const all: Participant[] = [];
+
+        do {
+          const res =
+            source.kind === "engagement-code"
+              ? await participantsApi.byEngagementCode(source.code, { page, limit })
+              : await participantsApi.public({ page, limit });
+          const chunk = res.data.data ?? [];
+          total = Number(res.data.meta?.total ?? chunk.length);
+          all.push(...chunk);
+          page += 1;
+          if (chunk.length === 0) break;
+        } while (all.length < total);
+
+        setParticipants(all);
       }
-      setParticipants(res.data.data ?? []);
     } catch (err) {
       setError(getApiError(err));
     } finally {

@@ -854,14 +854,16 @@ export interface Participant {
 
 export const participantsApi = {
   // B2B: participants for a specific engagement by code
-  byEngagementCode: (code: string) =>
+  byEngagementCode: (code: string, params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { total: number } }>(
-      `/engagements/code/${encodeURIComponent(code)}/participants`
+      `/engagements/code/${encodeURIComponent(code)}/participants`,
+      { params }
     ),
   // B2C: participants for public/open engagements
-  public: () =>
+  public: (params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { total: number } }>(
-      "/engagements/public/participants"
+      "/engagements/public/participants",
+      { params }
     ),
   // All participants across all engagements for an org
   byOrganization: (orgId: number) =>
