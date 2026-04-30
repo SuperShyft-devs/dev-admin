@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Loader2, Users } from "lucide-react";
+import { Search, Loader2, Users, Download } from "lucide-react";
 import { Modal } from "./Modal";
 import { participantsApi, type Participant, getApiError } from "../../lib/api";
 
@@ -37,6 +37,20 @@ function formatBool(value: boolean | null | undefined): string {
   if (value === true) return "Yes";
   if (value === false) return "No";
   return "—";
+}
+
+function toCsvCell(value: unknown): string {
+  if (value == null) return "";
+  const text =
+    typeof value === "object" ? JSON.stringify(value) : String(value);
+  const needsQuotes =
+    text.includes(",") ||
+    text.includes('"') ||
+    text.includes("\n") ||
+    text.includes("\r");
+  if (!needsQuotes) return text;
+  const escaped = text.replace(/"/g, '""');
+  return `"${escaped}"`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -102,6 +116,69 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       })
     : participants;
 
+  const handleExportCsv = () => {
+    if (participants.length === 0) return;
+
+    const preferredColumns = [
+      "engagement_participant_id",
+      "engagement_id",
+      "engagement_name",
+      "engagement_code",
+      "engagement_type",
+      "engagement_date",
+      "slot_start_time",
+      "user_id",
+      "first_name",
+      "last_name",
+      "phone",
+      "email",
+      "status",
+      "participants_employee_id",
+      "participant_department",
+      "participant_blood_group",
+      "want_doctor_consultation",
+      "want_nutritionist_consultation",
+      "want_doctor_and_nutritionist_consultation",
+      "is_metsights_profile_created",
+      "is_profile_created_on_metsights",
+      "is_primary_record_id_synced",
+      "is_fitprint_record_id_synced",
+      "city",
+    ];
+
+    const discoveredColumns = new Set<string>();
+    participants.forEach((participant) => {
+      Object.keys(participant as Record<string, unknown>).forEach((key) => {
+        discoveredColumns.add(key);
+      });
+    });
+
+    const columns = [
+      ...preferredColumns.filter((key) => discoveredColumns.has(key)),
+      ...Array.from(discoveredColumns).filter((key) => !preferredColumns.includes(key)).sort(),
+    ];
+
+    const lines = [
+      columns.map((key) => toCsvCell(key)).join(","),
+      ...participants.map((participant) =>
+        columns.map((key) => toCsvCell((participant as Record<string, unknown>)[key])).join(",")
+      ),
+    ];
+
+    const csv = lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const codePart = source.kind === "engagement-code" ? source.code : source.kind;
+    const datePart = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute("download", `participants-${codePart}-${datePart}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Modal
       open={open}
@@ -110,8 +187,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       maxWidthClassName="max-w-3xl"
     >
       {/* Search */}
-      <div className="mb-4">
-        <div className="relative">
+      <div className="mb-4 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
@@ -121,6 +198,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={participants.length === 0 || loading}
+          className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="w-4 h-4" />
+          Export CSV
+        </button>
       </div>
 
       {/* State: loading */}
