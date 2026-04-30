@@ -53,6 +53,10 @@ function toCsvCell(value: unknown): string {
   return `"${escaped}"`;
 }
 
+function participantToRecord(participant: Participant): Record<string, unknown> {
+  return participant as unknown as Record<string, unknown>;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ParticipantsModal({ open, onClose, source }: ParticipantsModalProps) {
@@ -148,7 +152,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
     const discoveredColumns = new Set<string>();
     participants.forEach((participant) => {
-      Object.keys(participant as Record<string, unknown>).forEach((key) => {
+      const row = participantToRecord(participant);
+      Object.keys(row).forEach((key) => {
         discoveredColumns.add(key);
       });
     });
@@ -160,9 +165,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
     const lines = [
       columns.map((key) => toCsvCell(key)).join(","),
-      ...participants.map((participant) =>
-        columns.map((key) => toCsvCell((participant as Record<string, unknown>)[key])).join(",")
-      ),
+      ...participants.map((participant) => {
+        const row = participantToRecord(participant);
+        return columns.map((key) => toCsvCell(row[key])).join(",");
+      }),
     ];
 
     const csv = lines.join("\r\n");
