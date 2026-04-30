@@ -870,6 +870,10 @@ export const participantsApi = {
     api.get<{ data: Participant[]; meta?: { total: number } }>(
       `/organizations/${orgId}/participants`
     ),
+  removeFromEngagement: (engagementId: number, userId: number) =>
+    api.delete<{ data: { engagement_id: number; user_id: number } }>(
+      `/engagements/${engagementId}/participants/${userId}`
+    ),
 };
 
 // Onboarding Assistants

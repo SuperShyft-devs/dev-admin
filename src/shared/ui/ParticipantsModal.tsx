@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Loader2, Users, Download } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle } from "lucide-react";
 import { Modal } from "./Modal";
 import { participantsApi, type Participant, getApiError } from "../../lib/api";
 
@@ -64,6 +64,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Participant | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -119,6 +122,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         );
       })
     : participants;
+  const canDeleteRows = source.kind === "engagement-code";
 
   const handleExportCsv = () => {
     if (participants.length === 0) return;
@@ -185,13 +189,32 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     URL.revokeObjectURL(url);
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.engagement_id || !deleteTarget.user_id) {
+      setDeleteError("Participant identifiers are missing.");
+      return;
+    }
+    try {
+      setDeleteLoading(true);
+      setDeleteError(null);
+      await participantsApi.removeFromEngagement(deleteTarget.engagement_id, deleteTarget.user_id);
+      setDeleteTarget(null);
+      await fetchParticipants();
+    } catch (err) {
+      setDeleteError(getApiError(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={modalTitle(source)}
-      maxWidthClassName="max-w-3xl"
-    >
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={modalTitle(source)}
+        maxWidthClassName="max-w-3xl"
+      >
       {/* Search */}
       <div className="mb-4 flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
@@ -260,7 +283,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
           {/* Scrollable table wrapper */}
           <div className="overflow-x-auto rounded-lg border border-zinc-200">
-            <table className="w-full text-sm min-w-[1400px]">
+            <table className="w-full text-sm min-w-[1500px]">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
@@ -305,6 +328,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                     FitPrint Record Synced
                   </th>
+                  {canDeleteRows && (
+                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -355,6 +383,23 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                       {formatBool(p.is_fitprint_record_id_synced)}
                     </td>
+                    {canDeleteRows && (
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleteTarget(p);
+                          }}
+                          className="inline-flex items-center justify-center p-2 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete participant from this engagement"
+                          aria-label="Delete participant from this engagement"
+                          disabled={deleteLoading}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -362,6 +407,49 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           </div>
         </>
       )}
-    </Modal>
+      </Modal>
+
+      {canDeleteRows && deleteTarget && (
+        <Modal
+          open={!!deleteTarget}
+          onClose={() => (deleteLoading ? undefined : setDeleteTarget(null))}
+          title="Delete Participant Engagement Data"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+              <p className="text-sm text-red-700">
+                This will permanently remove this participant from the selected engagement and delete linked
+                assessments, questionnaire responses, and generated reports for this engagement only.
+              </p>
+            </div>
+            <p className="text-sm text-zinc-700">
+              Are you sure you want to continue for <span className="font-semibold">{fullName(deleteTarget)}</span>?
+            </p>
+            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                disabled={deleteLoading}
+              >
+                {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
