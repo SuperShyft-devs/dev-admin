@@ -729,7 +729,17 @@ export function Engagements() {
     assessmentPackagesApi.list().then((r) => setAssessmentPackages(r.data.data));
   }, []);
   const fetchDiagnostics = useCallback(() => {
-    diagnosticPackagesApi.list().then((r) => setDiagnosticPackages(r.data.data));
+    Promise.all([
+      diagnosticPackagesApi.list({ package_for: "camp" }),
+      diagnosticPackagesApi.list({ package_for: "public" }),
+    ])
+      .then(([campRes, publicRes]) => {
+        const merged = [...(campRes.data.data ?? []), ...(publicRes.data.data ?? [])];
+        const uniqueById = new Map<number, DiagnosticPackageListItem>();
+        merged.forEach((pkg) => uniqueById.set(pkg.diagnostic_package_id, pkg));
+        setDiagnosticPackages(Array.from(uniqueById.values()));
+      })
+      .catch((err) => setError(getApiError(err)));
   }, []);
 
   useEffect(() => {
