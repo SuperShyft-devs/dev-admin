@@ -1005,6 +1005,7 @@ export interface DiagnosticTest {
   test_id: number;
   group_id: number;
   test_name: string;
+  healthians_parameter_id?: number | null;
   parameter_key?: string | null;
   unit?: string | null;
   meaning?: string | null;
@@ -1069,6 +1070,7 @@ export interface DiagnosticPackageListItem {
   diagnostic_package_id: number;
   package_name: string;
   diagnostic_provider?: string | null;
+  healthians_camp_id?: number | null;
   created_by_user_id?: number | null;
   no_of_tests?: number | null;
   report_duration_hours?: number | null;
@@ -1095,6 +1097,7 @@ export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
 export interface DiagnosticPackageCreate {
   package_name: string;
   diagnostic_provider?: string | null;
+  healthians_camp_id?: number | null;
   /** Public (false) vs custom/owned (true). Non-staff must use true; staff may use either. */
   custom?: boolean;
   report_duration_hours?: number | null;
@@ -1305,6 +1308,7 @@ export interface DiagnosticTestStandalone {
   test_id: number;
   parameter_type: HealthParameterType;
   test_name: string;
+  healthians_parameter_id?: number | null;
   parameter_key?: string | null;
   unit?: string | null;
   meaning?: string | null;
@@ -1379,6 +1383,7 @@ export interface PackageTestsResponse {
 export type HealthParameterCreatePayload = {
   parameter_type: HealthParameterType;
   test_name: string;
+  healthians_parameter_id?: number | null;
   parameter_key?: string | null;
   unit?: string | null;
   meaning?: string | null;
@@ -1410,6 +1415,7 @@ export type HealthParameterCreatePayload = {
 
 export type HealthParameterUpdatePayload = {
   test_name?: string;
+  healthians_parameter_id?: number | null;
   parameter_key?: string | null;
   unit?: string | null;
   meaning?: string | null;

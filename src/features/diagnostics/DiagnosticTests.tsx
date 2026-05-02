@@ -47,6 +47,7 @@ type RangeKey = (typeof RANGE_KEYS_MALE)[number] | (typeof RANGE_KEYS_FEMALE)[nu
 
 const EMPTY_FORM: Record<string, string | boolean> = {
   test_name: "",
+  healthians_parameter_id: "",
   is_available: true,
   price: "",
   original_price: "",
@@ -261,6 +262,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
     const toStr = (v: number | null | undefined) => (v != null ? String(v) : "");
     setForm({
       test_name: row.test_name,
+      healthians_parameter_id: toStr(row.healthians_parameter_id),
       is_available: row.is_available,
       price: toStr(row.price),
       original_price: toStr(row.original_price),
@@ -344,6 +346,7 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
 
       const fields: HealthParameterUpdatePayload = {
         test_name: (form.test_name as string).trim(),
+        healthians_parameter_id: toNumberOrUndefined(form.healthians_parameter_id as string),
         is_available: form.is_available as boolean,
         parameter_key: s("parameter_key"),
         unit: s("unit"),
@@ -496,6 +499,15 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
                 onChange={(e) => setForm((prev) => ({ ...prev, test_name: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
                 required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Parameter ID</label>
+              <input
+                type="number"
+                value={form.healthians_parameter_id as string}
+                onChange={(e) => setForm((prev) => ({ ...prev, healthians_parameter_id: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
               />
             </div>
             <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none">
