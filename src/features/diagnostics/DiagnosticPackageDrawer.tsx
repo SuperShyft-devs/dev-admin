@@ -680,6 +680,20 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                   {assignGroupsNote}
                 </div>
               )}
+              {(() => {
+                const allTests = testGroups.flatMap((g) => g.tests ?? []);
+                const totalTests = allTests.length;
+                const mappedTests = allTests.filter((t) => t.healthians_parameter_id != null).length;
+                if (totalTests === 0) return null;
+                return (
+                  <div className="flex items-center gap-2 px-1 text-sm text-zinc-600">
+                    <span className="font-medium text-zinc-900">{mappedTests}</span>
+                    <span>out of</span>
+                    <span className="font-medium text-zinc-900">{totalTests}</span>
+                    <span>tests mapped</span>
+                  </div>
+                );
+              })()}
               <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
                 <h3 className="text-sm font-medium text-zinc-900">Assigned Test Groups</h3>
                 {testGroups.length === 0 ? (
