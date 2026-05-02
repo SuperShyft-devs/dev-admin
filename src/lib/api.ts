@@ -1506,6 +1506,25 @@ export const diagnosticTestGroupsApi = {
     ),
 };
 
+// Healthians integration
+export interface HealthiansConstituent {
+  id: string;
+  name: string;
+}
+
+export interface HealthiansConstituentsResponse {
+  constituents: HealthiansConstituent[];
+  package_name?: string | null;
+}
+
+export const healthiansApi = {
+  getConstituents: (healthians_camp_id: number) =>
+    api.post<{ data: HealthiansConstituentsResponse }>(
+      "/diagnostics/healthians/constituents",
+      { healthians_camp_id }
+    ),
+};
+
 // Payments / bookings (employee)
 export interface BookingListItem {
   booking_id: number;

@@ -12,7 +12,9 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
+  Eye,
   GripVertical,
+  Link,
   Pencil,
   Plus,
   Search,
@@ -35,6 +37,7 @@ import {
 } from "../../lib/api";
 import { SortableItem } from "../../components/SortableItem";
 import { Modal } from "../../shared/ui/Modal";
+import { HealthiansMapModal } from "./HealthiansMapModal";
 
 interface DiagnosticPackageDrawerProps {
   open: boolean;
@@ -79,6 +82,11 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
   const [editingPrepId, setEditingPrepId] = useState<number | null>(null);
 
   const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [mapModalTestId, setMapModalTestId] = useState<number>(0);
+  const [mapModalTestName, setMapModalTestName] = useState("");
+  const [mapModalCurrentParamId, setMapModalCurrentParamId] = useState<number | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -723,13 +731,32 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                                       <div key={test.test_id} className="border border-zinc-200 rounded-lg px-3 py-2 bg-white">
                                         <div className="flex items-center justify-between gap-2">
                                           <p className="text-sm text-zinc-900">{test.test_name}</p>
-                                          <span
-                                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                                              test.is_available ? "bg-green-50 text-green-700" : "bg-zinc-100 text-zinc-500"
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setMapModalTestId(test.test_id);
+                                              setMapModalTestName(test.test_name);
+                                              setMapModalCurrentParamId(test.healthians_parameter_id ?? null);
+                                              setMapModalOpen(true);
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                                              test.healthians_parameter_id
+                                                ? "border border-green-200 text-green-700 hover:bg-green-50"
+                                                : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
                                             }`}
+                                            title={
+                                              test.healthians_parameter_id
+                                                ? `Mapped (ID: ${test.healthians_parameter_id})`
+                                                : "Map to Healthians parameter"
+                                            }
                                           >
-                                            {test.is_available ? "Yes" : "No"}
-                                          </span>
+                                            {test.healthians_parameter_id ? (
+                                              <Eye className="w-3.5 h-3.5" />
+                                            ) : (
+                                              <Link className="w-3.5 h-3.5" />
+                                            )}
+                                            {test.healthians_parameter_id ? "View" : "Map"}
+                                          </button>
                                         </div>
                                       </div>
                                     ))
@@ -1074,6 +1101,20 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
             </div>
           </div>
         </Modal>
+
+        <HealthiansMapModal
+          open={mapModalOpen}
+          onClose={() => setMapModalOpen(false)}
+          testId={mapModalTestId}
+          testName={mapModalTestName}
+          currentHealthiansParameterId={mapModalCurrentParamId}
+          diagnosticProvider={detail?.diagnostic_provider}
+          healthiansCampId={detail?.healthians_camp_id}
+          onMapped={() => {
+            void fetchData();
+            onUpdated?.();
+          }}
+        />
       </div>
     </div>
   );
