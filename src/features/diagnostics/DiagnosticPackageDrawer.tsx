@@ -37,7 +37,7 @@ import {
 } from "../../lib/api";
 import { SortableItem } from "../../components/SortableItem";
 import { Modal } from "../../shared/ui/Modal";
-import { HealthiansMapModal } from "./HealthiansMapModal";
+import { HealthiansMapModal, type MapModalTest } from "./HealthiansMapModal";
 
 interface DiagnosticPackageDrawerProps {
   open: boolean;
@@ -1124,9 +1124,21 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
           currentHealthiansParameterId={mapModalCurrentParamId}
           diagnosticProvider={detail?.diagnostic_provider}
           healthiansCampId={detail?.healthians_camp_id}
+          allTests={testGroups.flatMap((g) =>
+            (g.tests ?? []).map((t) => ({
+              test_id: t.test_id,
+              test_name: t.test_name,
+              healthians_parameter_id: t.healthians_parameter_id,
+            }))
+          )}
           onMapped={() => {
             void fetchData();
             onUpdated?.();
+          }}
+          onSwitchTest={(next: MapModalTest) => {
+            setMapModalTestId(next.test_id);
+            setMapModalTestName(next.test_name);
+            setMapModalCurrentParamId(next.healthians_parameter_id ?? null);
           }}
         />
       </div>

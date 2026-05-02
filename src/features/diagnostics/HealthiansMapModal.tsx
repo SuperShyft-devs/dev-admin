@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, Link, Check } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Search, Link, Check, ChevronRight } from "lucide-react";
 import {
   diagnosticTestsApi,
   getApiError,
@@ -7,6 +7,12 @@ import {
   type HealthiansConstituent,
 } from "../../lib/api";
 import { Modal } from "../../shared/ui/Modal";
+
+export interface MapModalTest {
+  test_id: number;
+  test_name: string;
+  healthians_parameter_id?: number | null;
+}
 
 interface HealthiansMapModalProps {
   open: boolean;
@@ -16,7 +22,9 @@ interface HealthiansMapModalProps {
   currentHealthiansParameterId?: number | null;
   diagnosticProvider: string | null | undefined;
   healthiansCampId: number | null | undefined;
+  allTests: MapModalTest[];
   onMapped: () => void;
+  onSwitchTest: (test: MapModalTest) => void;
 }
 
 export function HealthiansMapModal({
@@ -27,7 +35,9 @@ export function HealthiansMapModal({
   currentHealthiansParameterId,
   diagnosticProvider,
   healthiansCampId,
+  allTests,
   onMapped,
+  onSwitchTest,
 }: HealthiansMapModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,20 +47,26 @@ export function HealthiansMapModal({
   const [confirmConstituent, setConfirmConstituent] =
     useState<HealthiansConstituent | null>(null);
   const [mapping, setMapping] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const providerValid =
     diagnosticProvider?.toLowerCase() === "healthians";
   const campIdValid = healthiansCampId != null && healthiansCampId > 0;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setDataLoaded(false);
+      return;
+    }
     setSearch("");
     setConfirmConstituent(null);
     setError(null);
-    setConstituents([]);
-    setPackageName(null);
 
     if (!providerValid || !campIdValid) return;
+    if (dataLoaded) return;
+
+    setConstituents([]);
+    setPackageName(null);
 
     let cancelled = false;
     (async () => {
@@ -61,6 +77,7 @@ export function HealthiansMapModal({
         const data = res.data.data;
         setConstituents(data.constituents ?? []);
         setPackageName(data.package_name ?? null);
+        setDataLoaded(true);
       } catch (err) {
         if (!cancelled) setError(getApiError(err));
       } finally {
@@ -70,7 +87,19 @@ export function HealthiansMapModal({
     return () => {
       cancelled = true;
     };
-  }, [open, providerValid, campIdValid, healthiansCampId]);
+  }, [open, providerValid, campIdValid, healthiansCampId, dataLoaded]);
+
+  const nextUnmappedTest = useMemo(() => {
+    const currentIdx = allTests.findIndex((t) => t.test_id === testId);
+    if (currentIdx === -1) return null;
+    for (let i = currentIdx + 1; i < allTests.length; i++) {
+      if (allTests[i].healthians_parameter_id == null) return allTests[i];
+    }
+    for (let i = 0; i < currentIdx; i++) {
+      if (allTests[i].healthians_parameter_id == null) return allTests[i];
+    }
+    return null;
+  }, [allTests, testId]);
 
   const mappedConstituent = useMemo(() => {
     if (currentHealthiansParameterId == null) return null;
@@ -87,22 +116,51 @@ export function HealthiansMapModal({
     return constituents.filter((c) => c.name.toLowerCase().includes(q));
   }, [constituents, search]);
 
-  const handleMap = async (constituent: HealthiansConstituent) => {
-    setMapping(true);
-    setError(null);
-    try {
-      await diagnosticTestsApi.update(testId, {
-        healthians_parameter_id: parseInt(constituent.id, 10),
-      });
-      onMapped();
-      onClose();
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setMapping(false);
-      setConfirmConstituent(null);
-    }
-  };
+  const handleMapAndNext = useCallback(
+    async (constituent: HealthiansConstituent) => {
+      setMapping(true);
+      setError(null);
+      try {
+        await diagnosticTestsApi.update(testId, {
+          healthians_parameter_id: parseInt(constituent.id, 10),
+        });
+        onMapped();
+        setConfirmConstituent(null);
+        setSearch("");
+
+        if (nextUnmappedTest) {
+          onSwitchTest(nextUnmappedTest);
+        } else {
+          onClose();
+        }
+      } catch (err) {
+        setError(getApiError(err));
+      } finally {
+        setMapping(false);
+      }
+    },
+    [testId, nextUnmappedTest, onMapped, onSwitchTest, onClose]
+  );
+
+  const handleMapAndClose = useCallback(
+    async (constituent: HealthiansConstituent) => {
+      setMapping(true);
+      setError(null);
+      try {
+        await diagnosticTestsApi.update(testId, {
+          healthians_parameter_id: parseInt(constituent.id, 10),
+        });
+        onMapped();
+        onClose();
+      } catch (err) {
+        setError(getApiError(err));
+      } finally {
+        setMapping(false);
+        setConfirmConstituent(null);
+      }
+    },
+    [testId, onMapped, onClose]
+  );
 
   const renderContent = () => {
     if (!providerValid) {
@@ -264,23 +322,61 @@ export function HealthiansMapModal({
             ?
           </p>
 
+          {nextUnmappedTest && (
+            <p className="text-xs text-zinc-500">
+              Next unmapped test:{" "}
+              <span className="font-medium text-zinc-700">
+                {nextUnmappedTest.test_name}
+              </span>
+            </p>
+          )}
+
           {error && (
             <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={mapping}
-              onClick={() =>
-                confirmConstituent && void handleMap(confirmConstituent)
-              }
-              className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
-            >
-              {mapping ? "Mapping..." : "Yes, Map"}
-            </button>
+          <div className="flex flex-wrap gap-2">
+            {nextUnmappedTest ? (
+              <>
+                <button
+                  type="button"
+                  disabled={mapping}
+                  onClick={() =>
+                    confirmConstituent &&
+                    void handleMapAndNext(confirmConstituent)
+                  }
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {mapping ? "Mapping..." : "Yes, Next"}
+                  {!mapping && <ChevronRight className="w-4 h-4" />}
+                </button>
+                <button
+                  type="button"
+                  disabled={mapping}
+                  onClick={() =>
+                    confirmConstituent &&
+                    void handleMapAndClose(confirmConstituent)
+                  }
+                  className="px-4 py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 text-sm font-medium disabled:opacity-50"
+                >
+                  Map & Close
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={mapping}
+                onClick={() =>
+                  confirmConstituent &&
+                  void handleMapAndClose(confirmConstituent)
+                }
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {mapping ? "Mapping..." : "Yes, Map"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setConfirmConstituent(null)}
