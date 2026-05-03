@@ -147,7 +147,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       "want_doctor_consultation",
       "want_nutritionist_consultation",
       "want_doctor_and_nutritionist_consultation",
-      "is_metsights_profile_created",
       "is_profile_created_on_metsights",
       "is_primary_record_id_synced",
       "is_fitprint_record_id_synced",

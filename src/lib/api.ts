@@ -842,7 +842,6 @@ export interface Participant {
   want_doctor_consultation?: boolean | null;
   want_nutritionist_consultation?: boolean | null;
   want_doctor_and_nutritionist_consultation?: boolean | null;
-  is_metsights_profile_created?: boolean | null;
   is_profile_created_on_metsights?: boolean | null;
   is_primary_record_id_synced?: boolean | null;
   is_fitprint_record_id_synced?: boolean | null;
