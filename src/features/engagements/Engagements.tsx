@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Pencil,
   Upload,
+  ClipboardList,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -24,10 +25,12 @@ import {
   diagnosticPackagesApi,
   employeesApi,
   onboardingAssistantsApi,
+  engagementQuestionnaireStatusApi,
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
   type EngagementKind,
+  type EngagementQuestionnaireStatusResponse,
   type DiagnosticPackageListItem,
   type OrganizationListItem,
   type AssessmentPackage,
@@ -707,6 +710,12 @@ export function Engagements() {
   const [addChecklistPromptEngagementId, setAddChecklistPromptEngagementId] = useState<number | null>(null);
   const [addChecklistPromptBusy, setAddChecklistPromptBusy] = useState(false);
 
+  // ── Questionnaire Status state ──────────────────────────────
+  const [qStatusOpen, setQStatusOpen] = useState(false);
+  const [qStatusData, setQStatusData] = useState<EngagementQuestionnaireStatusResponse | null>(null);
+  const [qStatusLoading, setQStatusLoading] = useState(false);
+  const [qStatusError, setQStatusError] = useState<string | null>(null);
+
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
     setChecklistModalOpen(true);
@@ -820,6 +829,9 @@ export function Engagements() {
   }, [search, statusFilter, typeFilter, cityFilter]);
 
   const openView = (row: EngagementListItem) => {
+    setQStatusOpen(false);
+    setQStatusData(null);
+    setQStatusError(null);
     engagementsApi.get(row.engagement_id).then((res) => {
       setSelected(res.data.data);
       setModalMode("view");
@@ -1405,6 +1417,135 @@ export function Engagements() {
               Metsights export: id, Created Date, First Name, Last Name, Phone #, Email, Gender, Age. Slots use
               engagement start date (or end date) at 10:00.
             </p>
+
+            {/* ── Questionnaire Status Section ── */}
+            <div className="pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (qStatusOpen) {
+                    setQStatusOpen(false);
+                    return;
+                  }
+                  setQStatusOpen(true);
+                  if (!qStatusData && !qStatusLoading) {
+                    setQStatusLoading(true);
+                    setQStatusError(null);
+                    try {
+                      const res = await engagementQuestionnaireStatusApi.get(selected.engagement_id);
+                      setQStatusData(res.data.data);
+                    } catch (err) {
+                      setQStatusError(getApiError(err));
+                    } finally {
+                      setQStatusLoading(false);
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-700 hover:text-zinc-900"
+              >
+                {qStatusOpen ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+                <ClipboardList className="w-4 h-4" />
+                Questionnaire Status
+              </button>
+
+              {qStatusOpen && (
+                <div className="mt-3">
+                  {qStatusLoading && (
+                    <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-xs">Loading…</span>
+                    </div>
+                  )}
+
+                  {!qStatusLoading && qStatusError && (
+                    <p className="text-sm text-red-600">{qStatusError}</p>
+                  )}
+
+                  {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length === 0 && (
+                    <p className="text-xs text-zinc-400 italic">
+                      No assessment instances found for this engagement.
+                    </p>
+                  )}
+
+                  {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length > 0 && (
+                    <div className="space-y-3">
+                      {/* Summary: 3 stat cards */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-center">
+                          <div className="text-lg font-semibold text-amber-700">{qStatusData.summary.drafted}</div>
+                          <div className="text-[11px] text-amber-600">Drafted</div>
+                        </div>
+                        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-center">
+                          <div className="text-lg font-semibold text-emerald-700">{qStatusData.summary.submitted}</div>
+                          <div className="text-[11px] text-emerald-600">Submitted</div>
+                        </div>
+                        <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-center">
+                          <div className="text-lg font-semibold text-zinc-500">{qStatusData.summary.not_started}</div>
+                          <div className="text-[11px] text-zinc-500">Not Started</div>
+                        </div>
+                      </div>
+
+                      {/* Participants table */}
+                      <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-zinc-200 bg-zinc-50">
+                              <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
+                              <th className="px-3 py-2 text-left font-medium text-zinc-600">Package</th>
+                              <th className="px-3 py-2 text-center font-medium text-zinc-600">State</th>
+                              <th className="px-3 py-2 text-center font-medium text-zinc-600">Responses</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {qStatusData.participants.map((row) => {
+                              const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
+                              return (
+                                <tr
+                                  key={row.assessment_instance_id}
+                                  className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                                >
+                                  <td className="px-3 py-2">
+                                    <div className="font-medium text-zinc-800">{name}</div>
+                                    <div className="text-zinc-400">{row.phone || row.email || ""}</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
+                                    {row.package_display_name || row.package_code || "—"}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    <span
+                                      className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                        row.questionnaire_state === "submitted"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : row.questionnaire_state === "drafted"
+                                          ? "bg-amber-100 text-amber-700"
+                                          : "bg-zinc-100 text-zinc-500"
+                                      }`}
+                                    >
+                                      {row.questionnaire_state === "submitted"
+                                        ? "Submitted"
+                                        : row.questionnaire_state === "drafted"
+                                        ? "Drafted"
+                                        : "Not Started"}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-zinc-600">
+                                    {row.responses_count || "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <form

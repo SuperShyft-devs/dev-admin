@@ -875,6 +875,37 @@ export const participantsApi = {
     ),
 };
 
+// Engagement Questionnaire Status
+export interface EngagementQuestionnaireStatusParticipant {
+  assessment_instance_id: number;
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  package_code?: string | null;
+  package_display_name?: string | null;
+  questionnaire_state: "drafted" | "submitted" | "not_started";
+  responses_count: number;
+  completed_at?: string | null;
+}
+
+export interface EngagementQuestionnaireStatusResponse {
+  summary: {
+    drafted: number;
+    submitted: number;
+    not_started: number;
+  };
+  participants: EngagementQuestionnaireStatusParticipant[];
+}
+
+export const engagementQuestionnaireStatusApi = {
+  get: (engagementId: number) =>
+    api.get<{ data: EngagementQuestionnaireStatusResponse }>(
+      `/engagements/${engagementId}/questionnaire-status`
+    ),
+};
+
 // Onboarding Assistants
 export interface OnboardingAssistant {
   employee_id: number;
