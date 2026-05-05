@@ -1495,7 +1495,6 @@ export function Engagements() {
                           <thead>
                             <tr className="border-b border-zinc-200 bg-zinc-50">
                               <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
-                              <th className="px-3 py-2 text-left font-medium text-zinc-600">Package</th>
                               <th className="px-3 py-2 text-center font-medium text-zinc-600">State</th>
                               <th className="px-3 py-2 text-center font-medium text-zinc-600">Responses</th>
                             </tr>
@@ -1505,15 +1504,12 @@ export function Engagements() {
                               const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
                               return (
                                 <tr
-                                  key={row.assessment_instance_id}
+                                  key={row.user_id}
                                   className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                                 >
                                   <td className="px-3 py-2">
                                     <div className="font-medium text-zinc-800">{name}</div>
                                     <div className="text-zinc-400">{row.phone || row.email || ""}</div>
-                                  </td>
-                                  <td className="px-3 py-2 text-zinc-600 whitespace-nowrap">
-                                    {row.package_display_name || row.package_code || "—"}
                                   </td>
                                   <td className="px-3 py-2 text-center">
                                     <span
@@ -1533,7 +1529,7 @@ export function Engagements() {
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-center text-zinc-600">
-                                    {row.responses_count || "—"}
+                                    {row.total_responses || "—"}
                                   </td>
                                 </tr>
                               );
