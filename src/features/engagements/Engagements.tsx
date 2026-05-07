@@ -735,10 +735,12 @@ export function Engagements() {
   const [allActivePackages, setAllActivePackages] = useState<AssessmentPackage[]>([]);
 
   // ── Push Questionnaires to Metsights state ────────────────
-  const [pushConfirmOpen, setPushConfirmOpen] = useState(false);
+  const [pushConfirmPkg, setPushConfirmPkg] = useState<EngagementAssessmentPackageSummary | null>(null);
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<{ pushed: number; skipped: number; errors: number } | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
+  const [advSettingsPackages, setAdvSettingsPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
+  const [advSettingsLoading, setAdvSettingsLoading] = useState(false);
 
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
@@ -859,6 +861,8 @@ export function Engagements() {
     setAssessmentsModalOpen(false);
     setAssessmentsList([]);
     setAssessmentsError(null);
+    setPushConfirmPkg(null);
+    setAdvSettingsPackages([]);
     engagementsApi.get(row.engagement_id).then((res) => {
       setSelected(res.data.data);
       setModalMode("view");
@@ -924,12 +928,15 @@ export function Engagements() {
   }, [selectedAssignPackageCode, selected, loadAssessmentsForEngagement]);
 
   const handlePushQuestionnaires = useCallback(async () => {
-    if (!selected) return;
+    if (!selected || !pushConfirmPkg) return;
     setPushing(true);
     setPushResult(null);
     setPushError(null);
     try {
-      const res = await engagementAssessmentPackagesApi.pushQuestionnaires(selected.engagement_id);
+      const res = await engagementAssessmentPackagesApi.pushQuestionnaires(
+        selected.engagement_id,
+        pushConfirmPkg.package_id,
+      );
       const d = res.data.data;
       setPushResult({ pushed: d.pushed, skipped: d.skipped, errors: d.errors });
     } catch (err) {
@@ -937,7 +944,19 @@ export function Engagements() {
     } finally {
       setPushing(false);
     }
-  }, [selected]);
+  }, [selected, pushConfirmPkg]);
+
+  const loadAdvSettingsPackages = useCallback(async (engagementId: number) => {
+    setAdvSettingsLoading(true);
+    try {
+      const res = await engagementAssessmentPackagesApi.list(engagementId);
+      setAdvSettingsPackages(res.data.data);
+    } catch {
+      setAdvSettingsPackages([]);
+    } finally {
+      setAdvSettingsLoading(false);
+    }
+  }, []);
 
   const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
@@ -1658,19 +1677,43 @@ export function Engagements() {
                   <ClipboardList className="w-3.5 h-3.5" />
                   Manage Assessments
                 </button>
+              </div>
+
+              {/* ── Per-package Push Buttons ── */}
+              {advSettingsPackages.length === 0 && !advSettingsLoading && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setPushConfirmOpen(true);
-                    setPushResult(null);
-                    setPushError(null);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                  onClick={() => loadAdvSettingsPackages(selected.engagement_id)}
+                  className="mt-2 text-xs text-zinc-500 underline hover:text-zinc-700"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  Push Answers to Metsights
+                  Load push options…
                 </button>
-              </div>
+              )}
+              {advSettingsLoading && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading assessments…
+                </div>
+              )}
+              {advSettingsPackages.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {advSettingsPackages.map((pkg) => (
+                    <button
+                      key={pkg.package_id}
+                      type="button"
+                      onClick={() => {
+                        setPushConfirmPkg(pkg);
+                        setPushResult(null);
+                        setPushError(null);
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Push {pkg.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -2473,27 +2516,28 @@ export function Engagements() {
 
       {/* ── Push Questionnaires Confirmation Modal ── */}
       <Modal
-        open={pushConfirmOpen}
+        open={pushConfirmPkg !== null}
         onClose={() => {
           if (!pushing) {
-            setPushConfirmOpen(false);
+            setPushConfirmPkg(null);
             setPushResult(null);
             setPushError(null);
           }
         }}
-        title="Push Answers to Metsights"
+        title={`Push ${pushConfirmPkg?.display_name ?? "Answers"} to Metsights`}
       >
         <div className="space-y-4">
           {!pushResult && !pushError && !pushing && (
             <>
               <p className="text-sm text-zinc-700">
-                Push questionnaire answers for <span className="font-semibold">all participants</span> of{" "}
+                Push <span className="font-semibold">{pushConfirmPkg?.display_name}</span> answers for{" "}
+                <span className="font-semibold">all participants</span> of{" "}
                 <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span> to Metsights.
               </p>
               <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
                 <li>Participants who haven't filled any questions will be skipped.</li>
                 <li>Partially filled questionnaires will push whatever answers exist.</li>
-                <li>Answers from all assessment packages (primary + FitPrint, etc.) will be merged per participant.</li>
+                <li>Answers from all assessment packages will be merged per participant.</li>
               </ul>
             </>
           )}
@@ -2501,7 +2545,7 @@ export function Engagements() {
           {pushing && (
             <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-xs">Pushing answers to Metsights…</span>
+              <span className="text-xs">Pushing {pushConfirmPkg?.display_name} to Metsights…</span>
             </div>
           )}
 
@@ -2527,13 +2571,13 @@ export function Engagements() {
                 disabled={pushing}
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
               >
-                {pushing ? "Pushing…" : "Push All Answers"}
+                {pushing ? "Pushing…" : "Push Answers"}
               </button>
             )}
             <button
               type="button"
               onClick={() => {
-                setPushConfirmOpen(false);
+                setPushConfirmPkg(null);
                 setPushResult(null);
                 setPushError(null);
               }}

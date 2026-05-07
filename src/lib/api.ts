@@ -736,10 +736,12 @@ export const engagementAssessmentPackagesApi = {
     api.delete<{
       data: { package_id: number; package_code: string; deleted_instances: number };
     }>(`/engagements/${engagementId}/assessment-packages/${packageCode}`),
-  pushQuestionnaires: (engagementId: number) =>
+  pushQuestionnaires: (engagementId: number, packageId: number) =>
     api.post<{
       data: { pushed: number; skipped: number; errors: number; details: unknown[] };
-    }>(`/engagements/${engagementId}/push-questionnaires`),
+    }>(`/engagements/${engagementId}/push-questionnaires`, {
+      package_id: packageId,
+    }),
 };
 
 // Questionnaire questions
