@@ -13,6 +13,8 @@ import {
   Pencil,
   Upload,
   ClipboardList,
+  Settings,
+  CloudCog,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -46,6 +48,8 @@ import {
   type MetsightsImportResult,
   usersApi,
   getApiError,
+  engagementAssessmentPackagesApi,
+  type EngagementAssessmentPackageSummary,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 import { useLocation } from "react-router-dom";
@@ -716,6 +720,19 @@ export function Engagements() {
   const [qStatusLoading, setQStatusLoading] = useState(false);
   const [qStatusError, setQStatusError] = useState<string | null>(null);
 
+  // ── Engagement Assessments modal state ─────────────────────
+  const [assessmentsModalOpen, setAssessmentsModalOpen] = useState(false);
+  const [assessmentsList, setAssessmentsList] = useState<EngagementAssessmentPackageSummary[]>([]);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+  const [assessmentsError, setAssessmentsError] = useState<string | null>(null);
+  const [assessmentDeleteConfirm, setAssessmentDeleteConfirm] = useState<EngagementAssessmentPackageSummary | null>(null);
+  const [assessmentDeleting, setAssessmentDeleting] = useState(false);
+  const [assessmentAssignOpen, setAssessmentAssignOpen] = useState(false);
+  const [assessmentAssigning, setAssessmentAssigning] = useState(false);
+  const [assessmentAssignResult, setAssessmentAssignResult] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [selectedAssignPackageCode, setSelectedAssignPackageCode] = useState("");
+  const [allActivePackages, setAllActivePackages] = useState<AssessmentPackage[]>([]);
+
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
     setChecklistModalOpen(true);
@@ -832,12 +849,72 @@ export function Engagements() {
     setQStatusOpen(false);
     setQStatusData(null);
     setQStatusError(null);
+    setAssessmentsModalOpen(false);
+    setAssessmentsList([]);
+    setAssessmentsError(null);
     engagementsApi.get(row.engagement_id).then((res) => {
       setSelected(res.data.data);
       setModalMode("view");
       setModalOpen(true);
     }).catch((err) => setError(getApiError(err)));
   };
+
+  const loadAssessmentsForEngagement = useCallback(async (engagementId: number) => {
+    setAssessmentsLoading(true);
+    setAssessmentsError(null);
+    try {
+      const res = await engagementAssessmentPackagesApi.list(engagementId);
+      setAssessmentsList(res.data.data);
+    } catch (err) {
+      setAssessmentsError(getApiError(err));
+    } finally {
+      setAssessmentsLoading(false);
+    }
+  }, []);
+
+  const openAssessmentsModal = useCallback(async (engagementId: number) => {
+    setAssessmentsModalOpen(true);
+    setAssessmentDeleteConfirm(null);
+    setAssessmentAssignOpen(false);
+    setAssessmentAssignResult(null);
+    setSelectedAssignPackageCode("");
+    await loadAssessmentsForEngagement(engagementId);
+  }, [loadAssessmentsForEngagement]);
+
+  const handleAssessmentDelete = useCallback(async () => {
+    if (!assessmentDeleteConfirm || !selected) return;
+    setAssessmentDeleting(true);
+    try {
+      await engagementAssessmentPackagesApi.remove(selected.engagement_id, assessmentDeleteConfirm.package_code);
+      setAssessmentDeleteConfirm(null);
+      await loadAssessmentsForEngagement(selected.engagement_id);
+    } catch (err) {
+      setAssessmentsError(getApiError(err));
+      setAssessmentDeleteConfirm(null);
+    } finally {
+      setAssessmentDeleting(false);
+    }
+  }, [assessmentDeleteConfirm, selected, loadAssessmentsForEngagement]);
+
+  const handleAssessmentAssign = useCallback(async () => {
+    if (!selectedAssignPackageCode || !selected) return;
+    setAssessmentAssigning(true);
+    setAssessmentAssignResult(null);
+    try {
+      const res = await engagementAssessmentPackagesApi.add(selected.engagement_id, selectedAssignPackageCode);
+      const d = res.data.data;
+      setAssessmentAssignResult({
+        created: d.created.length,
+        skipped: d.skipped.length,
+        errors: d.errors.length,
+      });
+      await loadAssessmentsForEngagement(selected.engagement_id);
+    } catch (err) {
+      setAssessmentsError(getApiError(err));
+    } finally {
+      setAssessmentAssigning(false);
+    }
+  }, [selectedAssignPackageCode, selected, loadAssessmentsForEngagement]);
 
   const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
@@ -1542,6 +1619,22 @@ export function Engagements() {
                 </div>
               )}
             </div>
+
+            {/* ── Advanced Settings Section ── */}
+            <div className="pt-2 border-t border-zinc-100">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 mb-2">
+                <Settings className="w-4 h-4" />
+                Advanced Settings
+              </div>
+              <button
+                type="button"
+                onClick={() => openAssessmentsModal(selected.engagement_id)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                Manage Assessments
+              </button>
+            </div>
           </div>
         ) : (
           <form
@@ -2127,8 +2220,217 @@ export function Engagements() {
                   Cancel
                 </button>
               </div>
+              </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Engagement Assessments Modal ── */}
+      <Modal
+        open={assessmentsModalOpen}
+        onClose={() => setAssessmentsModalOpen(false)}
+        title={`Assessments — ${selected?.engagement_name ?? ""}`}
+        maxWidthClassName="max-w-xl"
+      >
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={async () => {
+              setAssessmentAssignOpen(true);
+              setAssessmentAssignResult(null);
+              setSelectedAssignPackageCode("");
+              try {
+                const res = await assessmentPackagesApi.list({ status: "active" });
+                setAllActivePackages(res.data.data);
+              } catch (err) {
+                setAssessmentsError(getApiError(err));
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Assign Assessment Package
+          </button>
+
+          {assessmentsLoading && (
+            <div className="py-8 flex flex-col items-center gap-2 text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">Loading…</span>
             </div>
           )}
+
+          {!assessmentsLoading && assessmentsError && (
+            <p className="text-sm text-red-600">{assessmentsError}</p>
+          )}
+
+          {!assessmentsLoading && !assessmentsError && assessmentsList.length === 0 && (
+            <p className="text-xs text-zinc-400 italic py-4">
+              No assessment packages assigned to this engagement.
+            </p>
+          )}
+
+          {!assessmentsLoading && assessmentsList.length > 0 && (
+            <div className="space-y-2">
+              {assessmentsList.map((pkg) => (
+                <div
+                  key={pkg.package_id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-zinc-200 p-3"
+                >
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-zinc-900">{pkg.display_name}</span>
+                      <span className="text-[11px] text-zinc-400 font-mono">{pkg.package_code}</span>
+                      <span
+                        className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          pkg.status === "active"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-zinc-100 text-zinc-500"
+                        }`}
+                      >
+                        {pkg.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-zinc-500">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        Assigned: {pkg.assigned_count}/{pkg.total_participants}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <CloudCog className="w-3 h-3" />
+                        Synced: {pkg.synced_count}/{pkg.assigned_count}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 h-1.5">
+                      <div className="flex-1 rounded-full bg-zinc-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-zinc-400 transition-all"
+                          style={{ width: pkg.total_participants > 0 ? `${(pkg.assigned_count / pkg.total_participants) * 100}%` : "0%" }}
+                        />
+                      </div>
+                      <div className="flex-1 rounded-full bg-zinc-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-emerald-400 transition-all"
+                          style={{ width: pkg.assigned_count > 0 ? `${(pkg.synced_count / pkg.assigned_count) * 100}%` : "0%" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAssessmentDeleteConfirm(pkg)}
+                    className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    title="Remove from engagement"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Assessment Delete Confirmation Modal ── */}
+      <Modal
+        open={assessmentDeleteConfirm !== null}
+        onClose={() => setAssessmentDeleteConfirm(null)}
+        title="Remove Assessment Package"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-700">
+            Remove <span className="font-semibold">{assessmentDeleteConfirm?.display_name}</span> from
+            all participants of this engagement?
+          </p>
+          <p className="text-xs text-zinc-500">
+            This will delete local assessment data (instances, responses, reports).
+            Metsights records will not be affected.
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleAssessmentDelete}
+              disabled={assessmentDeleting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {assessmentDeleting ? "Removing…" : "Remove"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssessmentDeleteConfirm(null)}
+              disabled={assessmentDeleting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Assessment Assign Modal ── */}
+      <Modal
+        open={assessmentAssignOpen}
+        onClose={() => {
+          setAssessmentAssignOpen(false);
+          setAssessmentAssignResult(null);
+          setSelectedAssignPackageCode("");
+        }}
+        title="Assign Assessment Package"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-700">
+            Select a package to assign to all participants of{" "}
+            <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span>.
+          </p>
+          <select
+            value={selectedAssignPackageCode}
+            onChange={(e) => {
+              setSelectedAssignPackageCode(e.target.value);
+              setAssessmentAssignResult(null);
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">Select a package…</option>
+            {allActivePackages
+              .filter((p) => p.package_code)
+              .map((p) => (
+                <option key={p.package_id} value={p.package_code!}>
+                  {p.display_name ?? p.package_code} ({p.package_code})
+                </option>
+              ))}
+          </select>
+
+          {assessmentAssignResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-emerald-700">Created: {assessmentAssignResult.created}</div>
+              <div className="text-zinc-500">Skipped (already exists): {assessmentAssignResult.skipped}</div>
+              {assessmentAssignResult.errors > 0 && (
+                <div className="text-red-600">Errors: {assessmentAssignResult.errors}</div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleAssessmentAssign}
+              disabled={!selectedAssignPackageCode || assessmentAssigning}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {assessmentAssigning ? "Assigning…" : "Assign to All Participants"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssessmentAssignOpen(false);
+                setAssessmentAssignResult(null);
+                setSelectedAssignPackageCode("");
+              }}
+              disabled={assessmentAssigning}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

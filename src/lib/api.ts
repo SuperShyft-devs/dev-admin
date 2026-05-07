@@ -703,6 +703,41 @@ export const assessmentPackagesApi = {
     ),
 };
 
+// Engagement-level assessment packages
+export interface EngagementAssessmentPackageSummary {
+  package_id: number;
+  package_code: string;
+  display_name: string;
+  assessment_type_code: string;
+  status: string;
+  assigned_count: number;
+  total_participants: number;
+  synced_count: number;
+}
+
+export const engagementAssessmentPackagesApi = {
+  list: (engagementId: number) =>
+    api.get<{ data: EngagementAssessmentPackageSummary[] }>(
+      `/engagements/${engagementId}/assessment-packages`
+    ),
+  add: (engagementId: number, packageCode: string) =>
+    api.post<{
+      data: {
+        package_id: number;
+        package_code: string;
+        created: { user_id: number; assessment_instance_id: number; metsights_record_id: string | null }[];
+        skipped: { user_id: number; assessment_instance_id: number; reason: string }[];
+        errors: { user_id: number; stage: string; reason: string }[];
+      };
+    }>(`/engagements/${engagementId}/assessment-packages`, {
+      package_code: packageCode,
+    }),
+  remove: (engagementId: number, packageCode: string) =>
+    api.delete<{
+      data: { package_id: number; package_code: string; deleted_instances: number };
+    }>(`/engagements/${engagementId}/assessment-packages/${packageCode}`),
+};
+
 // Questionnaire questions
 export interface QuestionnaireOption {
   option_value: string;
