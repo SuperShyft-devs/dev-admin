@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Settings,
   CloudCog,
+  Send,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -733,6 +734,12 @@ export function Engagements() {
   const [selectedAssignPackageCode, setSelectedAssignPackageCode] = useState("");
   const [allActivePackages, setAllActivePackages] = useState<AssessmentPackage[]>([]);
 
+  // ── Push Questionnaires to Metsights state ────────────────
+  const [pushConfirmOpen, setPushConfirmOpen] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{ pushed: number; skipped: number; errors: number } | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
+
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
     setChecklistModalOpen(true);
@@ -915,6 +922,22 @@ export function Engagements() {
       setAssessmentAssigning(false);
     }
   }, [selectedAssignPackageCode, selected, loadAssessmentsForEngagement]);
+
+  const handlePushQuestionnaires = useCallback(async () => {
+    if (!selected) return;
+    setPushing(true);
+    setPushResult(null);
+    setPushError(null);
+    try {
+      const res = await engagementAssessmentPackagesApi.pushQuestionnaires(selected.engagement_id);
+      const d = res.data.data;
+      setPushResult({ pushed: d.pushed, skipped: d.skipped, errors: d.errors });
+    } catch (err) {
+      setPushError(getApiError(err));
+    } finally {
+      setPushing(false);
+    }
+  }, [selected]);
 
   const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
@@ -1626,14 +1649,28 @@ export function Engagements() {
                 <Settings className="w-4 h-4" />
                 Advanced Settings
               </div>
-              <button
-                type="button"
-                onClick={() => openAssessmentsModal(selected.engagement_id)}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-              >
-                <ClipboardList className="w-3.5 h-3.5" />
-                Manage Assessments
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openAssessmentsModal(selected.engagement_id)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  Manage Assessments
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPushConfirmOpen(true);
+                    setPushResult(null);
+                    setPushError(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Push Answers to Metsights
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -2429,6 +2466,81 @@ export function Engagements() {
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Push Questionnaires Confirmation Modal ── */}
+      <Modal
+        open={pushConfirmOpen}
+        onClose={() => {
+          if (!pushing) {
+            setPushConfirmOpen(false);
+            setPushResult(null);
+            setPushError(null);
+          }
+        }}
+        title="Push Answers to Metsights"
+      >
+        <div className="space-y-4">
+          {!pushResult && !pushError && !pushing && (
+            <>
+              <p className="text-sm text-zinc-700">
+                Push questionnaire answers for <span className="font-semibold">all participants</span> of{" "}
+                <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span> to Metsights.
+              </p>
+              <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                <li>Participants who haven't filled any questions will be skipped.</li>
+                <li>Partially filled questionnaires will push whatever answers exist.</li>
+                <li>Answers from all assessment packages (primary + FitPrint, etc.) will be merged per participant.</li>
+              </ul>
+            </>
+          )}
+
+          {pushing && (
+            <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">Pushing answers to Metsights…</span>
+            </div>
+          )}
+
+          {pushError && (
+            <p className="text-sm text-red-600">{pushError}</p>
+          )}
+
+          {pushResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-emerald-700">Pushed: {pushResult.pushed}</div>
+              <div className="text-zinc-500">Skipped (no answers / no Metsights record): {pushResult.skipped}</div>
+              {pushResult.errors > 0 && (
+                <div className="text-red-600">Errors: {pushResult.errors}</div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            {!pushResult && !pushError && (
+              <button
+                type="button"
+                onClick={handlePushQuestionnaires}
+                disabled={pushing}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {pushing ? "Pushing…" : "Push All Answers"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setPushConfirmOpen(false);
+                setPushResult(null);
+                setPushError(null);
+              }}
+              disabled={pushing}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {pushResult || pushError ? "Close" : "Cancel"}
             </button>
           </div>
         </div>
