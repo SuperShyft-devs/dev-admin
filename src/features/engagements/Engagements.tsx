@@ -16,6 +16,7 @@ import {
   Settings,
   CloudCog,
   Send,
+  Download,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -670,9 +671,11 @@ export function Engagements() {
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
 
   const metsightsImportInputRef = useRef<HTMLInputElement | null>(null);
+  const walkinsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [metsightsImporting, setMetsightsImporting] = useState(false);
   const [metsightsImportResult, setMetsightsImportResult] = useState<MetsightsImportResult | null>(null);
   const [metsightsImportSummaryOpen, setMetsightsImportSummaryOpen] = useState(false);
+  const [metsightsImportSummaryTitle, setMetsightsImportSummaryTitle] = useState("Import results");
 
   const [participantsSource, setParticipantsSource] = useState<
     | { kind: "engagement-code"; code: string; name?: string }
@@ -1135,6 +1138,7 @@ export function Engagements() {
     setError(null);
     try {
       const res = await engagementsApi.importMetsightsCsv(selected.engagement_id, file);
+      setMetsightsImportSummaryTitle("Import results");
       setMetsightsImportResult(res.data.data);
       setMetsightsImportSummaryOpen(true);
       const fresh = await engagementsApi.get(selected.engagement_id);
@@ -1145,6 +1149,40 @@ export function Engagements() {
     } finally {
       setMetsightsImporting(false);
     }
+  };
+
+  const handleWalkinsCsvSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !selected) return;
+    setMetsightsImporting(true);
+    setError(null);
+    try {
+      const res = await engagementsApi.uploadWalkinsCsv(selected.engagement_id, file);
+      setMetsightsImportSummaryTitle("Walkins upload results");
+      setMetsightsImportResult(res.data.data);
+      setMetsightsImportSummaryOpen(true);
+      const fresh = await engagementsApi.get(selected.engagement_id);
+      setSelected(fresh.data.data);
+      await fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setMetsightsImporting(false);
+    }
+  };
+
+  const downloadWalkinsTemplate = () => {
+    const csv = "name,number,metsights_profile_id,record_id\r\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "walkins-template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
@@ -1214,7 +1252,8 @@ export function Engagements() {
   const toggleEmployeeSelection = (id: number) => {
     setSelectedEmployeeIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -1677,6 +1716,34 @@ export function Engagements() {
                   <ClipboardList className="w-3.5 h-3.5" />
                   Manage Assessments
                 </button>
+                <input
+                  ref={walkinsImportInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={handleWalkinsCsvSelected}
+                />
+                <button
+                  type="button"
+                  disabled={metsightsImporting || (selected.status ?? "").toLowerCase() !== "active"}
+                  onClick={() => walkinsImportInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 disabled:opacity-50 disabled:pointer-events-none text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  {metsightsImporting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  Upload Walkins
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadWalkinsTemplate}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download Template
+                </button>
               </div>
 
               {/* ── Per-package Push Buttons ── */}
@@ -2035,7 +2102,7 @@ export function Engagements() {
           setMetsightsImportSummaryOpen(false);
           setMetsightsImportResult(null);
         }}
-        title="Import results"
+        title={metsightsImportSummaryTitle}
         maxWidthClassName="max-w-lg"
       >
         {metsightsImportResult ? (

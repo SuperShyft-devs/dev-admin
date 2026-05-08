@@ -636,6 +636,14 @@ export const engagementsApi = {
       formData
     );
   },
+  uploadWalkinsCsv: (engagementId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: MetsightsImportResult; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/import/metsights-csv`,
+      formData
+    );
+  },
 };
 
 // Assessment packages
