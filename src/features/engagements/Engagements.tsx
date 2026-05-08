@@ -3,6 +3,7 @@ import {
   Search,
   Plus,
   Loader2,
+  RefreshCw,
   Users,
   UserCog,
   Trash2,
@@ -734,6 +735,15 @@ export function Engagements() {
   const [assessmentAssignOpen, setAssessmentAssignOpen] = useState(false);
   const [assessmentAssigning, setAssessmentAssigning] = useState(false);
   const [assessmentAssignResult, setAssessmentAssignResult] = useState<{ created: number; skipped: number; errors: number } | null>(null);
+  const [assessmentSyncingPackageId, setAssessmentSyncingPackageId] = useState<number | null>(null);
+  const [assessmentSyncResult, setAssessmentSyncResult] = useState<{
+    package_id: number;
+    package_name: string;
+    created: number;
+    skipped: number;
+    errors: number;
+  } | null>(null);
+  const [assessmentSyncError, setAssessmentSyncError] = useState<string | null>(null);
   const [selectedAssignPackageCode, setSelectedAssignPackageCode] = useState("");
   const [allActivePackages, setAllActivePackages] = useState<AssessmentPackage[]>([]);
 
@@ -891,6 +901,9 @@ export function Engagements() {
     setAssessmentDeleteConfirm(null);
     setAssessmentAssignOpen(false);
     setAssessmentAssignResult(null);
+    setAssessmentSyncResult(null);
+    setAssessmentSyncError(null);
+    setAssessmentSyncingPackageId(null);
     setSelectedAssignPackageCode("");
     await loadAssessmentsForEngagement(engagementId);
   }, [loadAssessmentsForEngagement]);
@@ -929,6 +942,29 @@ export function Engagements() {
       setAssessmentAssigning(false);
     }
   }, [selectedAssignPackageCode, selected, loadAssessmentsForEngagement]);
+
+  const handleAssessmentSyncPackage = useCallback(async (pkg: EngagementAssessmentPackageSummary) => {
+    if (!selected) return;
+    setAssessmentSyncingPackageId(pkg.package_id);
+    setAssessmentSyncResult(null);
+    setAssessmentSyncError(null);
+    try {
+      const res = await engagementAssessmentPackagesApi.add(selected.engagement_id, pkg.package_code);
+      const d = res.data.data;
+      setAssessmentSyncResult({
+        package_id: pkg.package_id,
+        package_name: pkg.display_name,
+        created: d.created.length,
+        skipped: d.skipped.length,
+        errors: d.errors.length,
+      });
+      await loadAssessmentsForEngagement(selected.engagement_id);
+    } catch (err) {
+      setAssessmentSyncError(getApiError(err));
+    } finally {
+      setAssessmentSyncingPackageId(null);
+    }
+  }, [selected, loadAssessmentsForEngagement]);
 
   const handlePushQuestionnaires = useCallback(async () => {
     if (!selected || !pushConfirmPkg) return;
@@ -2410,6 +2446,23 @@ export function Engagements() {
             <p className="text-sm text-red-600">{assessmentsError}</p>
           )}
 
+          {!assessmentsLoading && !assessmentsError && assessmentSyncError && (
+            <p className="text-sm text-red-600">{assessmentSyncError}</p>
+          )}
+
+          {!assessmentsLoading && !assessmentsError && assessmentSyncResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-zinc-700">
+                Sync result for <span className="font-semibold">{assessmentSyncResult.package_name}</span>
+              </div>
+              <div className="text-emerald-700">Created: {assessmentSyncResult.created}</div>
+              <div className="text-zinc-500">Skipped: {assessmentSyncResult.skipped}</div>
+              {assessmentSyncResult.errors > 0 && (
+                <div className="text-red-600">Errors: {assessmentSyncResult.errors}</div>
+              )}
+            </div>
+          )}
+
           {!assessmentsLoading && !assessmentsError && assessmentsList.length === 0 && (
             <p className="text-xs text-zinc-400 italic py-4">
               No assessment packages assigned to this engagement.
@@ -2462,14 +2515,27 @@ export function Engagements() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAssessmentDeleteConfirm(pkg)}
-                    className="shrink-0 p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                    title="Remove from engagement"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="shrink-0 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleAssessmentSyncPackage(pkg)}
+                      disabled={assessmentSyncingPackageId !== null}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-50"
+                      title="Sync missing participants"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 ${assessmentSyncingPackageId === pkg.package_id ? "animate-spin" : ""}`}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAssessmentDeleteConfirm(pkg)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Remove from engagement"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
