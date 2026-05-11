@@ -57,9 +57,11 @@ export function Employees() {
     setUsersLoading(true);
     setError(null);
     try {
-      const res = await usersApi.list();
-      setUsers(res.data.data);
-      const index = res.data.data.reduce<Record<number, UserListItem>>((acc, user) => {
+      const allUsers = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
+        usersApi.list({ page: nextPage, limit: nextLimit })
+      );
+      setUsers(allUsers);
+      const index = allUsers.reduce<Record<number, UserListItem>>((acc, user) => {
         acc[user.user_id] = user;
         return acc;
       }, {});
