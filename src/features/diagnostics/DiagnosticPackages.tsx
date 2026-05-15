@@ -27,6 +27,7 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   price: null,
   original_price: null,
   is_most_popular: false,
+  complementary_nutritionist: true,
   about_text: "",
   bookings_count: null,
 };
@@ -205,6 +206,7 @@ export function DiagnosticPackages() {
       price: row.price ?? null,
       original_price: row.original_price ?? null,
       is_most_popular: !!row.is_most_popular,
+      complementary_nutritionist: !!row.complementary_nutritionist,
       about_text: "",
       bookings_count: null,
     });
@@ -259,6 +261,7 @@ export function DiagnosticPackages() {
         price: form.price ?? null,
         original_price: form.original_price ?? null,
         is_most_popular: !!form.is_most_popular,
+        complementary_nutritionist: !!form.complementary_nutritionist,
         about_text: form.about_text?.trim() || null,
         bookings_count: form.bookings_count ?? null,
       };
@@ -642,14 +645,27 @@ export function DiagnosticPackages() {
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
               />
             </div>
-            <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-              <input
-                type="checkbox"
-                checked={!!form.is_most_popular}
-                onChange={(e) => setForm((prev) => ({ ...prev, is_most_popular: e.target.checked }))}
-              />
-              Most popular
-            </label>
+            <div className="flex flex-col gap-2 self-stretch justify-center">
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={!!form.is_most_popular}
+                  onChange={(e) => setForm((prev) => ({ ...prev, is_most_popular: e.target.checked }))}
+                />
+                Most popular
+              </label>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 px-3 py-4 rounded-lg border border-zinc-300 bg-zinc-50 text-sm font-medium text-zinc-900 cursor-pointer hover:bg-zinc-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={form.complementary_nutritionist !== false}
+                  onChange={(e) => setForm((prev) => ({ ...prev, complementary_nutritionist: e.target.checked }))}
+                  className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
+                />
+                Nutritionist consultation
+              </label>
+            </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">About</label>
               <textarea
