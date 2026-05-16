@@ -7,9 +7,11 @@ import {
   usersApi,
   employeesApi,
   uploadsApi,
+  notificationsApi,
   type UserListItem,
   type UserDetail,
   type UserCreate,
+  type NotificationServiceItem,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -60,6 +62,15 @@ export function Users() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<UserListItem | null>(null);
   const [alwaysActiveUserId, setAlwaysActiveUserId] = useState<number | null>(null);
+
+  const [sendMsgUser, setSendMsgUser] = useState<UserListItem | null>(null);
+  const [sendMsgServices, setSendMsgServices] = useState<NotificationServiceItem[]>([]);
+  const [sendMsgKey, setSendMsgKey] = useState("");
+  const [sendMsgSearch, setSendMsgSearch] = useState("");
+  const [sendMsgDropdownOpen, setSendMsgDropdownOpen] = useState(false);
+  const [sendMsgSubmitting, setSendMsgSubmitting] = useState(false);
+  const [sendMsgError, setSendMsgError] = useState<string | null>(null);
+  const [sendMsgSuccess, setSendMsgSuccess] = useState<string | null>(null);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -214,6 +225,40 @@ export function Users() {
       setError(getApiError(err));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openSendMessage = async (row: UserListItem) => {
+    setSendMsgUser(row);
+    setSendMsgKey("");
+    setSendMsgSearch("");
+    setSendMsgDropdownOpen(false);
+    setSendMsgError(null);
+    setSendMsgSuccess(null);
+    try {
+      const res = await notificationsApi.listServices();
+      setSendMsgServices(res.data.data.filter((s) => s.is_active));
+    } catch {
+      setSendMsgServices([]);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!sendMsgUser || !sendMsgKey) return;
+    setSendMsgSubmitting(true);
+    setSendMsgError(null);
+    setSendMsgSuccess(null);
+    try {
+      await notificationsApi.dispatch({
+        service_key: sendMsgKey,
+        user_id: sendMsgUser.user_id,
+        engagement_id: null,
+      });
+      setSendMsgSuccess("Message dispatched successfully");
+    } catch (err) {
+      setSendMsgError(getApiError(err));
+    } finally {
+      setSendMsgSubmitting(false);
     }
   };
 
@@ -426,6 +471,7 @@ export function Users() {
             onView={openView}
             onEdit={openEdit}
             onDelete={(r) => setDeactivateConfirm(r)}
+            onSendMessage={openSendMessage}
             pagination={{ page, limit, total, onPageChange: setPage }}
           />
         )}
@@ -784,6 +830,108 @@ export function Users() {
             >
               Cancel
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Send Message Modal */}
+      {sendMsgUser && (
+        <Modal
+          open={!!sendMsgUser}
+          onClose={() => setSendMsgUser(null)}
+          title="Send Message"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600">
+              Send a notification to{" "}
+              <span className="font-semibold text-zinc-900">
+                {[sendMsgUser.first_name, sendMsgUser.last_name].filter(Boolean).join(" ") || sendMsgUser.phone}
+              </span>
+            </p>
+
+            {sendMsgError && (
+              <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{sendMsgError}</div>
+            )}
+            {sendMsgSuccess && (
+              <div className="p-3 rounded-lg bg-emerald-50 text-emerald-700 text-sm">{sendMsgSuccess}</div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Notification Service
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search services..."
+                  value={sendMsgSearch}
+                  onChange={(e) => {
+                    setSendMsgSearch(e.target.value);
+                    setSendMsgDropdownOpen(true);
+                  }}
+                  onFocus={() => setSendMsgDropdownOpen(true)}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+                {sendMsgDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-lg border border-zinc-200 bg-white shadow-lg">
+                    {sendMsgServices
+                      .filter(
+                        (s) =>
+                          s.display_name.toLowerCase().includes(sendMsgSearch.toLowerCase()) ||
+                          s.service_key.toLowerCase().includes(sendMsgSearch.toLowerCase())
+                      )
+                      .map((s) => (
+                        <button
+                          key={s.service_key}
+                          type="button"
+                          onClick={() => {
+                            setSendMsgKey(s.service_key);
+                            setSendMsgSearch(s.display_name);
+                            setSendMsgDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 flex items-center justify-between ${
+                            sendMsgKey === s.service_key ? "bg-zinc-50 font-medium" : "text-zinc-700"
+                          }`}
+                        >
+                          <span>{s.display_name}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                            s.channel === "email"
+                              ? "bg-blue-50 text-blue-600"
+                              : "bg-green-50 text-green-600"
+                          }`}>
+                            {s.channel}
+                          </span>
+                        </button>
+                      ))}
+                    {sendMsgServices.filter(
+                      (s) =>
+                        s.display_name.toLowerCase().includes(sendMsgSearch.toLowerCase()) ||
+                        s.service_key.toLowerCase().includes(sendMsgSearch.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-zinc-500">No services found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={handleSendMessage}
+                disabled={sendMsgSubmitting || !sendMsgKey || !!sendMsgSuccess}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {sendMsgSubmitting ? "Sending..." : "Send"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSendMsgUser(null)}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+              >
+                {sendMsgSuccess ? "Close" : "Cancel"}
+              </button>
+            </div>
           </div>
         </Modal>
       )}

@@ -19,6 +19,7 @@ import {
   ChevronDown,
   CreditCard,
   Stethoscope,
+  Bell,
   // Settings,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -41,6 +42,7 @@ const libraryNavItems = [
   { to: "/payments/bookings", icon: CreditCard, label: "Payments" },
   { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates" },
   { to: "/library/health-metrics", icon: Activity, label: "Health Metrics" },
+  { to: "/notifications/notifications", icon: Bell, label: "Notifications" },
 ];
 
 function isLibraryPath(pathname: string) {
@@ -49,7 +51,8 @@ function isLibraryPath(pathname: string) {
     pathname.startsWith("/diagnostics") ||
     pathname.startsWith("/payments") ||
     pathname.startsWith("/checklists") ||
-    pathname.startsWith("/library")
+    pathname.startsWith("/library") ||
+    pathname.startsWith("/notifications")
   );
 }
 

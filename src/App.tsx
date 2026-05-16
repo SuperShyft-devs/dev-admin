@@ -18,6 +18,7 @@ import { HealthMetrics } from "./features/health-metrics/HealthMetrics";
 import { MyTasks } from "./features/checklists/MyTasks";
 import { Settings } from "./features/settings/Settings";
 import { Experts } from "./features/experts/Experts";
+import { Notifications } from "./features/notifications/Notifications";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -97,6 +98,8 @@ function AppRoutes() {
         <Route path="payments/bookings" element={<Bookings />} />
         <Route path="checklists" element={<ChecklistTemplates />} />
         <Route path="library/health-metrics" element={<HealthMetrics />} />
+        <Route path="notifications" element={<Navigate to="/notifications/notifications" replace />} />
+        <Route path="notifications/:tab" element={<Notifications />} />
         <Route
           path="admin/library/health-metrics"
           element={<Navigate to="/library/health-metrics" replace />}

@@ -1801,3 +1801,76 @@ export const checklistTasksApi = {
   myTasks: (params?: { status?: string }) =>
     api.get<{ data: MyTask[]; meta: Record<string, unknown> }>("/checklist/my-tasks", { params }),
 };
+
+// Notifications
+export interface NotificationItem {
+  notification_id: number;
+  service_key: string;
+  status: "pending" | "sent" | "failed";
+  channel: "email" | "whatsapp";
+  user_id: number | null;
+  engagement_id: number | null;
+  assessment_instance_id: number | null;
+  message: string | null;
+  triggered_by_user_id: number | null;
+  dispatched_at: string | null;
+  completed_at: string | null;
+}
+
+export interface NotificationServiceItem {
+  notification_service_id: number;
+  service_key: string;
+  display_name: string;
+  channel: "email" | "whatsapp";
+  webhook_path: string;
+  is_active: boolean;
+  require_record_id: boolean;
+  created_at: string | null;
+}
+
+export const notificationsApi = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    service_key?: string;
+    user_id?: number;
+    engagement_id?: number;
+  }) =>
+    api.get<{ data: NotificationItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/notifications",
+      { params }
+    ),
+  dispatch: (body: {
+    service_key: string;
+    user_id: number;
+    engagement_id: number | null;
+    record_id?: string | null;
+  }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
+
+  listServices: () =>
+    api.get<{ data: NotificationServiceItem[]; meta: Record<string, unknown> }>("/notifications/services"),
+  createService: (body: {
+    service_key: string;
+    display_name: string;
+    channel: string;
+    webhook_path: string;
+    is_active?: boolean;
+    require_record_id?: boolean;
+  }) =>
+    api.post<{ data: NotificationServiceItem; meta: Record<string, unknown> }>("/notifications/services", body),
+  updateService: (
+    id: number,
+    body: {
+      display_name?: string;
+      channel?: string;
+      webhook_path?: string;
+      is_active?: boolean;
+      require_record_id?: boolean;
+    }
+  ) =>
+    api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(
+      `/notifications/services/${id}`,
+      body
+    ),
+};

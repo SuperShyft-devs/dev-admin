@@ -12,6 +12,7 @@ import {
   Users,
   UserCog,
   CalendarClock,
+  Send,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -45,6 +46,7 @@ interface DataTableProps<T> {
   /** Engagement checklist manager (shown with ClipboardCheck icon). */
   onManageChecklists?: (row: T) => void;
   onManageChecklistsLabel?: string;
+  onSendMessage?: (row: T) => void;
   firstColumnClickableView?: boolean;
   pagination?: {
     page: number;
@@ -74,6 +76,7 @@ export function DataTable<T extends object>(
     onOccupiedSlots,
     onManageChecklists,
     onManageChecklistsLabel = "Manage Checklists",
+    onSendMessage,
     firstColumnClickableView = true,
     pagination,
   } = props;
@@ -87,7 +90,8 @@ export function DataTable<T extends object>(
     onParticipants ||
     onAssistants ||
     onOccupiedSlots ||
-    onManageChecklists;
+    onManageChecklists ||
+    onSendMessage;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -299,6 +303,18 @@ export function DataTable<T extends object>(
                             >
                               <ListChecks className="w-4 h-4" />
                               {onQuestionsLabel}
+                            </button>
+                          )}
+                          {onSendMessage && (
+                            <button
+                              onClick={() => {
+                                onSendMessage(row);
+                                setOpenActionsRow(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                            >
+                              <Send className="w-4 h-4" />
+                              Send Message
                             </button>
                           )}
                           {onDelete && (
