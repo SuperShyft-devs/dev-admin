@@ -111,6 +111,16 @@ function NotificationsTab() {
     fetchList();
   }, [fetchList]);
 
+  const handleDelete = async (row: NotificationItem) => {
+    if (!window.confirm(`Delete notification #${row.notification_id}? This cannot be undone.`)) return;
+    try {
+      await notificationsApi.delete(row.notification_id);
+      await fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    }
+  };
+
   const columns: Column<NotificationItem>[] = [
     { key: "notification_id", label: "ID", sortable: false, className: "w-16" },
     {
@@ -232,6 +242,8 @@ function NotificationsTab() {
             columns={columns}
             data={data}
             keyExtractor={(r) => r.notification_id}
+            onDelete={handleDelete}
+            firstColumnClickableView={false}
             pagination={{ page, limit, total, onPageChange: setPage }}
           />
         )}
@@ -309,6 +321,22 @@ function ServicesTab() {
     setModalMode("edit");
     setModalOpen(true);
     setError(null);
+  };
+
+  const handleDelete = async (row: NotificationServiceItem) => {
+    if (
+      !window.confirm(
+        `Delete service "${row.display_name}" (${row.service_key})? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await notificationsApi.deleteService(row.notification_service_id);
+      await fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    }
   };
 
   const handleSubmit = async () => {
@@ -401,6 +429,8 @@ function ServicesTab() {
             data={data}
             keyExtractor={(r) => r.notification_service_id}
             onEdit={openEdit}
+            onDelete={handleDelete}
+            firstColumnClickableView={false}
           />
         )}
       </div>

@@ -1166,6 +1166,7 @@ export interface DiagnosticPackageListItem {
   gender_suitability?: string | null;
   package_for?: "public" | "camp" | null;
   status?: string | null;
+  display_order?: number | null;
   tags?: DiagnosticTag[];
   filter_chips?: PackageFilterChip[];
 }
@@ -1229,6 +1230,8 @@ export const diagnosticPackagesApi = {
       `/diagnostic-packages/${id}/status`,
       { status }
     ),
+  reorder: (payload: { package_ids: number[] }) =>
+    api.patch<{ data: { reordered: boolean } }>("/diagnostic-packages/order", payload),
   delete: (id: number) => api.delete(`/diagnostic-packages/${id}`),
   addReason: (id: number, payload: { reason_text: string; display_order?: number }) =>
     api.post<{ data: DiagnosticReason }>(`/diagnostic-packages/${id}/reasons`, payload),
@@ -1876,5 +1879,13 @@ export const notificationsApi = {
     api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(
       `/notifications/services/${id}`,
       body
+    ),
+  delete: (notificationId: number) =>
+    api.delete<{ data: { notification_id: number; deleted: boolean } }>(
+      `/notifications/${notificationId}`
+    ),
+  deleteService: (notificationServiceId: number) =>
+    api.delete<{ data: { notification_service_id: number; deleted: boolean } }>(
+      `/notifications/services/${notificationServiceId}`
     ),
 };

@@ -1,28 +1,20 @@
-import {
-  ChevronDown,
-  ChevronUp,
-  ChevronLeft,
-  ChevronRight,
-  MoreHorizontal,
-  Eye,
-  Pencil,
-  Trash2,
-  ListChecks,
-  ClipboardCheck,
-  Users,
-  UserCog,
-  CalendarClock,
-  Send,
-} from "lucide-react";
-import {
+import re
+import sys
+
+def main():
+    file_path = "src/shared/ui/DataTable.tsx"
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    imports = """import {
   DndContext,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  DragEndEvent,
 } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
@@ -32,50 +24,38 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+"""
+    content = content.replace("import { useEffect, useRef, useState } from \"react\";", imports + "import { useEffect, useRef, useState } from \"react\";")
 
-export interface Column<T> {
-  key: string;
-  label: string;
-  sortable?: boolean;
-  render?: (row: T) => React.ReactNode;
-  className?: string;
-  /** Hide this column on mobile (< sm, i.e. < 640px) */
-  hideOnMobile?: boolean;
-  /** Hide this column on mobile + tablet (< md, i.e. < 768px) */
-  hideOnTablet?: boolean;
-}
+    content = content.replace("  firstColumnClickableView?: boolean;", "  firstColumnClickableView?: boolean;\n  onReorder?: (newOrderKeys: (string | number)[]) => void;")
+    content = content.replace("    firstColumnClickableView = true,", "    firstColumnClickableView = true,\n    onReorder,")
 
-interface DataTableProps<T> {
-  columns: Column<T>[];
-  data: T[];
-  keyExtractor: (row: T) => string | number;
-  sortKey?: string;
-  sortDir?: "asc" | "desc";
-  onSort?: (key: string) => void;
-  onView?: (row: T) => void;
-  onEdit?: (row: T) => void;
-  onDelete?: (row: T) => void;
-  onQuestions?: (row: T) => void;
-  onQuestionsLabel?: string;
-  onParticipants?: (row: T) => void;
-  onAssistants?: (row: T) => void;
-  onOccupiedSlots?: (row: T) => void;
-  /** Engagement checklist manager (shown with ClipboardCheck icon). */
-  onManageChecklists?: (row: T) => void;
-  onManageChecklistsLabel?: string;
-  onSendMessage?: (row: T) => void;
-  firstColumnClickableView?: boolean;
-  onReorder?: (newOrderKeys: (string | number)[]) => void;
-  pagination?: {
-    page: number;
-    limit: number;
-    total: number;
-    onPageChange: (page: number) => void;
+    sensors_code = """
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id && onReorder) {
+      const oldIndex = data.findIndex((item) => keyExtractor(item) === active.id);
+      const newIndex = data.findIndex((item) => keyExtractor(item) === over.id);
+      
+      const newOrder = arrayMove(data.map(d => keyExtractor(d)), oldIndex, newIndex);
+      onReorder(newOrder);
+    }
   };
-}
+"""
+    content = content.replace("  const hasActions =", sensors_code + "\n  const hasActions =")
 
+    # Add empty th for drag handle
+    content = content.replace("{columns.map((col) => (", "{onReorder && <th className=\"w-10 px-3 sm:px-4 py-3\"></th>}\n            {columns.map((col) => (")
 
+    # Add SortableRow component at the top of the file (after imports)
+    sortable_row_code = """
 interface SortableRowProps<T> {
   row: T;
   rowKey: string | number;
@@ -220,140 +200,15 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
     </tr>
   );
 }
+"""
 
-export function DataTable<T extends object>(
-  props: DataTableProps<T>
-) {
-  const {
-    columns,
-    data,
-    keyExtractor,
-    sortKey,
-    sortDir,
-    onSort,
-    onView,
-    onEdit,
-    onDelete,
-    onQuestions,
-    onQuestionsLabel = "Manage Questions",
-    onParticipants,
-    onAssistants,
-    onOccupiedSlots,
-    onManageChecklists,
-    onManageChecklistsLabel = "Manage Checklists",
-    onSendMessage,
-    firstColumnClickableView = true,
-    onReorder,
-    pagination,
-  } = props;
+    content = content.replace("export function DataTable<T extends object>(", sortable_row_code + "\nexport function DataTable<T extends object>(")
 
-  const firstKey = columns[0]?.key;
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id && onReorder) {
-      const activeKey = String(active.id);
-      const overKey = String(over.id);
-      const oldIndex = data.findIndex((item) => String(keyExtractor(item)) === activeKey);
-      const newIndex = data.findIndex((item) => String(keyExtractor(item)) === overKey);
-      if (oldIndex < 0 || newIndex < 0) return;
-
-      const newOrder = arrayMove(
-        data.map((item) => keyExtractor(item)),
-        oldIndex,
-        newIndex
-      );
-      onReorder(newOrder);
-    }
-  };
-
-  const hasActions =
-    onView ||
-    onEdit ||
-    onDelete ||
-    onQuestions ||
-    onParticipants ||
-    onAssistants ||
-    onOccupiedSlots ||
-    onManageChecklists ||
-    onSendMessage;
-  const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
-  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (!actionsMenuRef.current) return;
-      if (!actionsMenuRef.current.contains(event.target as Node)) {
-        setOpenActionsRow(null);
-      }
-    };
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenActionsRow(null);
-    };
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, []);
-
-  // Build a helper that returns the visibility class for a column
-  const visibilityClass = (col: Column<T>) => {
-    if (col.hideOnTablet) return "hidden md:table-cell";
-    if (col.hideOnMobile) return "hidden sm:table-cell";
-    return "";
-  };
-
-  return (
-    <div className="overflow-x-auto -mx-px">
-      <DndContext 
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-200">
-            {onReorder && <th className="w-10 px-3 sm:px-4 py-3"></th>}
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={
-                  "px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 " +
-                  visibilityClass(col) +
-                  " " + (col.className || "") +
-                  (col.sortable ? " cursor-pointer select-none hover:text-zinc-900" : "")
-                }
-                onClick={() => col.sortable && onSort?.(col.key)}
-              >
-                <span className="flex items-center gap-1">
-                  {col.label}
-                  {col.sortable && sortKey === col.key &&
-                    (sortDir === "asc" ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    ))}
-                </span>
-              </th>
-            ))}
-            {hasActions && (
-              <th className="px-3 sm:px-4 py-3 text-right font-medium text-zinc-600 w-14 sm:w-16">
-                Actions
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
+    # Replace tbody content
+    start_tbody = content.find("<tbody>")
+    end_tbody = content.find("</tbody>", start_tbody)
+    
+    new_tbody = """<tbody>
           {data.length === 0 ? (
             <tr>
               <td
@@ -375,7 +230,7 @@ export function DataTable<T extends object>(
                   rowKey={keyExtractor(row)}
                   columns={columns}
                   firstKey={firstKey}
-                  hasActions={!!hasActions}
+                  hasActions={hasActions}
                   onView={onView}
                   onEdit={onEdit}
                   onDelete={onDelete}
@@ -397,43 +252,26 @@ export function DataTable<T extends object>(
               ))}
             </SortableContext>
           )}
-        </tbody>
-      </table>
-      </DndContext>
+        </tbody>"""
 
-      {pagination && pagination.total > pagination.limit && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-zinc-200">
-          <span className="text-xs sm:text-sm text-zinc-600 order-2 sm:order-1 text-center sm:text-left">
-            Showing {(pagination.page - 1) * pagination.limit + 1}–
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
-            {pagination.total}
-          </span>
-          <div className="flex items-center justify-center gap-2 order-1 sm:order-2">
-            <button
-              onClick={() => pagination.onPageChange(pagination.page - 1)}
-              disabled={pagination.page <= 1}
-              className="p-1.5 sm:p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs sm:text-sm text-zinc-600">
-              Page {pagination.page} of{" "}
-              {Math.ceil(pagination.total / pagination.limit)}
-            </span>
-            <button
-              onClick={() => pagination.onPageChange(pagination.page + 1)}
-              disabled={
-                pagination.page >= Math.ceil(pagination.total / pagination.limit)
-              }
-              className="p-1.5 sm:p-2 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Next page"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+    content = content[:start_tbody] + new_tbody + content[end_tbody + 8:]
+
+    # Wrap the table in DndContext
+    start_table = content.find("<table")
+    end_table = content.find("</table>", start_table) + 8
+    
+    new_table_wrapper = f"""<DndContext 
+        sensors={{sensors}}
+        collisionDetection={{closestCenter}}
+        onDragEnd={{handleDragEnd}}
+      >
+        {content[start_table:end_table]}
+      </DndContext>"""
+      
+    content = content[:start_table] + new_table_wrapper + content[end_table:]
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+if __name__ == "__main__":
+    main()

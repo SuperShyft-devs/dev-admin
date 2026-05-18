@@ -39,6 +39,15 @@ function toNumberOrNull(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function sortPackagesByDisplayOrder(items: DiagnosticPackageListItem[]) {
+  return [...items].sort((a, b) => {
+    const orderA = a.display_order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.display_order ?? Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) return orderA - orderB;
+    return b.diagnostic_package_id - a.diagnostic_package_id;
+  });
+}
+
 export function DiagnosticPackages() {
   const [activeTab, setActiveTab] = useState<TabKey>("packages");
   const [rows, setRows] = useState<DiagnosticPackageListItem[]>([]);
@@ -60,15 +69,18 @@ export function DiagnosticPackages() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPackageId, setDrawerPackageId] = useState<number | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
+  const [reorderingPackages, setReorderingPackages] = useState(false);
   const [openCreateTestGroup, setOpenCreateTestGroup] = useState<(() => void) | null>(null);
   const [openCreateTest, setOpenCreateTest] = useState<(() => void) | null>(null);
 
-  const fetchPackages = useCallback(async () => {
-    setLoading(true);
+  const fetchPackages = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await diagnosticPackagesApi.list({ include_inactive: true, type: "public_package" });
-      const baseRows = res.data.data ?? [];
+      const baseRows = sortPackagesByDisplayOrder(res.data.data ?? []);
       const providerMissing = baseRows.some((row) => !row.diagnostic_provider);
 
       // Some backend list responses can omit provider; hydrate from detail endpoint so table shows real values.
@@ -87,14 +99,16 @@ export function DiagnosticPackages() {
             }
           })
         );
-        setRows(detailed);
+        setRows(sortPackagesByDisplayOrder(detailed));
       } else {
         setRows(baseRows);
       }
     } catch (err) {
       setError(getApiError(err));
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -193,12 +207,15 @@ export function DiagnosticPackages() {
     [rows]
   );
 
+  const canReorderPackages = useMemo(
+    () => !search.trim() && !tagFilter && !providerFilter && !genderFilter && !statusFilter,
+    [search, tagFilter, providerFilter, genderFilter, statusFilter]
+  );
+
   const filteredRows = useMemo(() => {
-    // Latest created/added packages first (higher id = newer, assuming monotonic ids).
-    const sorted = [...rows].sort((a, b) => b.diagnostic_package_id - a.diagnostic_package_id);
     const q = search.trim().toLowerCase();
 
-    return sorted.filter((row) => {
+    return rows.filter((row) => {
       if (q && !row.package_name.toLowerCase().includes(q)) return false;
       if (providerFilter && (row.diagnostic_provider?.trim() ?? "") !== providerFilter) return false;
       if (genderFilter && (row.gender_suitability?.trim().toLowerCase() ?? "") !== genderFilter) return false;
@@ -254,6 +271,31 @@ export function DiagnosticPackages() {
       setError(getApiError(err));
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  const handlePackageReorder = async (newOrderKeys: (string | number)[]) => {
+    const packageIds = newOrderKeys.map((id) => Number(id));
+    if (packageIds.length < 2) return;
+    const previous = [...rows];
+    const byId = new Map(rows.map((row) => [row.diagnostic_package_id, row]));
+    const reordered = packageIds
+      .map((id) => byId.get(id))
+      .filter((row): row is DiagnosticPackageListItem => Boolean(row))
+      .map((row, index) => ({ ...row, display_order: index + 1 }));
+    const reorderedIds = new Set(packageIds);
+    const rest = rows.filter((row) => !reorderedIds.has(row.diagnostic_package_id));
+    setRows([...reordered, ...rest]);
+    setReorderingPackages(true);
+    setError(null);
+    try {
+      await diagnosticPackagesApi.reorder({ package_ids: packageIds });
+      await fetchPackages({ silent: true });
+    } catch (err) {
+      setRows(previous);
+      setError(getApiError(err));
+    } finally {
+      setReorderingPackages(false);
     }
   };
 
@@ -525,6 +567,11 @@ export function DiagnosticPackages() {
           </div>
 
           <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+            {canReorderPackages && !loading && filteredRows.length > 1 && (
+              <p className="px-4 py-2 text-xs text-zinc-500 border-b border-zinc-100">
+                {reorderingPackages ? "Saving order…" : "Drag the handle to reorder packages."}
+              </p>
+            )}
             {loading ? (
               <div className="py-14 flex justify-center">
                 <Loader2 className="w-7 h-7 animate-spin text-zinc-400" />
@@ -537,6 +584,11 @@ export function DiagnosticPackages() {
                 onView={openDrawer}
                 onEdit={openEdit}
                 onDelete={handleDeletePackage}
+                onReorder={
+                  canReorderPackages && filteredRows.length > 1 && !reorderingPackages
+                    ? handlePackageReorder
+                    : undefined
+                }
                 firstColumnClickableView
               />
             )}
