@@ -141,34 +141,6 @@ export function DiagnosticPackages() {
     };
   }, [modalOpen, modalMode, editing?.diagnostic_package_id]);
 
-  useEffect(() => {
-    if (!modalOpen || modalMode !== "edit" || !editing) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await diagnosticPackagesApi.getTests(editing.diagnostic_package_id);
-        const groups = res.data.data?.groups ?? [];
-        const seen = new Set<number>();
-        let sum = 0;
-        for (const g of groups) {
-          for (const t of g.tests ?? []) {
-            if (t.test_id == null || seen.has(t.test_id)) continue;
-            seen.add(t.test_id);
-            if (t.original_price != null && Number.isFinite(t.original_price)) sum += t.original_price;
-          }
-        }
-        if (!cancelled && sum > 0) {
-          setForm((f) => ({ ...f, original_price: sum }));
-        }
-      } catch {
-        /* keep existing form */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [modalOpen, modalMode, editing?.diagnostic_package_id]);
-
   const tagOptions = useMemo(
     () =>
       Array.from(
