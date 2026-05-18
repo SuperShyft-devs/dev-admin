@@ -28,6 +28,7 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   original_price: null,
   is_most_popular: false,
   complementary_nutritionist: true,
+  complementary_doctor: false,
   health_areas_covered: "",
   about_text: "",
   bookings_count: null,
@@ -200,7 +201,7 @@ export function DiagnosticPackages() {
   const openCreate = () => {
     setModalMode("add");
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, complementary_doctor: false });
     setFormError(null);
     setModalOpen(true);
   };
@@ -220,6 +221,7 @@ export function DiagnosticPackages() {
       original_price: row.original_price ?? null,
       is_most_popular: !!row.is_most_popular,
       complementary_nutritionist: !!row.complementary_nutritionist,
+      complementary_doctor: !!row.complementary_doctor,
       health_areas_covered: "",
       about_text: "",
       bookings_count: null,
@@ -301,6 +303,7 @@ export function DiagnosticPackages() {
         original_price: form.original_price ?? null,
         is_most_popular: !!form.is_most_popular,
         complementary_nutritionist: !!form.complementary_nutritionist,
+        complementary_doctor: !!form.complementary_doctor,
         health_areas_covered: form.health_areas_covered?.trim() || null,
         about_text: form.about_text?.trim() || null,
         bookings_count: form.bookings_count ?? null,
@@ -714,6 +717,17 @@ export function DiagnosticPackages() {
                   className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
                 />
                 Nutritionist consultation
+              </label>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 px-3 py-4 rounded-lg border border-zinc-300 bg-zinc-50 text-sm font-medium text-zinc-900 cursor-pointer hover:bg-zinc-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={form.complementary_doctor === true}
+                  onChange={(e) => setForm((prev) => ({ ...prev, complementary_doctor: e.target.checked }))}
+                  className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
+                />
+                Doctor consultation
               </label>
             </div>
             <div className="sm:col-span-2">

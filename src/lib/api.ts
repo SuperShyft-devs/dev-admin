@@ -1163,6 +1163,7 @@ export interface DiagnosticPackageListItem {
   discount_percent?: number | null;
   is_most_popular?: boolean | null;
   complementary_nutritionist?: boolean | null;
+  complementary_doctor?: boolean | null;
   gender_suitability?: string | null;
   package_for?: "public" | "camp" | null;
   status?: string | null;
@@ -1195,6 +1196,7 @@ export interface DiagnosticPackageCreate {
   original_price?: number | null;
   is_most_popular?: boolean | null;
   complementary_nutritionist?: boolean | null;
+  complementary_doctor?: boolean | null;
   gender_suitability?: string | null;
   package_for?: "public" | "camp" | null;
 }
