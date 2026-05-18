@@ -28,6 +28,7 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   original_price: null,
   is_most_popular: false,
   complementary_nutritionist: true,
+  health_areas_covered: "",
   about_text: "",
   bookings_count: null,
 };
@@ -102,6 +103,29 @@ export function DiagnosticPackages() {
       void fetchPackages();
     }
   }, [activeTab, fetchPackages]);
+
+  useEffect(() => {
+    if (!modalOpen || modalMode !== "edit" || !editing) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detailRes = await diagnosticPackagesApi.get(editing.diagnostic_package_id);
+        const detail = detailRes.data.data;
+        if (!cancelled) {
+          setForm((f) => ({
+            ...f,
+            health_areas_covered: detail.health_areas_covered ?? "",
+            about_text: detail.about_text ?? "",
+          }));
+        }
+      } catch {
+        /* keep existing form */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, modalMode, editing?.diagnostic_package_id]);
 
   useEffect(() => {
     if (!modalOpen || modalMode !== "edit" || !editing) return;
@@ -207,6 +231,7 @@ export function DiagnosticPackages() {
       original_price: row.original_price ?? null,
       is_most_popular: !!row.is_most_popular,
       complementary_nutritionist: !!row.complementary_nutritionist,
+      health_areas_covered: "",
       about_text: "",
       bookings_count: null,
     });
@@ -262,6 +287,7 @@ export function DiagnosticPackages() {
         original_price: form.original_price ?? null,
         is_most_popular: !!form.is_most_popular,
         complementary_nutritionist: !!form.complementary_nutritionist,
+        health_areas_covered: form.health_areas_covered?.trim() || null,
         about_text: form.about_text?.trim() || null,
         bookings_count: form.bookings_count ?? null,
       };
@@ -665,6 +691,14 @@ export function DiagnosticPackages() {
                 />
                 Nutritionist consultation
               </label>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Health areas covered</label>
+              <textarea
+                value={form.health_areas_covered ?? ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, health_areas_covered: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 min-h-24 focus:ring-2 focus:ring-zinc-900"
+              />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">About</label>

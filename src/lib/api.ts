@@ -1171,6 +1171,7 @@ export interface DiagnosticPackageListItem {
 }
 
 export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
+  health_areas_covered?: string | null;
   about_text?: string | null;
   bookings_count?: number | null;
   reasons?: DiagnosticReason[];
@@ -1186,6 +1187,7 @@ export interface DiagnosticPackageCreate {
   custom?: boolean;
   report_duration_hours?: number | null;
   collection_type?: string | null;
+  health_areas_covered?: string | null;
   about_text?: string | null;
   bookings_count?: number | null;
   price?: number | null;

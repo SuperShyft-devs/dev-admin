@@ -518,6 +518,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                     {(detail?.status ?? "").toLowerCase() === "active" ? "Active" : "Inactive"}
                   </span>
                 </div>
+                <div className="sm:col-span-2"><p className="text-zinc-500">Health areas covered</p><p className="text-zinc-900 whitespace-pre-wrap">{detail?.health_areas_covered ?? "—"}</p></div>
                 <div className="sm:col-span-2"><p className="text-zinc-500">About</p><p className="text-zinc-900 whitespace-pre-wrap">{detail?.about_text ?? "—"}</p></div>
               </div>
 
