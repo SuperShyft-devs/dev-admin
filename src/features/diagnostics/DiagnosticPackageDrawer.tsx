@@ -513,6 +513,10 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                   <p className="text-zinc-900">{detail?.complementary_nutritionist ? "Yes" : "No"}</p>
                 </div>
                 <div>
+                  <p className="text-zinc-500">Doctor consultation</p>
+                  <p className="text-zinc-900">{detail?.complementary_doctor ? "Yes" : "No"}</p>
+                </div>
+                <div>
                   <p className="text-zinc-500">Status</p>
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${(detail?.status ?? "").toLowerCase() === "active" ? "bg-green-50 text-green-700" : "bg-zinc-100 text-zinc-500"}`}>
                     {(detail?.status ?? "").toLowerCase() === "active" ? "Active" : "Inactive"}
