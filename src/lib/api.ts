@@ -56,6 +56,7 @@ export interface UserListItem {
   email?: string | null;
   profile_photo?: string | null;
   is_participant?: boolean | null;
+  metsights_profile_id?: string | null;
   status?: string | null;
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Loader2, ListTree } from "lucide-react";
+import { Search, Plus, Loader2, ListTree, Info, AlertTriangle } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
@@ -19,6 +19,10 @@ import { fetchAllPages } from "../../lib/fetchAllPages";
 const STATUS_OPTIONS = ["active", "inactive"];
 const GENDER_OPTIONS = ["male", "female", "other"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
+
+function hasMetsightsProfileId(user: UserListItem): boolean {
+  return Boolean((user.metsights_profile_id ?? "").trim());
+}
 
 type ModalMode = "view" | "add" | "edit";
 
@@ -62,6 +66,7 @@ export function Users() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [deactivateConfirm, setDeactivateConfirm] = useState<UserListItem | null>(null);
   const [alwaysActiveUserId, setAlwaysActiveUserId] = useState<number | null>(null);
+  const [metsightsStats, setMetsightsStats] = useState({ withProfile: 0, totalParticipants: 0 });
 
   const [sendMsgUser, setSendMsgUser] = useState<UserListItem | null>(null);
   const [sendMsgServices, setSendMsgServices] = useState<NotificationServiceItem[]>([]);
@@ -83,6 +88,12 @@ export function Users() {
           status: statusFilter || undefined,
         })
       );
+
+      const participants = items.filter((u) => u.is_participant === true);
+      setMetsightsStats({
+        withProfile: participants.filter(hasMetsightsProfileId).length,
+        totalParticipants: participants.length,
+      });
 
       if (search) {
         const q = search.toLowerCase();
@@ -295,12 +306,32 @@ export function Users() {
       key: "name",
       label: "Name",
       sortable: true,
-      render: (row) => (
-        <div className="flex flex-col">
-          <span className="font-medium text-zinc-900">{getFullName(row)}</span>
-          <span className="text-xs text-zinc-500">{row.phone}</span>
-        </div>
-      ),
+      render: (row) => {
+        const showMissingMetsightsWarning =
+          row.is_participant === true && !hasMetsightsProfileId(row);
+        return (
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-medium text-zinc-900 truncate">{getFullName(row)}</span>
+              {showMissingMetsightsWarning && (
+                <span className="relative group/warn shrink-0">
+                  <AlertTriangle
+                    className="w-3.5 h-3.5 text-amber-500"
+                    aria-label="Missing Metsights profile ID"
+                  />
+                  <span
+                    role="tooltip"
+                    className="pointer-events-none absolute left-1/2 bottom-full z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/warn:opacity-100"
+                  >
+                    metsights_profile_id is null
+                  </span>
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-zinc-500">{row.phone}</span>
+          </div>
+        );
+      },
     },
     {
       key: "email",
@@ -414,13 +445,31 @@ export function Users() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Users</h1>
-        <button
-          onClick={openAdd}
-          className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
-        >
-          <Plus className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Add User</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="relative group/info">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+              aria-label="Metsights profile coverage among participants"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 w-max max-w-[min(16rem,calc(100vw-2rem))] rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/info:opacity-100"
+            >
+              {metsightsStats.withProfile} of {metsightsStats.totalParticipants} participants
+              have a metsights_profile_id
+            </span>
+          </span>
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Add User</span>
+          </button>
+        </div>
       </div>
 
       {/* Error */}
