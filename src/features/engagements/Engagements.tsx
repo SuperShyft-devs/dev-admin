@@ -92,13 +92,21 @@ function dueDateToInput(value?: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+function getEmployeeUserName(
+  userId: number,
+  usersById: Record<number, UserListItem>
+): string {
+  const u = usersById[userId];
+  const name = [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim();
+  return name || `User ${userId}`;
+}
+
 function formatEmployeeAssignLabel(
   emp: EmployeeListItem,
   usersById: Record<number, UserListItem>
 ): string {
-  const u = usersById[emp.user_id];
-  const name = [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim();
-  if (name) {
+  const name = getEmployeeUserName(emp.user_id, usersById);
+  if (name !== `User ${emp.user_id}`) {
     return emp.role?.trim() ? `${name} · ${emp.role}` : name;
   }
   if (emp.role?.trim()) return emp.role.trim();
@@ -702,6 +710,7 @@ export function Engagements() {
   const [addAssistantsOpen, setAddAssistantsOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([]);
   const [allEmployeesLoading, setAllEmployeesLoading] = useState(false);
+  const [assistantUsersById, setAssistantUsersById] = useState<Record<number, UserListItem>>({});
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -1237,6 +1246,22 @@ export function Engagements() {
     }
   }, []);
 
+  const loadAssistantUsers = useCallback(async () => {
+    try {
+      const allUsers = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
+        usersApi.list({ page: nextPage, limit: nextLimit })
+      );
+      setAssistantUsersById(
+        allUsers.reduce<Record<number, UserListItem>>((acc, user) => {
+          acc[user.user_id] = user;
+          return acc;
+        }, {})
+      );
+    } catch (err) {
+      setAssistantsError(getApiError(err));
+    }
+  }, []);
+
   const openAssistantsModal = (row: EngagementListItem) => {
     setAssistantsEngagement(row);
     setAssistants([]);
@@ -1245,7 +1270,8 @@ export function Engagements() {
     setSelectedEmployeeIds(new Set());
     setEmployeeSearch("");
     setAssistantsModalOpen(true);
-    fetchAssistants(row.engagement_id);
+    void fetchAssistants(row.engagement_id);
+    void loadAssistantUsers();
   };
 
   const closeAssistantsModal = () => {
@@ -1274,6 +1300,9 @@ export function Engagements() {
     setAddAssistantsOpen(true);
     setSelectedEmployeeIds(new Set());
     setEmployeeSearch("");
+    if (Object.keys(assistantUsersById).length === 0) {
+      void loadAssistantUsers();
+    }
     setAllEmployeesLoading(true);
     try {
       const res = await employeesApi.list({ status: "active", limit: 100 });
@@ -1317,10 +1346,15 @@ export function Engagements() {
   const assignedIds = new Set(assistants.map((a) => a.employee_id));
   const availableEmployees = allEmployees.filter((e) => !assignedIds.has(e.employee_id));
   const filteredEmployees = employeeSearch.trim()
-    ? availableEmployees.filter((e) =>
-        String(e.employee_id).includes(employeeSearch.trim()) ||
-        (e.role ?? "").toLowerCase().includes(employeeSearch.trim().toLowerCase())
-      )
+    ? availableEmployees.filter((e) => {
+        const q = employeeSearch.trim().toLowerCase();
+        const name = getEmployeeUserName(e.user_id, assistantUsersById).toLowerCase();
+        return (
+          String(e.employee_id).includes(q) ||
+          (e.role ?? "").toLowerCase().includes(q) ||
+          name.includes(q)
+        );
+      })
     : availableEmployees;
 
   const openParticipants = (row: EngagementListItem) => {
@@ -2265,7 +2299,7 @@ export function Engagements() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            Employee #{a.employee_id}
+                            {getEmployeeUserName(a.user_id, assistantUsersById)}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {a.role ? `Role: ${a.role}` : "No role"}{" "}
@@ -2328,7 +2362,7 @@ export function Engagements() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input
                   type="search"
-                  placeholder="Search by role or ID…"
+                  placeholder="Search by name, role, or ID…"
                   value={employeeSearch}
                   onChange={(e) => setEmployeeSearch(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
@@ -2367,7 +2401,7 @@ export function Engagements() {
                         />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            Employee #{e.employee_id}
+                            {getEmployeeUserName(e.user_id, assistantUsersById)}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {e.role ? `Role: ${e.role}` : "No role"}
