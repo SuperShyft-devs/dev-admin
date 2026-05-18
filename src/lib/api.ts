@@ -1835,6 +1835,7 @@ export interface NotificationServiceItem {
   webhook_path: string;
   is_active: boolean;
   require_record_id: boolean;
+  require_participant_detail: boolean;
   created_at: string | null;
 }
 
@@ -1856,6 +1857,7 @@ export const notificationsApi = {
     user_id: number;
     engagement_id: number | null;
     record_id?: string | null;
+    participant_details?: Record<string, string> | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
 
   listServices: () =>
@@ -1867,6 +1869,7 @@ export const notificationsApi = {
     webhook_path: string;
     is_active?: boolean;
     require_record_id?: boolean;
+    require_participant_detail?: boolean;
   }) =>
     api.post<{ data: NotificationServiceItem; meta: Record<string, unknown> }>("/notifications/services", body),
   updateService: (
@@ -1877,6 +1880,7 @@ export const notificationsApi = {
       webhook_path?: string;
       is_active?: boolean;
       require_record_id?: boolean;
+      require_participant_detail?: boolean;
     }
   ) =>
     api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(

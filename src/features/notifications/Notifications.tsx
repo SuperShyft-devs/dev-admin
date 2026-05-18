@@ -261,6 +261,7 @@ interface ServiceFormData {
   webhook_path: string;
   is_active: boolean;
   require_record_id: boolean;
+  require_participant_detail: boolean;
 }
 
 const EMPTY_SERVICE_FORM: ServiceFormData = {
@@ -270,6 +271,7 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   webhook_path: "",
   is_active: true,
   require_record_id: true,
+  require_participant_detail: false,
 };
 
 function ServicesTab() {
@@ -316,6 +318,7 @@ function ServicesTab() {
       webhook_path: row.webhook_path,
       is_active: row.is_active,
       require_record_id: row.require_record_id,
+      require_participant_detail: row.require_participant_detail,
     });
     setEditingId(row.notification_service_id);
     setModalMode("edit");
@@ -352,6 +355,7 @@ function ServicesTab() {
           webhook_path: formData.webhook_path,
           is_active: formData.is_active,
           require_record_id: formData.require_record_id,
+          require_participant_detail: formData.require_participant_detail,
         });
       }
       setModalOpen(false);
@@ -392,6 +396,13 @@ function ServicesTab() {
       sortable: false,
       hideOnTablet: true,
       render: (r) => (r.require_record_id ? "Yes" : "No"),
+    },
+    {
+      key: "require_participant_detail",
+      label: "Requires Participant",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (r.require_participant_detail ? "Yes" : "No"),
     },
     {
       key: "created_at",
@@ -519,6 +530,15 @@ function ServicesTab() {
                 className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
               <span className="text-sm text-zinc-700">Require Record ID</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.require_participant_detail}
+                onChange={(e) => setFormData({ ...formData, require_participant_detail: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              />
+              <span className="text-sm text-zinc-700">Require Participant Detail</span>
             </label>
           </div>
 
