@@ -142,8 +142,7 @@ export const platformSettingsApi = {
   importMetsightsProfilesPage: (payload: { page: number }) =>
     api.post<{ data: MetsightsProfilesImportPageResult; meta: Record<string, unknown> }>(
       "/platform-settings/metsights-profiles/import-page",
-      payload,
-      { timeout: 120_000 }
+      payload
     ),
 };
 
