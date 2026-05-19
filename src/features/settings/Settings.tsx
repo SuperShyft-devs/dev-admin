@@ -394,7 +394,8 @@ export function Settings() {
             <p className="text-xs text-zinc-500 mt-1 max-w-lg">
               Import participant profiles from Metsights into local users. Profiles that already have a matching{" "}
               <code className="bg-zinc-100 px-1 rounded">metsights_profile_id</code> are skipped. Existing users with
-              the same phone are linked.
+              the same phone (with or without +91) are linked and receive the Metsights profile id. If that user already
+              has a different Metsights profile id, a sub-profile is created instead.
             </p>
           </div>
           <button
