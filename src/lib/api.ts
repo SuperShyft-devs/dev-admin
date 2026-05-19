@@ -61,9 +61,20 @@ export interface UserListItem {
 }
 
 export function getApiError(err: unknown): string {
-  if (axios.isAxiosError(err) && err.response?.data) {
-    const d = err.response.data as { message?: string };
-    return d.message || "Request failed";
+  if (axios.isAxiosError(err)) {
+    if (err.code === "ECONNABORTED") {
+      return "Request timed out — the server may still be processing. Wait, refresh stats, then retry this page.";
+    }
+    if (err.response?.status === 429) {
+      return "Too many requests — wait a minute, then retry this page.";
+    }
+    if (err.response?.data) {
+      const d = err.response.data as { message?: string };
+      return d.message || "Request failed";
+    }
+    if (err.message === "Network Error") {
+      return "Network error — connection dropped or timed out. Retry this page after the API finishes (large imports can take up to 2 minutes).";
+    }
   }
   return err instanceof Error ? err.message : "Unknown error";
 }
@@ -142,7 +153,8 @@ export const platformSettingsApi = {
   importMetsightsProfilesPage: (payload: { page: number }) =>
     api.post<{ data: MetsightsProfilesImportPageResult; meta: Record<string, unknown> }>(
       "/platform-settings/metsights-profiles/import-page",
-      payload
+      payload,
+      { timeout: 120_000 }
     ),
 };
 

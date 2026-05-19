@@ -296,7 +296,7 @@ export function Settings() {
   }
 
   function handleRetryPage() {
-    if (failedPage == null) return;
+    if (failedPage == null || runningRef.current) return;
     setSyncPhase("running");
     setSyncError(null);
     void runSyncLoop(failedPage);

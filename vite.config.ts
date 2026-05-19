@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_DEV_PROXY_TARGET || 'http://localhost:8000',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
+          // Metsights import-page can run 30–90s when profiles need linking (not just skips).
+          timeout: 120_000,
+          proxyTimeout: 120_000,
         },
       },
     },
