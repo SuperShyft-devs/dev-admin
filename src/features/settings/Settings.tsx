@@ -16,6 +16,8 @@ import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const SYNC_STORAGE_KEY = "metsights-sync-v1";
 const METSIGHTS_RATE_LIMIT_RETRY_SEC = 60;
+const METSIGHTS_PAGE_GAP_MS = 2_500;
+const METSIGHTS_MAX_RETRY_WAIT_SEC = 300;
 
 type SyncPhase = "idle" | "running" | "waiting" | "paused" | "completed" | "error";
 
@@ -80,14 +82,33 @@ function shouldAutoRetryMetsightsSyncError(err: unknown): boolean {
   return true;
 }
 
-async function waitForMetsightsRetry(
+function retryWaitSecondsForAttempt(attempt: number, err: unknown): number {
+  const cappedAttempt = Math.max(1, attempt);
+  let seconds = Math.min(
+    Math.round(METSIGHTS_RATE_LIMIT_RETRY_SEC * 1.5 ** (cappedAttempt - 1)),
+    METSIGHTS_MAX_RETRY_WAIT_SEC
+  );
+  if (axios.isAxiosError(err)) {
+    const retryAfter = err.response?.headers?.["retry-after"];
+    const parsed =
+      typeof retryAfter === "string" && /^\d+$/.test(retryAfter.trim())
+        ? parseInt(retryAfter.trim(), 10)
+        : null;
+    if (parsed != null) {
+      seconds = Math.max(seconds, Math.min(parsed, METSIGHTS_MAX_RETRY_WAIT_SEC));
+    }
+  }
+  return seconds;
+}
+
+async function waitInterruptible(
   totalSeconds: number,
   opts: {
     onTick: (secondsRemaining: number) => void;
     isPaused: () => boolean;
     isAborted: () => boolean;
   }
-): Promise<"retry" | "paused" | "aborted"> {
+): Promise<"done" | "paused" | "aborted"> {
   for (let remaining = totalSeconds; remaining > 0; remaining -= 1) {
     opts.onTick(remaining);
     if (opts.isAborted()) {
@@ -98,7 +119,24 @@ async function waitForMetsightsRetry(
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  return "retry";
+  return "done";
+}
+
+async function sleepInterruptible(
+  totalMs: number,
+  opts: { isPaused: () => boolean; isAborted: () => boolean }
+): Promise<boolean> {
+  const stepMs = 250;
+  let remaining = totalMs;
+  while (remaining > 0) {
+    if (opts.isAborted() || opts.isPaused()) {
+      return false;
+    }
+    const chunk = Math.min(stepMs, remaining);
+    await new Promise((resolve) => setTimeout(resolve, chunk));
+    remaining -= chunk;
+  }
+  return true;
 }
 
 export function Settings() {
@@ -125,6 +163,7 @@ export function Settings() {
   const [syncTotals, setSyncTotals] = useState<SyncTotals>({ created: 0, linked: 0, skipped: 0, failed: 0 });
   const [syncError, setSyncError] = useState<string | null>(null);
   const [retryWaitSeconds, setRetryWaitSeconds] = useState<number | null>(null);
+  const [pageRetryAttempt, setPageRetryAttempt] = useState(0);
   const [failedPage, setFailedPage] = useState<number | null>(null);
   const [activityLog, setActivityLog] = useState<PageLogEntry[]>([]);
   const [logOpen, setLogOpen] = useState(false);
@@ -133,6 +172,7 @@ export function Settings() {
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const runningRef = useRef(false);
+  const pageFailStreakRef = useRef(0);
 
   const loadB2c = useCallback(async () => {
     setLoading(true);
@@ -258,12 +298,18 @@ export function Settings() {
   }
 
   const runSyncLoop = useCallback(
-    async (startPage: number) => {
+    async (startPage: number, opts?: { preserveRetryStreak?: boolean }) => {
       if (runningRef.current) return;
       runningRef.current = true;
       pauseRef.current = false;
+      if (!opts?.preserveRetryStreak) {
+        pageFailStreakRef.current = 0;
+        setPageRetryAttempt(0);
+      }
       setSyncError(null);
-      setFailedPage(null);
+      if (!opts?.preserveRetryStreak) {
+        setFailedPage(null);
+      }
       setSyncPhase("running");
 
       let page = startPage;
@@ -282,6 +328,8 @@ export function Settings() {
             const pages = totalPagesFromCount(remoteTotal, result.page_size || pageSizeHint);
             const hasNext = result.metsights_next != null && result.metsights_next !== "";
 
+            pageFailStreakRef.current = 0;
+            setPageRetryAttempt(0);
             page += 1;
             setNextPage(page);
             setSyncError(null);
@@ -289,6 +337,20 @@ export function Settings() {
 
             if (!hasNext || (pages > 0 && page > pages)) {
               setSyncPhase("completed");
+              await refreshMsStats();
+              break;
+            }
+
+            const paced = await sleepInterruptible(METSIGHTS_PAGE_GAP_MS, {
+              isPaused: () => pauseRef.current,
+              isAborted: () => Boolean(abortRef.current?.signal.aborted),
+            });
+            if (!paced) {
+              if (abortRef.current?.signal.aborted) {
+                return;
+              }
+              setSyncPhase("paused");
+              setSyncError(`Paused before page ${page}. Resume to continue.`);
               await refreshMsStats();
               break;
             }
@@ -302,13 +364,18 @@ export function Settings() {
               break;
             }
 
+            pageFailStreakRef.current += 1;
+            const attempt = pageFailStreakRef.current;
+            const waitSec = retryWaitSecondsForAttempt(attempt, err);
+
             setFailedPage(page);
+            setPageRetryAttempt(attempt);
             setSyncPhase("waiting");
             setSyncError(
-              `Request failed (possible Metsights rate limit). Retrying page ${page} in ${METSIGHTS_RATE_LIMIT_RETRY_SEC}s…`
+              `Page ${page} failed (attempt ${attempt}). Retrying in ${waitSec}s (Metsights rate limit)…`
             );
 
-            const waitOutcome = await waitForMetsightsRetry(METSIGHTS_RATE_LIMIT_RETRY_SEC, {
+            const waitOutcome = await waitInterruptible(waitSec, {
               onTick: setRetryWaitSeconds,
               isPaused: () => pauseRef.current,
               isAborted: () => Boolean(abortRef.current?.signal.aborted),
@@ -351,6 +418,8 @@ export function Settings() {
     setSyncTotals({ created: 0, linked: 0, skipped: 0, failed: 0 });
     setActivityLog([]);
     setRetryWaitSeconds(null);
+    setPageRetryAttempt(0);
+    pageFailStreakRef.current = 0;
     setSyncPhase("idle");
     const total = msStats?.metsights_total ?? 0;
     setMetsightsTotal(total);
@@ -362,8 +431,9 @@ export function Settings() {
   }
 
   function handleResume() {
-    if (syncPhase === "error" && failedPage != null) {
-      void runSyncLoop(failedPage);
+    const resumePage = failedPage ?? nextPage;
+    if (syncPhase === "error" || syncPhase === "paused") {
+      void runSyncLoop(resumePage, { preserveRetryStreak: syncPhase === "paused" && failedPage != null });
       return;
     }
     void runSyncLoop(nextPage);
@@ -549,7 +619,7 @@ export function Settings() {
         {syncPhase === "waiting" ? (
           <p className="text-sm text-amber-700" role="status">
             {retryWaitSeconds != null
-              ? `Waiting ${retryWaitSeconds}s before retrying page ${failedPage ?? nextPage} (Metsights rate limit)…`
+              ? `Waiting ${retryWaitSeconds}s — retry ${pageRetryAttempt || 1} for page ${failedPage ?? nextPage} (then continues sync)…`
               : syncError}
           </p>
         ) : null}
