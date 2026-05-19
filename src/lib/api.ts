@@ -105,12 +105,43 @@ export interface B2cOnboardingDefaults {
   b2c_default_diagnostic_package_id: number;
 }
 
+export interface MetsightsProfilesStats {
+  local_total_users: number;
+  local_with_metsights_profile_id: number;
+  local_without_metsights_profile_id: number;
+  metsights_total: number;
+  estimated_not_imported: number;
+}
+
+export interface MetsightsProfilesImportPageResult {
+  page: number;
+  page_size: number;
+  metsights_total: number;
+  metsights_next: string | null;
+  metsights_previous: string | null;
+  created: number;
+  linked: number;
+  skipped: number;
+  failed: number;
+  failures: { metsights_profile_id: string; reason: string }[];
+  skipped_items: { metsights_profile_id: string; reason: string }[];
+}
+
 export const platformSettingsApi = {
   getB2cOnboarding: () =>
     api.get<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>("/platform-settings/b2c-onboarding"),
   patchB2cOnboarding: (payload: B2cOnboardingDefaults) =>
     api.patch<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>(
       "/platform-settings/b2c-onboarding",
+      payload
+    ),
+  getMetsightsProfileStats: () =>
+    api.get<{ data: MetsightsProfilesStats; meta: Record<string, unknown> }>(
+      "/platform-settings/metsights-profiles/stats"
+    ),
+  importMetsightsProfilesPage: (payload: { page: number }) =>
+    api.post<{ data: MetsightsProfilesImportPageResult; meta: Record<string, unknown> }>(
+      "/platform-settings/metsights-profiles/import-page",
       payload
     ),
 };

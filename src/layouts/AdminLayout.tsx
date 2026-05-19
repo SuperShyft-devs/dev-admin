@@ -20,7 +20,7 @@ import {
   CreditCard,
   Stethoscope,
   Bell,
-  // Settings,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
@@ -32,7 +32,7 @@ const primaryNavItems = [
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/support", icon: LifeBuoy, label: "Support" },
-  // { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
 
