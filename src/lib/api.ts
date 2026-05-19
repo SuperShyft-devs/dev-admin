@@ -647,6 +647,24 @@ export const engagementsApi = {
       `/engagements/${id}/status`,
       { status }
     ),
+  assignParticipantsBatch: (
+    engagementId: number,
+    payload: { rows: { metsights_record_id: string; phone: string }[] },
+    config?: { signal?: AbortSignal }
+  ) =>
+    api.post<{
+      data: {
+        results: {
+          metsights_record_id: string;
+          phone: string;
+          status: string;
+          reason?: string | null;
+          user_id?: number | null;
+          assessment_instance_id?: number | null;
+          newly_enrolled?: boolean | null;
+        }[];
+      };
+    }>(`/engagements/${engagementId}/assign-participants-batch`, payload, config),
 };
 
 // Assessment packages

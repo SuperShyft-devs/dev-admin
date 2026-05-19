@@ -20,6 +20,7 @@ import {
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
+import { AssignParticipantsFromCsv } from "../../shared/ui/AssignParticipantsFromCsv";
 import { OccupiedSlotsModal } from "../../shared/ui/OccupiedSlotsModal";
 import {
   engagementsApi,
@@ -1552,6 +1553,15 @@ export function Engagements() {
                 <Users className="w-3.5 h-3.5" />
                 View Participants
               </button>
+              <AssignParticipantsFromCsv
+                engagementId={selected.engagement_id}
+                engagementName={selected.engagement_name ?? selected.engagement_code}
+                onComplete={() => {
+                  engagementsApi.get(selected.engagement_id).then((res) => {
+                    setSelected(res.data.data);
+                  }).catch(() => {});
+                }}
+              />
             </div>
 
             {/* ── Questionnaire Status Section ── */}
