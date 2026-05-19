@@ -678,7 +678,10 @@ export const engagementsApi = {
           newly_enrolled?: boolean | null;
         }[];
       };
-    }>(`/engagements/${engagementId}/assign-participants-batch`, payload, config),
+    }>(`/engagements/${engagementId}/assign-participants-batch`, payload, {
+      timeout: 120_000,
+      ...config,
+    }),
 };
 
 // Assessment packages

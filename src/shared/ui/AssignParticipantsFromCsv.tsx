@@ -99,6 +99,9 @@ export function AssignParticipantsFromCsv({
     failed: 0,
   });
   const [lastResults, setLastResults] = useState<AssignParticipantsRowResult[]>([]);
+  const [failedBatchStart, setFailedBatchStart] = useState<number | null>(null);
+  const pendingRowsRef = useRef<AssignParticipantsRow[]>([]);
+  const runningRef = useRef(false);
 
   const accumulateResults = useCallback((results: AssignParticipantsRowResult[]) => {
     setLastResults((prev) => [...results, ...prev].slice(0, 20));
@@ -122,21 +125,29 @@ export function AssignParticipantsFromCsv({
   }, []);
 
   const runBatches = useCallback(
-    async (rows: AssignParticipantsRow[]) => {
+    async (rows: AssignParticipantsRow[], startAt = 0) => {
+      if (runningRef.current) return;
+      runningRef.current = true;
+
       abortRef.current = new AbortController();
       const signal = abortRef.current.signal;
+      pendingRowsRef.current = rows;
 
       setProgressOpen(true);
       setPhase("running");
       setParseError(null);
       setRunError(null);
-      setTotalRows(rows.length);
-      setProcessedRows(0);
-      setTotals({ assigned: 0, enrolled: 0, skipped: 0, failed: 0 });
-      setLastResults([]);
+      if (startAt === 0) {
+        setTotalRows(rows.length);
+        setProcessedRows(0);
+        setTotals({ assigned: 0, enrolled: 0, skipped: 0, failed: 0 });
+        setLastResults([]);
+      }
+      setFailedBatchStart(null);
 
+      let nextIndex = startAt;
       try {
-        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        for (let i = startAt; i < rows.length; i += BATCH_SIZE) {
           if (signal.aborted) {
             setPhase("cancelled");
             return;
@@ -146,7 +157,8 @@ export function AssignParticipantsFromCsv({
           const res = await engagementsApi.assignParticipantsBatch(engagementId, { rows: chunk }, { signal });
           const results = res.data.data.results ?? [];
           accumulateResults(results);
-          setProcessedRows((prev) => prev + chunk.length);
+          nextIndex = i + chunk.length;
+          setProcessedRows(nextIndex);
         }
 
         setPhase("completed");
@@ -157,11 +169,19 @@ export function AssignParticipantsFromCsv({
           return;
         }
         setRunError(getApiError(err));
+        setFailedBatchStart(nextIndex);
         setPhase("error");
+      } finally {
+        runningRef.current = false;
       }
     },
     [accumulateResults, engagementId, onComplete]
   );
+
+  const handleRetryFailedBatch = () => {
+    if (failedBatchStart == null || runningRef.current) return;
+    void runBatches(pendingRowsRef.current, failedBatchStart);
+  };
 
   const handleFileChange = async (file?: File) => {
     if (!file) return;
@@ -229,11 +249,22 @@ export function AssignParticipantsFromCsv({
           )}
 
           {(phase === "completed" || phase === "cancelled" || phase === "error") && (
-            <p className="text-zinc-700">
-              {phase === "completed" && "Import finished."}
-              {phase === "cancelled" && "Import cancelled."}
-              {phase === "error" && (runError || "Import failed.")}
-            </p>
+            <div className="space-y-2">
+              <p className="text-zinc-700">
+                {phase === "completed" && "Import finished."}
+                {phase === "cancelled" && "Import cancelled."}
+                {phase === "error" && (runError || "Import failed.")}
+              </p>
+              {phase === "error" && failedBatchStart != null ? (
+                <button
+                  type="button"
+                  onClick={handleRetryFailedBatch}
+                  className="text-xs font-medium text-red-700 underline hover:text-red-800"
+                >
+                  Retry from row {failedBatchStart + 1}
+                </button>
+              ) : null}
+            </div>
           )}
 
           <dl className="grid grid-cols-2 gap-2 text-xs">
