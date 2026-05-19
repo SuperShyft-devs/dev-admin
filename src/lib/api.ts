@@ -623,19 +623,6 @@ export interface EngagementCreate {
   enroll_for_fitprint_full?: boolean;
 }
 
-export interface MetsightsImportRowResult {
-  line: number;
-  status: "imported" | "skipped" | "failed";
-  reason: string;
-}
-
-export interface MetsightsImportResult {
-  imported: number;
-  skipped: number;
-  failed: number;
-  rows: MetsightsImportRowResult[];
-}
-
 export const engagementsApi = {
   list: (params?: {
     page?: number;
@@ -660,22 +647,6 @@ export const engagementsApi = {
       `/engagements/${id}/status`,
       { status }
     ),
-  importMetsightsCsv: (engagementId: number, file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return api.post<{ data: MetsightsImportResult; meta: Record<string, unknown> }>(
-      `/engagements/${engagementId}/import/metsights-csv`,
-      formData
-    );
-  },
-  uploadWalkinsCsv: (engagementId: number, file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return api.post<{ data: MetsightsImportResult; meta: Record<string, unknown> }>(
-      `/engagements/${engagementId}/import/metsights-csv`,
-      formData
-    );
-  },
 };
 
 // Assessment packages

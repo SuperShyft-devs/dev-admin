@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -12,12 +12,10 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
-  Upload,
   ClipboardList,
   Settings,
   CloudCog,
   Send,
-  Download,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -48,7 +46,6 @@ import {
   type ChecklistTemplate,
   type ChecklistTask,
   type UserListItem,
-  type MetsightsImportResult,
   usersApi,
   getApiError,
   engagementAssessmentPackagesApi,
@@ -679,13 +676,6 @@ export function Engagements() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
 
-  const metsightsImportInputRef = useRef<HTMLInputElement | null>(null);
-  const walkinsImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [metsightsImporting, setMetsightsImporting] = useState(false);
-  const [metsightsImportResult, setMetsightsImportResult] = useState<MetsightsImportResult | null>(null);
-  const [metsightsImportSummaryOpen, setMetsightsImportSummaryOpen] = useState(false);
-  const [metsightsImportSummaryTitle, setMetsightsImportSummaryTitle] = useState("Import results");
-
   const [participantsSource, setParticipantsSource] = useState<
     | { kind: "engagement-code"; code: string; name?: string }
     | { kind: "public" }
@@ -1175,61 +1165,6 @@ export function Engagements() {
     }
   };
 
-  const handleMetsightsCsvSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !selected) return;
-    setMetsightsImporting(true);
-    setError(null);
-    try {
-      const res = await engagementsApi.importMetsightsCsv(selected.engagement_id, file);
-      setMetsightsImportSummaryTitle("Import results");
-      setMetsightsImportResult(res.data.data);
-      setMetsightsImportSummaryOpen(true);
-      const fresh = await engagementsApi.get(selected.engagement_id);
-      setSelected(fresh.data.data);
-      await fetchList();
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setMetsightsImporting(false);
-    }
-  };
-
-  const handleWalkinsCsvSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !selected) return;
-    setMetsightsImporting(true);
-    setError(null);
-    try {
-      const res = await engagementsApi.uploadWalkinsCsv(selected.engagement_id, file);
-      setMetsightsImportSummaryTitle("Walkins upload results");
-      setMetsightsImportResult(res.data.data);
-      setMetsightsImportSummaryOpen(true);
-      const fresh = await engagementsApi.get(selected.engagement_id);
-      setSelected(fresh.data.data);
-      await fetchList();
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setMetsightsImporting(false);
-    }
-  };
-
-  const downloadWalkinsTemplate = () => {
-    const csv = "name,number,metsights_profile_id,record_id\r\n";
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "walkins-template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
 
   // ── Onboarding Assistants handlers ───────────────────────────
@@ -1617,34 +1552,7 @@ export function Engagements() {
                 <Users className="w-3.5 h-3.5" />
                 View Participants
               </button>
-              <input
-                ref={metsightsImportInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={handleMetsightsCsvSelected}
-              />
-              <button
-                type="button"
-                disabled={
-                  metsightsImporting ||
-                  (selected.status ?? "").toLowerCase() !== "active"
-                }
-                onClick={() => metsightsImportInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 disabled:pointer-events-none text-zinc-700 text-xs font-medium"
-              >
-                {metsightsImporting ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Upload className="w-3.5 h-3.5" />
-                )}
-                Import CSV
-              </button>
             </div>
-            <p className="text-xs text-zinc-500">
-              Metsights export: id, Created Date, First Name, Last Name, Phone #, Email, Gender, Age. Slots use
-              engagement start date (or end date) at 10:00.
-            </p>
 
             {/* ── Questionnaire Status Section ── */}
             <div className="pt-2 border-t border-zinc-100">
@@ -1785,34 +1693,6 @@ export function Engagements() {
                 >
                   <ClipboardList className="w-3.5 h-3.5" />
                   Manage Assessments
-                </button>
-                <input
-                  ref={walkinsImportInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={handleWalkinsCsvSelected}
-                />
-                <button
-                  type="button"
-                  disabled={metsightsImporting || (selected.status ?? "").toLowerCase() !== "active"}
-                  onClick={() => walkinsImportInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 disabled:opacity-50 disabled:pointer-events-none text-zinc-700 text-xs font-medium transition-colors"
-                >
-                  {metsightsImporting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5" />
-                  )}
-                  Upload Walkins
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadWalkinsTemplate}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download Template
                 </button>
               </div>
 
@@ -2165,76 +2045,6 @@ export function Engagements() {
           source={occupiedSlotsSource}
         />
       )}
-
-      <Modal
-        open={metsightsImportSummaryOpen}
-        onClose={() => {
-          setMetsightsImportSummaryOpen(false);
-          setMetsightsImportResult(null);
-        }}
-        title={metsightsImportSummaryTitle}
-        maxWidthClassName="max-w-lg"
-      >
-        {metsightsImportResult ? (
-          <div className="space-y-4 text-sm">
-            <div className="flex flex-wrap gap-4 text-zinc-700">
-              <span>
-                <span className="text-zinc-500">Imported:</span> {metsightsImportResult.imported}
-              </span>
-              <span>
-                <span className="text-zinc-500">Skipped:</span> {metsightsImportResult.skipped}
-              </span>
-              <span>
-                <span className="text-zinc-500">Failed:</span> {metsightsImportResult.failed}
-              </span>
-            </div>
-            {metsightsImportResult.rows.length > 0 && (
-              <div className="border border-zinc-200 rounded-lg max-h-64 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-zinc-50 sticky top-0">
-                    <tr>
-                      <th className="text-left px-2 py-1.5 font-medium text-zinc-600">Line</th>
-                      <th className="text-left px-2 py-1.5 font-medium text-zinc-600">Status</th>
-                      <th className="text-left px-2 py-1.5 font-medium text-zinc-600">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metsightsImportResult.rows.map((r) => (
-                      <tr key={r.line} className="border-t border-zinc-100">
-                        <td className="px-2 py-1 text-zinc-800">{r.line}</td>
-                        <td className="px-2 py-1">
-                          <span
-                            className={
-                              r.status === "imported"
-                                ? "text-emerald-700"
-                                : r.status === "skipped"
-                                  ? "text-amber-700"
-                                  : "text-red-700"
-                            }
-                          >
-                            {r.status}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1 text-zinc-600">{r.reason || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setMetsightsImportSummaryOpen(false);
-                setMetsightsImportResult(null);
-              }}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
-            >
-              Close
-            </button>
-          </div>
-        ) : null}
-      </Modal>
 
       <EngagementChecklistModal
         open={checklistModalOpen}
