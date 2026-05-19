@@ -158,7 +158,7 @@ export function HealthMetrics() {
       setFormError("Display name is required.");
       return;
     }
-    if (modalMode === "add" && !form.parameter_key.trim()) {
+    if (!form.parameter_key.trim()) {
       setFormError("Metric key is required.");
       return;
     }
@@ -340,29 +340,16 @@ export function HealthMetrics() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Metric key {modalMode === "add" ? "*" : ""}
-              </label>
-              {modalMode === "add" ? (
-                <>
-                  <input
-                    type="text"
-                    value={form.parameter_key}
-                    onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
-                    className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                    placeholder="oxidative_stress"
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-zinc-500 mt-1">Use snake_case, e.g. oxidative_stress</p>
-                </>
-              ) : (
-                <input
-                  type="text"
-                  value={form.parameter_key}
-                  readOnly
-                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 bg-zinc-50 text-zinc-600 cursor-not-allowed"
-                />
-              )}
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Metric key *</label>
+              <input
+                type="text"
+                value={form.parameter_key}
+                onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                placeholder="oxidative_stress"
+                autoComplete="off"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Use snake_case, e.g. oxidative_stress</p>
             </div>
 
             <label className="inline-flex items-center gap-2 text-sm text-zinc-700 leading-none sm:col-span-2">
