@@ -37,7 +37,7 @@ function parseCsvRows(text: string): AssignParticipantsRow[] {
   const parsed = Papa.parse<Record<string, string>>(text, {
     header: true,
     skipEmptyLines: true,
-    transformHeader: (h) => h.trim(),
+    transformHeader: (h: string) => h.trim(),
   });
 
   if (parsed.errors.length > 0) {
@@ -54,8 +54,8 @@ function parseCsvRows(text: string): AssignParticipantsRow[] {
     }
   }
 
-  const idKey = fields.find((f) => normalizeHeader(f) === "id")!;
-  const phoneKey = fields.find((f) => normalizeHeader(f) === "phone #")!;
+  const idKey = fields.find((f: string) => normalizeHeader(f) === "id")!;
+  const phoneKey = fields.find((f: string) => normalizeHeader(f) === "phone #")!;
 
   const rows: AssignParticipantsRow[] = [];
   for (const record of parsed.data) {
