@@ -583,7 +583,7 @@ export function Settings() {
           <button
             type="button"
             onClick={handlePause}
-            disabled={!isSyncing && syncPhase !== "waiting"}
+            disabled={!isSyncing}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
           >
             <Pause className="w-4 h-4" />
