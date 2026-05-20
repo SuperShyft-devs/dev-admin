@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
   expertsApi,
   getApiError,
@@ -25,10 +26,9 @@ function formatUserDropdownLabel(u: UserListItem): string {
   return name || `User #${u.user_id}`;
 }
 
-function formatViewUserId(userId: number | null | undefined, users: UserListItem[]): string {
+function formatViewUserId(userId: number | null | undefined, user: UserListItem | null): string {
   if (userId == null || userId <= 0) return "—";
-  const u = users.find((x) => x.user_id === userId);
-  return u ? `${userId} — ${formatUserDropdownLabel(u)}` : String(userId);
+  return user ? `${userId} — ${formatUserDropdownLabel(user)}` : String(userId);
 }
 
 const emptyPayload = (): ExpertPayload => ({
@@ -72,8 +72,7 @@ export function Experts() {
   const [newTagName, setNewTagName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [usersList, setUsersList] = useState<UserListItem[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  const [viewUser, setViewUser] = useState<UserListItem | null>(null);
 
   const syncModesFromPayload = (modes: ConsultationMode[] | string[] | null | undefined) => {
     const set = new Set((modes ?? []).map((m) => String(m).toLowerCase()));
@@ -129,31 +128,37 @@ export function Experts() {
   }, [search, expertTypeFilter, statusFilter]);
 
   useEffect(() => {
-    if (!modalOpen) return;
+    const userId = selected?.user_id;
+    if (modalMode !== "view" || userId == null || userId <= 0) {
+      setViewUser(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
-      setUsersLoading(true);
       try {
-        const res = await usersApi.list({
-          page: 1,
-          limit: 50,
-          status: "active",
-          sort_by: "name",
-          sort_dir: "asc",
-        });
+        const res = await usersApi.get(userId);
         if (!cancelled) {
-          setUsersList(res.data.data);
+          const u = res.data.data;
+          setViewUser({
+            user_id: u.user_id,
+            first_name: u.first_name,
+            last_name: u.last_name,
+            phone: u.phone,
+            email: u.email,
+            age: u.age,
+            profile_photo: u.profile_photo,
+            is_participant: u.is_participant,
+            status: u.status,
+          });
         }
-      } catch (err) {
-        if (!cancelled) setError(getApiError(err));
-      } finally {
-        if (!cancelled) setUsersLoading(false);
+      } catch {
+        if (!cancelled) setViewUser(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [modalOpen]);
+  }, [modalMode, selected?.user_id]);
 
   const openView = (row: ExpertListItem) => {
     expertsApi
@@ -420,7 +425,7 @@ export function Experts() {
             <div className="font-medium text-zinc-900">{selected.specialization}</div>
             <div className="text-zinc-600">
               <span className="text-zinc-500">User Id:</span>{" "}
-              {formatViewUserId(selected.user_id, usersList)}
+              {formatViewUserId(selected.user_id, viewUser)}
             </div>
             <div className="text-zinc-600">
               <span className="text-zinc-500">Type:</span> {selected.expert_type}
@@ -455,30 +460,14 @@ export function Experts() {
         ) : (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block sm:col-span-2">
-                <span className="text-zinc-600 text-xs">User Id *</span>
-                <select
-                  required
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
-                  value={formData.user_id > 0 ? String(formData.user_id) : ""}
-                  disabled={usersLoading}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      user_id: e.target.value ? Number(e.target.value) : 0,
-                    }))
-                  }
-                >
-                  <option value="">
-                    {usersLoading ? "Loading users…" : "Select a user"}
-                  </option>
-                  {usersList.map((u) => (
-                    <option key={u.user_id} value={u.user_id}>
-                      {formatUserDropdownLabel(u)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <UserSearchPicker
+                key={modalMode === "add" ? "add" : `edit-${selected?.expert_id ?? 0}`}
+                className="sm:col-span-2"
+                label="User"
+                required
+                value={formData.user_id}
+                onChange={(userId) => setFormData((p) => ({ ...p, user_id: userId }))}
+              />
               <label className="block">
                 <span className="text-zinc-600 text-xs">Specialization *</span>
                 <input
