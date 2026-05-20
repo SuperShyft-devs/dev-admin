@@ -5,6 +5,13 @@ const API_BASE = import.meta.env.VITE_API_URL || "/api";
 export const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
+  timeout: 120_000,
+});
+
+const authHttp = axios.create({
+  baseURL: API_BASE,
+  headers: { "Content-Type": "application/json" },
+  timeout: 30_000,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -60,20 +67,32 @@ export interface UserListItem {
   status?: string | null;
 }
 
-export function getApiError(err: unknown): string {
+export function getApiError(err: unknown, context?: "auth" | "import"): string {
   if (axios.isAxiosError(err)) {
     if (err.code === "ECONNABORTED") {
+      if (context === "auth") {
+        return "Request timed out — check that the API is running and reachable, then try again.";
+      }
       return "Request timed out — the server may still be processing. Wait, refresh stats, then retry this page.";
     }
     if (err.response?.status === 429) {
-      return "Too many requests — wait a minute, then retry this page.";
+      return "Too many requests — wait a minute, then retry.";
     }
     if (err.response?.data) {
       const d = err.response.data as { message?: string };
       return d.message || "Request failed";
     }
-    if (err.message === "Network Error") {
-      return "Network error — connection dropped or timed out. Retry this page after the API finishes (large imports can take up to 2 minutes).";
+    if (err.message === "Network Error" || err.code === "ERR_NETWORK") {
+      if (context === "auth") {
+        return (
+          "Cannot reach the API. Check that it is up, CORS allows this admin origin " +
+          `(API: ${API_BASE}), and try ${API_BASE.replace(/\/$/, "")}/health in your browser.`
+        );
+      }
+      if (context === "import") {
+        return "Network error — connection dropped or timed out. Large imports can take up to 2 minutes; wait and retry.";
+      }
+      return "Network error — could not reach the API. Check your connection and API status, then retry.";
     }
   }
   return err instanceof Error ? err.message : "Unknown error";
@@ -170,15 +189,15 @@ export interface AuthTokens {
 
 export const authApi = {
   sendOtp: (phone: string) =>
-    api.post<{ data: { session_id: number } }>("/auth/send-otp", { phone }),
+    authHttp.post<{ data: { session_id: number } }>("/auth/send-otp", { phone }),
   verifyOtp: (phone: string, otp: string) =>
-    api.post<{ data: AuthTokens }>("/auth/verify-otp", { phone, otp }),
+    authHttp.post<{ data: AuthTokens }>("/auth/verify-otp", { phone, otp }),
   refreshToken: (refreshToken: string) =>
-    api.post<{ data: { tokens: AuthTokens["tokens"] } }>("/auth/refresh-token", {
+    authHttp.post<{ data: { tokens: AuthTokens["tokens"] } }>("/auth/refresh-token", {
       refresh_token: refreshToken,
     }),
   logout: (refreshToken: string) =>
-    api.post("/auth/logout", { refresh_token: refreshToken }),
+    authHttp.post("/auth/logout", { refresh_token: refreshToken }),
 };
 
 // Full user detail (employee view)

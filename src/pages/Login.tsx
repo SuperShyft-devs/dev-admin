@@ -31,7 +31,7 @@ export function Login() {
       setStep("otp");
       setOtp("");
     } catch (err) {
-      setError(getApiError(err));
+      setError(getApiError(err, "auth"));
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function Login() {
       await login(phone.trim(), otp.trim());
       navigate("/", { replace: true });
     } catch (err) {
-      setError(getApiError(err));
+      setError(getApiError(err, "auth"));
     } finally {
       setLoading(false);
     }
