@@ -8,7 +8,6 @@ import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngage
 import {
   organizationsApi,
   employeesApi,
-  usersApi,
   uploadsApi,
   type EmployeeListItem,
   type UserListItem,
@@ -17,7 +16,6 @@ import {
   type OrganizationCreate,
   getApiError,
 } from "../../lib/api";
-import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
@@ -80,54 +78,35 @@ export function Organisations() {
     city?: string;
   } | null>(null);
 
+  useEffect(() => {
+    organizationsApi
+      .filterOptions()
+      .then((res) => {
+        setCityOptions(res.data.data.cities);
+        setCountryOptions(res.data.data.countries);
+      })
+      .catch(() => {
+        setCityOptions([]);
+        setCountryOptions([]);
+      });
+  }, []);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let items = await fetchAllPages<OrganizationListItem>((nextPage, nextLimit) =>
-        organizationsApi.list({
-          page: nextPage,
-          limit: nextLimit,
-          status: statusFilter || undefined,
-        })
-      );
-      const citySet = new Set<string>();
-      const countrySet = new Set<string>();
-      items.forEach((item) => {
-        const city = (item.city ?? "").trim();
-        const country = (item.country ?? "").trim();
-        if (city) citySet.add(city);
-        if (country) countrySet.add(country);
+      const res = await organizationsApi.list({
+        page,
+        limit,
+        status: statusFilter || undefined,
+        search: search.trim() || undefined,
+        city: cityFilter || undefined,
+        country: countryFilter || undefined,
+        sort_by: sortKey,
+        sort_dir: sortDir,
       });
-      setCityOptions(Array.from(citySet).sort((a, b) => a.localeCompare(b)));
-      setCountryOptions(Array.from(countrySet).sort((a, b) => a.localeCompare(b)));
-
-      if (search) {
-        const q = search.toLowerCase();
-        items = items.filter(
-          (o) =>
-            (o.name ?? "").toLowerCase().includes(q) ||
-            (o.city ?? "").toLowerCase().includes(q) ||
-            (o.country ?? "").toLowerCase().includes(q)
-        );
-      }
-      if (cityFilter) {
-        const city = cityFilter.toLowerCase();
-        items = items.filter((o) => (o.city ?? "").toLowerCase() === city);
-      }
-      if (countryFilter) {
-        const country = countryFilter.toLowerCase();
-        items = items.filter((o) => (o.country ?? "").toLowerCase() === country);
-      }
-
-      const sorted = [...items].sort((a, b) => {
-        const aVal = String(a[sortKey as keyof OrganizationListItem] ?? "");
-        const bVal = String(b[sortKey as keyof OrganizationListItem] ?? "");
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-      setTotal(sorted.length);
-      setData(sorted.slice((page - 1) * limit, page * limit));
+      setData(res.data.data);
+      setTotal(res.data.meta.total);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -139,14 +118,17 @@ export function Organisations() {
     setEmployeeLoading(true);
     setError(null);
     try {
-      const [employeeRes, usersRes] = await Promise.all([
-        employeesApi.list({ status: "active" }),
-        usersApi.list({ status: "active" }),
-      ]);
+      const employeeRes = await employeesApi.list({ status: "active", limit: 100, page: 1 });
       const list = employeeRes.data.data;
       setEmployees(list);
-      const usersIndex = usersRes.data.data.reduce<Record<number, UserListItem>>((acc, user) => {
-        acc[user.user_id] = user;
+      const usersIndex = list.reduce<Record<number, UserListItem>>((acc, emp) => {
+        if (emp.user_id) {
+          acc[emp.user_id] = {
+            user_id: emp.user_id,
+            first_name: emp.first_name,
+            last_name: emp.last_name,
+          } as UserListItem;
+        }
         return acc;
       }, {});
       setUsersById(usersIndex);
@@ -325,6 +307,7 @@ export function Organisations() {
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
     setSortKey(key);
+    setPage(1);
   };
 
   return (

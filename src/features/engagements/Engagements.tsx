@@ -47,12 +47,10 @@ import {
   type ChecklistTemplate,
   type ChecklistTask,
   type UserListItem,
-  usersApi,
   getApiError,
   engagementAssessmentPackagesApi,
   type EngagementAssessmentPackageSummary,
 } from "../../lib/api";
-import { fetchAllPages } from "../../lib/fetchAllPages";
 import { useLocation } from "react-router-dom";
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
@@ -704,7 +702,6 @@ export function Engagements() {
   const [addAssistantsOpen, setAddAssistantsOpen] = useState(false);
   const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([]);
   const [allEmployeesLoading, setAllEmployeesLoading] = useState(false);
-  const [assistantUsersById, setAssistantUsersById] = useState<Record<number, UserListItem>>({});
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -802,53 +799,35 @@ export function Engagements() {
     setPendingEngagementPreset(state.createEngagementFromOrg);
   }, [location.state]);
 
+  useEffect(() => {
+    engagementsApi
+      .filterOptions()
+      .then((res) => {
+        setTypeOptions(res.data.data.engagement_types);
+        setCityOptions(res.data.data.cities);
+      })
+      .catch(() => {
+        setTypeOptions([]);
+        setCityOptions([]);
+      });
+  }, []);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let items = await fetchAllPages<EngagementListItem>((nextPage, nextLimit) =>
-        engagementsApi.list({
-          page: nextPage,
-          limit: nextLimit,
-          status: statusFilter || undefined,
-        })
-      );
-      const typeSet = new Set<string>();
-      const citySet = new Set<string>();
-      items.forEach((item) => {
-        const type = (item.engagement_type ?? "").trim();
-        const city = (item.city ?? "").trim();
-        if (type) typeSet.add(type);
-        if (city) citySet.add(city);
+      const res = await engagementsApi.list({
+        page,
+        limit,
+        status: statusFilter || undefined,
+        search: search.trim() || undefined,
+        engagement_type: typeFilter || undefined,
+        city: cityFilter || undefined,
+        sort_by: sortKey,
+        sort_dir: sortDir,
       });
-      setTypeOptions(Array.from(typeSet).sort((a, b) => a.localeCompare(b)));
-      setCityOptions(Array.from(citySet).sort((a, b) => a.localeCompare(b)));
-
-      if (search) {
-        const q = search.toLowerCase();
-        items = items.filter(
-          (e) =>
-            (e.engagement_name ?? "").toLowerCase().includes(q) ||
-            (e.engagement_code ?? "").toLowerCase().includes(q) ||
-            (e.city ?? "").toLowerCase().includes(q)
-        );
-      }
-      if (typeFilter) {
-        const type = typeFilter.toLowerCase();
-        items = items.filter((e) => (e.engagement_type ?? "").toLowerCase() === type);
-      }
-      if (cityFilter) {
-        const city = cityFilter.toLowerCase();
-        items = items.filter((e) => (e.city ?? "").toLowerCase() === city);
-      }
-      const sorted = [...items].sort((a, b) => {
-        const aVal = String(a[sortKey as keyof EngagementListItem] ?? "");
-        const bVal = String(b[sortKey as keyof EngagementListItem] ?? "");
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-      setTotal(sorted.length);
-      setData(sorted.slice((page - 1) * limit, page * limit));
+      setData(res.data.data);
+      setTotal(res.data.meta.total);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -1186,22 +1165,6 @@ export function Engagements() {
     }
   }, []);
 
-  const loadAssistantUsers = useCallback(async () => {
-    try {
-      const allUsers = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
-        usersApi.list({ page: nextPage, limit: nextLimit })
-      );
-      setAssistantUsersById(
-        allUsers.reduce<Record<number, UserListItem>>((acc, user) => {
-          acc[user.user_id] = user;
-          return acc;
-        }, {})
-      );
-    } catch (err) {
-      setAssistantsError(getApiError(err));
-    }
-  }, []);
-
   const openAssistantsModal = (row: EngagementListItem) => {
     setAssistantsEngagement(row);
     setAssistants([]);
@@ -1211,7 +1174,6 @@ export function Engagements() {
     setEmployeeSearch("");
     setAssistantsModalOpen(true);
     void fetchAssistants(row.engagement_id);
-    void loadAssistantUsers();
   };
 
   const closeAssistantsModal = () => {
@@ -1240,9 +1202,6 @@ export function Engagements() {
     setAddAssistantsOpen(true);
     setSelectedEmployeeIds(new Set());
     setEmployeeSearch("");
-    if (Object.keys(assistantUsersById).length === 0) {
-      void loadAssistantUsers();
-    }
     setAllEmployeesLoading(true);
     try {
       const res = await employeesApi.list({ status: "active", limit: 100 });
@@ -1288,7 +1247,7 @@ export function Engagements() {
   const filteredEmployees = employeeSearch.trim()
     ? availableEmployees.filter((e) => {
         const q = employeeSearch.trim().toLowerCase();
-        const name = getEmployeeDisplayName(e, assistantUsersById).toLowerCase();
+        const name = getEmployeeDisplayName(e, {}).toLowerCase();
         return (
           String(e.employee_id).includes(q) ||
           (e.role ?? "").toLowerCase().includes(q) ||
@@ -1407,6 +1366,7 @@ export function Engagements() {
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
     setSortKey(key);
+    setPage(1);
   };
 
   return (
@@ -2123,7 +2083,7 @@ export function Engagements() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeDisplayName(a, assistantUsersById)}
+                            {getEmployeeDisplayName(a, {})}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {a.role ? `Role: ${a.role}` : "No role"}{" "}
@@ -2225,7 +2185,7 @@ export function Engagements() {
                         />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeDisplayName(e, assistantUsersById)}
+                            {getEmployeeDisplayName(e, {})}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {e.role ? `Role: ${e.role}` : "No role"}

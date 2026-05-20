@@ -11,7 +11,6 @@ import {
   type UserListItem,
   getApiError,
 } from "../../lib/api";
-import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
@@ -31,7 +30,7 @@ export function Employees() {
   const [error, setError] = useState<string | null>(null);
 
   const [users, setUsers] = useState<UserListItem[]>([]);
-  const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
+  const [userPickerSearch, setUserPickerSearch] = useState("");
   const [usersLoading, setUsersLoading] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,28 +43,24 @@ export function Employees() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const getUserName = useCallback(
-    (userId: number) => {
-      const user = usersById[userId];
-      const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
-      return name || `User ${userId}`;
-    },
-    [usersById]
-  );
+  const getUserName = useCallback((row: EmployeeListItem) => {
+    const name = [row.first_name, row.last_name].filter(Boolean).join(" ");
+    return name || `User ${row.user_id}`;
+  }, []);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsersForPicker = useCallback(async (searchQuery: string) => {
     setUsersLoading(true);
     setError(null);
     try {
-      const allUsers = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
-        usersApi.list({ page: nextPage, limit: nextLimit })
-      );
-      setUsers(allUsers);
-      const index = allUsers.reduce<Record<number, UserListItem>>((acc, user) => {
-        acc[user.user_id] = user;
-        return acc;
-      }, {});
-      setUsersById(index);
+      const res = await usersApi.list({
+        page: 1,
+        limit: 50,
+        status: "active",
+        search: searchQuery.trim() || undefined,
+        sort_by: "name",
+        sort_dir: "asc",
+      });
+      setUsers(res.data.data);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -77,45 +72,24 @@ export function Employees() {
     setLoading(true);
     setError(null);
     try {
-      let items = await fetchAllPages<EmployeeListItem>((nextPage, nextLimit) =>
-        employeesApi.list({
-          page: nextPage,
-          limit: nextLimit,
-          status: statusFilter || undefined,
-        })
-      );
-      if (search) {
-        const q = search.toLowerCase();
-        items = items.filter((e) => {
-          const name = getUserName(e.user_id).toLowerCase();
-          const role = (e.role ?? "").toLowerCase();
-          return name.includes(q) || role.includes(q);
-        });
-      }
-      const sorted = [...items].sort((a, b) => {
-        const getValue = (item: EmployeeListItem) => {
-          if (sortKey === "name") return getUserName(item.user_id);
-          if (sortKey === "role") return item.role ?? "";
-          if (sortKey === "status") return item.status ?? "";
-          return String(item[sortKey as keyof EmployeeListItem] ?? "");
-        };
-        const aVal = String(getValue(a));
-        const bVal = String(getValue(b));
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
-        return sortDir === "asc" ? cmp : -cmp;
+      const sortBy =
+        sortKey === "name" ? "first_name" : sortKey === "role" || sortKey === "status" ? sortKey : sortKey;
+      const res = await employeesApi.list({
+        page,
+        limit,
+        status: statusFilter || undefined,
+        search: search.trim() || undefined,
+        sort_by: sortBy,
+        sort_dir: sortDir,
       });
-      setTotal(sorted.length);
-      setData(sorted.slice((page - 1) * limit, page * limit));
+      setData(res.data.data);
+      setTotal(res.data.meta.total);
     } catch (err) {
       setError(getApiError(err));
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, sortKey, sortDir, getUserName]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  }, [page, limit, statusFilter, search, sortKey, sortDir]);
 
   useEffect(() => {
     fetchList();
@@ -127,16 +101,15 @@ export function Employees() {
 
   const openAdd = () => {
     setSelected(null);
+    setUserPickerSearch("");
     setFormData({
-      user_id: users[0]?.user_id ?? 0,
+      user_id: 0,
       role: "",
       status: "active",
     });
     setModalMode("add");
     setModalOpen(true);
-    if (users.length === 0) {
-      fetchUsers();
-    }
+    void fetchUsersForPicker("");
   };
 
   const openEdit = (row: EmployeeListItem) => {
@@ -181,17 +154,11 @@ export function Employees() {
       key: "name",
       label: "Name",
       sortable: true,
-      render: (row) => {
-        const user = usersById[row.user_id];
-        return (
-          <div className="flex flex-col">
-            <span className="font-medium text-zinc-900">{getUserName(row.user_id)}</span>
-            {user?.email && (
-              <span className="text-xs text-zinc-500">{user.email}</span>
-            )}
-          </div>
-        );
-      },
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="font-medium text-zinc-900">{getUserName(row)}</span>
+        </div>
+      ),
     },
     { key: "role", label: "Role", sortable: true, hideOnMobile: true },
     {
@@ -222,8 +189,8 @@ export function Employees() {
             aria-pressed={isActive}
             aria-label={
               isProtectedEmployee
-                ? `${getUserName(row.user_id)} is always active`
-                : `Set ${getUserName(row.user_id)} ${isActive ? "inactive" : "active"}`
+                ? `${getUserName(row)} is always active`
+                : `Set ${getUserName(row)} ${isActive ? "inactive" : "active"}`
             }
           >
             <span
@@ -240,6 +207,7 @@ export function Employees() {
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
     setSortKey(key);
+    setPage(1);
   };
 
   return (
@@ -325,6 +293,19 @@ export function Employees() {
         >
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">User *</label>
+            {modalMode === "add" && (
+              <input
+                type="search"
+                value={userPickerSearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setUserPickerSearch(value);
+                  void fetchUsersForPicker(value);
+                }}
+                placeholder="Search users by name, phone, or email..."
+                className="w-full mb-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            )}
             <select
               value={formData.user_id}
               onChange={(e) => setFormData({ ...formData, user_id: Number(e.target.value) })}

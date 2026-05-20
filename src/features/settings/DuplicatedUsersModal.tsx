@@ -1,34 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
-import { fetchAllPages } from "../../lib/fetchAllPages";
-import { phoneDuplicateKey } from "../../lib/phoneDuplicateKey";
-import { getApiError, usersApi, type UserListItem } from "../../lib/api";
+import { getApiError, usersApi, type DuplicateUserGroupApi, type UserListItem } from "../../lib/api";
 
-export interface DuplicateUserGroup {
-  key: string;
-  users: UserListItem[];
-}
-
-export function findDuplicateUserGroups(users: UserListItem[]): DuplicateUserGroup[] {
-  const byKey = new Map<string, UserListItem[]>();
-
-  for (const user of users) {
-    const key = phoneDuplicateKey(user.phone);
-    if (!key) continue;
-    const list = byKey.get(key) ?? [];
-    list.push(user);
-    byKey.set(key, list);
-  }
-
-  return [...byKey.entries()]
-    .filter(([, group]) => group.length > 1)
-    .map(([key, groupUsers]) => ({
-      key,
-      users: [...groupUsers].sort((a, b) => a.user_id - b.user_id),
-    }))
-    .sort((a, b) => b.users.length - a.users.length);
-}
+export type DuplicateUserGroup = DuplicateUserGroupApi;
 
 function displayName(user: UserListItem): string {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
@@ -50,10 +25,8 @@ export function DuplicatedUsersModal({ open, onClose }: DuplicatedUsersModalProp
     setLoading(true);
     setError(null);
     try {
-      const users = await fetchAllPages<UserListItem>((page, limit) =>
-        usersApi.list({ page, limit })
-      );
-      setGroups(findDuplicateUserGroups(users));
+      const res = await usersApi.duplicates();
+      setGroups(res.data.data);
     } catch (err) {
       setError(getApiError(err));
       setGroups([]);
@@ -140,7 +113,6 @@ export function DuplicatedUsersModal({ open, onClose }: DuplicatedUsersModalProp
                         ) : null}
                         <p className="text-[11px] text-zinc-400 mt-0.5">
                           ID {user.user_id}
-                          {user.is_participant === true ? " · Participant" : ""}
                           {user.status ? ` · ${user.status}` : ""}
                         </p>
                       </div>

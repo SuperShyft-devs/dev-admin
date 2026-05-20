@@ -225,6 +225,16 @@ export interface UserCreate {
 
 export type UserUpdate = UserCreate;
 
+export interface UserParticipantStats {
+  with_metsights_profile: number;
+  total_participants: number;
+}
+
+export interface DuplicateUserGroupApi {
+  key: string;
+  users: Pick<UserListItem, "user_id" | "first_name" | "last_name" | "phone" | "email" | "status">[];
+}
+
 export const usersApi = {
   me: () => api.get<{ data: UserProfile }>("/users/me"),
   list: (params?: {
@@ -234,11 +244,18 @@ export const usersApi = {
     is_participant?: boolean;
     phone?: string;
     email?: string;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
   }) =>
     api.get<{ data: UserListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/users",
-      { params: { ...params, limit: params?.limit ?? 100 } }
+      { params }
     ),
+  stats: () =>
+    api.get<{ data: UserParticipantStats }>("/users/stats"),
+  duplicates: () =>
+    api.get<{ data: DuplicateUserGroupApi[] }>("/users/duplicates"),
   get: (id: number) =>
     api.get<{ data: UserDetail }>(`/users/${id}`),
   create: (payload: UserCreate) =>
@@ -382,10 +399,18 @@ export interface EmployeeUpdate {
 }
 
 export const employeesApi = {
-  list: (params?: { page?: number; limit?: number; status?: string; role?: string }) =>
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    role?: string;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
+  }) =>
     api.get<{ data: EmployeeListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/employees",
-      { params: { ...params, limit: params?.limit ?? 100 } }
+      { params }
     ),
   get: (id: number) =>
     api.get<{ data: EmployeeListItem }>(`/employees/${id}`),
@@ -460,11 +485,18 @@ export const organizationsApi = {
     status?: string;
     organization_type?: string;
     bd_employee_id?: number;
+    search?: string;
+    city?: string;
+    country?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
   }) =>
     api.get<{ data: OrganizationListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/organizations",
       { params }
     ),
+  filterOptions: () =>
+    api.get<{ data: { cities: string[]; countries: string[] } }>("/organizations/filter-options"),
   get: (id: number) =>
     api.get<{ data: Organization }>(`/organizations/${id}`),
   create: (payload: OrganizationCreate) =>
@@ -546,6 +578,9 @@ export const expertsApi = {
     limit?: number;
     expert_type?: string;
     status?: string;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
   }) =>
     api.get<{ data: ExpertListItem[]; meta: { page: number; limit: number; total: number } }>("/experts", {
       params,
@@ -646,12 +681,18 @@ export const engagementsApi = {
     org_id?: number;
     status?: string;
     city?: string;
+    engagement_type?: string;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
     date?: string;
   }) =>
     api.get<{ data: EngagementListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/engagements",
       { params }
     ),
+  filterOptions: () =>
+    api.get<{ data: { engagement_types: string[]; cities: string[] } }>("/engagements/filter-options"),
   get: (id: number) =>
     api.get<{ data: Engagement }>(`/engagements/${id}`),
   create: (payload: EngagementCreate) =>

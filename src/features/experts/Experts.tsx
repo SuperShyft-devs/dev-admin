@@ -15,7 +15,6 @@ import {
   type ExpertType,
   type UserListItem,
 } from "../../lib/api";
-import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const MODES: ConsultationMode[] = ["video", "voice", "chat"];
 
@@ -103,30 +102,17 @@ export function Experts() {
     setLoading(true);
     setError(null);
     try {
-      let items = await fetchAllPages<ExpertListItem>((nextPage, nextLimit) =>
-        expertsApi.list({
-          page: nextPage,
-          limit: nextLimit,
-          expert_type: expertTypeFilter || undefined,
-          status: statusFilter || undefined,
-        })
-      );
-      if (search) {
-        const q = search.toLowerCase();
-        items = items.filter(
-          (e) =>
-            (e.specialization ?? "").toLowerCase().includes(q) ||
-            (e.qualifications ?? "").toLowerCase().includes(q)
-        );
-      }
-      const sorted = [...items].sort((a, b) => {
-        const aVal = String(a[sortKey as keyof ExpertListItem] ?? "");
-        const bVal = String(b[sortKey as keyof ExpertListItem] ?? "");
-        const cmp = aVal.localeCompare(bVal, undefined, { numeric: true });
-        return sortDir === "asc" ? cmp : -cmp;
+      const res = await expertsApi.list({
+        page,
+        limit,
+        expert_type: expertTypeFilter || undefined,
+        status: statusFilter || undefined,
+        search: search.trim() || undefined,
+        sort_by: sortKey,
+        sort_dir: sortDir,
       });
-      setTotal(sorted.length);
-      setData(sorted.slice((page - 1) * limit, page * limit));
+      setData(res.data.data);
+      setTotal(res.data.meta.total);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -148,16 +134,15 @@ export function Experts() {
     (async () => {
       setUsersLoading(true);
       try {
-        const items = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
-          usersApi.list({ page: nextPage, limit: nextLimit })
-        );
+        const res = await usersApi.list({
+          page: 1,
+          limit: 50,
+          status: "active",
+          sort_by: "name",
+          sort_dir: "asc",
+        });
         if (!cancelled) {
-          const sorted = [...items].sort((a, b) =>
-            formatUserDropdownLabel(a).localeCompare(formatUserDropdownLabel(b), undefined, {
-              sensitivity: "base",
-            })
-          );
-          setUsersList(sorted);
+          setUsersList(res.data.data);
         }
       } catch (err) {
         if (!cancelled) setError(getApiError(err));
@@ -343,6 +328,7 @@ export function Experts() {
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
     setSortKey(key);
+    setPage(1);
   };
 
   return (

@@ -14,15 +14,14 @@ import {
   type NotificationServiceItem,
   getApiError,
 } from "../../lib/api";
-import { fetchAllPages } from "../../lib/fetchAllPages";
+function hasMetsightsProfileId(user: UserListItem): boolean {
+  return Boolean((user.metsights_profile_id ?? "").trim());
+}
 
 const STATUS_OPTIONS = ["active", "inactive"];
 const GENDER_OPTIONS = ["male", "female", "other"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
-
-function hasMetsightsProfileId(user: UserListItem): boolean {
-  return Boolean((user.metsights_profile_id ?? "").trim());
-}
+const SEARCH_DEBOUNCE_MS = 300;
 
 type ModalMode = "view" | "add" | "edit";
 
@@ -52,6 +51,7 @@ export function Users() {
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortKey, setSortKey] = useState("user_id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -77,53 +77,47 @@ export function Users() {
   const [sendMsgError, setSendMsgError] = useState<string | null>(null);
   const [sendMsgSuccess, setSendMsgSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await usersApi.stats();
+      setMetsightsStats({
+        withProfile: res.data.data.with_metsights_profile,
+        totalParticipants: res.data.data.total_participants,
+      });
+    } catch {
+      // Stats are supplementary; keep the table usable if this fails.
+    }
+  }, []);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let items = await fetchAllPages<UserListItem>((nextPage, nextLimit) =>
-        usersApi.list({
-          page: nextPage,
-          limit: nextLimit,
-          status: statusFilter || undefined,
-        })
-      );
-
-      const participants = items.filter((u) => u.is_participant === true);
-      setMetsightsStats({
-        withProfile: participants.filter(hasMetsightsProfileId).length,
-        totalParticipants: participants.length,
+      const res = await usersApi.list({
+        page,
+        limit,
+        status: statusFilter || undefined,
+        search: debouncedSearch || undefined,
+        sort_by: sortKey === "name" ? "name" : sortKey,
+        sort_dir: sortDir,
       });
-
-      if (search) {
-        const q = search.toLowerCase();
-        items = items.filter((u) => {
-          const name = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
-          const phone = (u.phone ?? "").toLowerCase();
-          const email = (u.email ?? "").toLowerCase();
-          return name.includes(q) || phone.includes(q) || email.includes(q);
-        });
-      }
-
-      const sorted = [...items].sort((a, b) => {
-        const getValue = (item: UserListItem): string => {
-          if (sortKey === "name") {
-            return [item.first_name, item.last_name].filter(Boolean).join(" ");
-          }
-          return String(item[sortKey as keyof UserListItem] ?? "");
-        };
-        const cmp = getValue(a).localeCompare(getValue(b), undefined, { numeric: true });
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-
-      setTotal(sorted.length);
-      setData(sorted.slice((page - 1) * limit, page * limit));
+      setData(res.data.data);
+      setTotal(res.data.meta.total);
     } catch (err) {
       setError(getApiError(err));
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, sortKey, sortDir]);
+  }, [page, limit, statusFilter, debouncedSearch, sortKey, sortDir]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   useEffect(() => {
     fetchList();
@@ -219,6 +213,7 @@ export function Users() {
       }
       setModalOpen(false);
       fetchList();
+      fetchStats();
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -232,6 +227,7 @@ export function Users() {
       await usersApi.deactivate(row.user_id);
       setDeactivateConfirm(null);
       fetchList();
+      fetchStats();
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -431,6 +427,7 @@ export function Users() {
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
     setSortKey(key);
+    setPage(1);
   };
 
   const field = (label: string, value?: string | number | null | boolean) => (
