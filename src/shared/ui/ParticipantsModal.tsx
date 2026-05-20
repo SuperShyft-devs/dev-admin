@@ -65,6 +65,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Participant | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -123,6 +124,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       })
     : participants;
   const canDeleteRows = source.kind === "engagement-code";
+  const engagementIdForDelete =
+    canDeleteRows && participants.length > 0 ? participants[0].engagement_id : undefined;
 
   const handleExportCsv = () => {
     if (participants.length === 0) return;
@@ -206,6 +209,24 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   };
 
+  const handleConfirmDeleteAll = async () => {
+    if (!engagementIdForDelete) {
+      setDeleteError("Engagement id is missing.");
+      return;
+    }
+    try {
+      setDeleteLoading(true);
+      setDeleteError(null);
+      await participantsApi.removeAllFromEngagement(engagementIdForDelete);
+      setDeleteAllOpen(false);
+      await fetchParticipants();
+    } catch (err) {
+      setDeleteError(getApiError(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   return (
     <>
       <Modal
@@ -226,15 +247,31 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
-        <button
-          type="button"
-          onClick={handleExportCsv}
-          disabled={participants.length === 0 || loading}
-          className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-        </button>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          {canDeleteRows && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteAllOpen(true);
+              }}
+              disabled={participants.length === 0 || loading || deleteLoading || !engagementIdForDelete}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete all
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={participants.length === 0 || loading}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* State: loading */}
@@ -444,6 +481,51 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               >
                 {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Yes, Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {canDeleteRows && deleteAllOpen && (
+        <Modal
+          open={deleteAllOpen}
+          onClose={() => (deleteLoading ? undefined : setDeleteAllOpen(false))}
+          title="Delete All Participants"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+              <p className="text-sm text-red-700">
+                This will permanently remove every participant from this engagement and delete all linked
+                assessments, questionnaire responses, and generated reports for this engagement only. This
+                cannot be undone.
+              </p>
+            </div>
+            <p className="text-sm text-zinc-700">
+              Are you sure you want to delete all{" "}
+              <span className="font-semibold">{participants.length}</span> participant
+              {participants.length !== 1 ? "s" : ""}?
+            </p>
+            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteAllOpen(false)}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAll}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                disabled={deleteLoading}
+              >
+                {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Yes, Delete All
               </button>
             </div>
           </div>

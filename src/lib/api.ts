@@ -960,6 +960,18 @@ export const participantsApi = {
     api.delete<{ data: { engagement_id: number; user_id: number } }>(
       `/engagements/${engagementId}/participants/${userId}`
     ),
+  removeAllFromEngagement: (engagementId: number) =>
+    api.delete<{
+      data: {
+        engagement_id: number;
+        deleted_users: number;
+        deleted_engagement_participants: number;
+        deleted_assessment_instances: number;
+        deleted_questionnaire_responses: number;
+        deleted_reports: number;
+        deleted_category_progress_rows: number;
+      };
+    }>(`/engagements/${engagementId}/participants`),
 };
 
 // Engagement Questionnaire Status
