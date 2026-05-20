@@ -99,11 +99,20 @@ function getEmployeeUserName(
   return name || `User ${userId}`;
 }
 
+function getEmployeeDisplayName(
+  emp: EmployeeListItem,
+  usersById: Record<number, UserListItem>
+): string {
+  const fromEmployee = [emp.first_name, emp.last_name].filter(Boolean).join(" ").trim();
+  if (fromEmployee) return fromEmployee;
+  return getEmployeeUserName(emp.user_id, usersById);
+}
+
 function formatEmployeeAssignLabel(
   emp: EmployeeListItem,
   usersById: Record<number, UserListItem>
 ): string {
-  const name = getEmployeeUserName(emp.user_id, usersById);
+  const name = getEmployeeDisplayName(emp, usersById);
   if (name !== `User ${emp.user_id}`) {
     return emp.role?.trim() ? `${name} · ${emp.role}` : name;
   }
@@ -152,22 +161,16 @@ function EngagementChecklistModal({
     setLoading(true);
     setError(null);
     try {
-      const [clRes, tRes, empRes, usersRes] = await Promise.all([
+      const [clRes, tRes, empRes] = await Promise.all([
         engagementChecklistsApi.list(engagementId),
         checklistTemplatesApi.list(),
         employeesApi.list({ status: "active", limit: 100 }),
-        usersApi.list({ status: "active", limit: 100 }),
       ]);
       setChecklists(clRes.data.data);
       setTemplates(tRes.data.data);
       const emps = [...empRes.data.data].sort((a, b) => a.employee_id - b.employee_id);
       setEmployees(emps);
-      setUsersById(
-        usersRes.data.data.reduce<Record<number, UserListItem>>((acc, u) => {
-          acc[u.user_id] = u;
-          return acc;
-        }, {})
-      );
+      setUsersById({});
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -1094,6 +1097,7 @@ export function Engagements() {
       } else if (selected) {
         const payload = {
           engagement_name: formData.engagement_name,
+          engagement_code: (formData.engagement_code ?? "").trim(),
           metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
           organization_id: formData.organization_id,
           engagement_type: formData.engagement_type,
@@ -1284,7 +1288,7 @@ export function Engagements() {
   const filteredEmployees = employeeSearch.trim()
     ? availableEmployees.filter((e) => {
         const q = employeeSearch.trim().toLowerCase();
-        const name = getEmployeeUserName(e.user_id, assistantUsersById).toLowerCase();
+        const name = getEmployeeDisplayName(e, assistantUsersById).toLowerCase();
         return (
           String(e.employee_id).includes(q) ||
           (e.role ?? "").toLowerCase().includes(q) ||
@@ -2119,7 +2123,7 @@ export function Engagements() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeUserName(a.user_id, assistantUsersById)}
+                            {getEmployeeDisplayName(a, assistantUsersById)}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {a.role ? `Role: ${a.role}` : "No role"}{" "}
@@ -2221,7 +2225,7 @@ export function Engagements() {
                         />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeUserName(e.user_id, assistantUsersById)}
+                            {getEmployeeDisplayName(e, assistantUsersById)}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
                             {e.role ? `Role: ${e.role}` : "No role"}

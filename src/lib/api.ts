@@ -366,6 +366,8 @@ export interface EmployeeListItem {
   user_id: number;
   role?: string | null;
   status?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 export interface EmployeeCreate {
@@ -654,7 +656,7 @@ export const engagementsApi = {
     api.get<{ data: Engagement }>(`/engagements/${id}`),
   create: (payload: EngagementCreate) =>
     api.post<{ data: { engagement_id: number } }>("/engagements", payload),
-  update: (id: number, payload: Omit<EngagementCreate, "engagement_code">) =>
+  update: (id: number, payload: EngagementCreate) =>
     api.put<{ data: { engagement_id: number } }>(`/engagements/${id}`, payload),
   updateStatus: (id: number, status: string) =>
     api.patch<{ data: { engagement_id: number; status: string } }>(
@@ -1015,6 +1017,8 @@ export interface OnboardingAssistant {
   user_id: number;
   role?: string | null;
   status?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 // Occupied Slots
