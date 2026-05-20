@@ -5,16 +5,18 @@ import { Modal } from "./Modal";
 import { engagementsApi, getApiError } from "../../lib/api";
 
 const BATCH_SIZE = 50;
-const REQUIRED_HEADERS = ["id", "phone #"] as const;
+const REQUIRED_HEADERS = ["id", "phone #", "email"] as const;
 
 export interface AssignParticipantsRow {
   metsights_record_id: string;
   phone: string;
+  email: string;
 }
 
 export interface AssignParticipantsRowResult {
   metsights_record_id: string;
   phone: string;
+  email: string;
   status: string;
   reason?: string | null;
   user_id?: number | null;
@@ -50,19 +52,23 @@ function parseCsvRows(text: string): AssignParticipantsRow[] {
 
   for (const required of REQUIRED_HEADERS) {
     if (!normalizedFields.has(required)) {
-      throw new Error(`CSV is missing required column: ${required === "phone #" ? "Phone #" : "id"}`);
+      const label =
+        required === "phone #" ? "Phone #" : required === "id" ? "id" : "Email";
+      throw new Error(`CSV is missing required column: ${label}`);
     }
   }
 
   const idKey = fields.find((f: string) => normalizeHeader(f) === "id")!;
   const phoneKey = fields.find((f: string) => normalizeHeader(f) === "phone #")!;
+  const emailKey = fields.find((f: string) => normalizeHeader(f) === "email")!;
 
   const rows: AssignParticipantsRow[] = [];
   for (const record of parsed.data) {
     const metsights_record_id = (record[idKey] ?? "").trim();
     const phone = (record[phoneKey] ?? "").trim();
-    if (!metsights_record_id && !phone) continue;
-    rows.push({ metsights_record_id, phone });
+    const email = (record[emailKey] ?? "").trim();
+    if (!metsights_record_id && !phone && !email) continue;
+    rows.push({ metsights_record_id, phone, email });
   }
 
   if (rows.length === 0) {

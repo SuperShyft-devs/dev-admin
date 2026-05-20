@@ -725,7 +725,7 @@ export const engagementsApi = {
     ),
   assignParticipantsBatch: (
     engagementId: number,
-    payload: { rows: { metsights_record_id: string; phone: string }[] },
+    payload: { rows: { metsights_record_id: string; phone: string; email: string }[] },
     config?: { signal?: AbortSignal }
   ) =>
     api.post<{
@@ -733,6 +733,7 @@ export const engagementsApi = {
         results: {
           metsights_record_id: string;
           phone: string;
+          email: string;
           status: string;
           reason?: string | null;
           user_id?: number | null;
