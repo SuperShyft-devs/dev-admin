@@ -283,8 +283,21 @@ export const usersApi = {
     api.put<{ data: { user_id: number; status: string } }>(`/users/${id}`, payload),
   deactivate: (id: number) =>
     api.patch<{ data: { user_id: number; status: string } }>(`/users/${id}/deactivate`),
-  delete: (id: number) =>
-    api.delete<{ data: { deleted_user_id: number; deleted_user_count: number } }>(`/users/${id}`),
+  deleteImpact: (id: number) =>
+    api.get<{
+      data: {
+        engagements_to_orphan: {
+          engagement_id: number;
+          engagement_code: string;
+          engagement_name?: string | null;
+        }[];
+      };
+    }>(`/users/${id}/delete-impact`),
+  delete: (id: number, params?: { delete_orphan_engagements?: boolean }) =>
+    api.delete<{ data: { deleted_user_id: number; deleted_user_count: number } }>(
+      `/users/${id}`,
+      { params }
+    ),
 };
 
 // Participant journey (employee: per-user assessments + questionnaire)

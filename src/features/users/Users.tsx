@@ -64,7 +64,11 @@ export function Users() {
   const [formData, setFormData] = useState<UserCreate>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [deactivateConfirm, setDeactivateConfirm] = useState<UserListItem | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<UserListItem | null>(null);
+  const [orphanEngagementConfirm, setOrphanEngagementConfirm] = useState<{
+    user: UserListItem;
+    engagements: { engagement_id: number; engagement_code: string; engagement_name?: string | null }[];
+  } | null>(null);
   const [alwaysActiveUserId, setAlwaysActiveUserId] = useState<number | null>(null);
   const [metsightsStats, setMetsightsStats] = useState({ withProfile: 0, totalParticipants: 0 });
 
@@ -221,13 +225,48 @@ export function Users() {
     }
   };
 
-  const handleDeactivate = async (row: UserListItem) => {
+  const finishDelete = async (
+    row: UserListItem,
+    deleteOrphanEngagements: boolean
+  ) => {
+    await usersApi.delete(row.user_id, {
+      delete_orphan_engagements: deleteOrphanEngagements,
+    });
+    setDeleteConfirm(null);
+    setOrphanEngagementConfirm(null);
+    fetchList();
+    fetchStats();
+  };
+
+  const handleDeleteFirstConfirm = async (row: UserListItem) => {
+    if (alwaysActiveUserId === row.user_id) {
+      setError("This user cannot be deleted.");
+      return;
+    }
     setSubmitting(true);
+    setError(null);
     try {
-      await usersApi.deactivate(row.user_id);
-      setDeactivateConfirm(null);
-      fetchList();
-      fetchStats();
+      const impactRes = await usersApi.deleteImpact(row.user_id);
+      const engagements = impactRes.data.data.engagements_to_orphan ?? [];
+      if (engagements.length > 0) {
+        setDeleteConfirm(null);
+        setOrphanEngagementConfirm({ user: row, engagements });
+      } else {
+        await finishDelete(row, false);
+      }
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteWithOrphanChoice = async (deleteOrphanEngagements: boolean) => {
+    if (!orphanEngagementConfirm) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await finishDelete(orphanEngagementConfirm.user, deleteOrphanEngagements);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -516,7 +555,13 @@ export function Users() {
             onSort={handleSort}
             onView={openView}
             onEdit={openEdit}
-            onDelete={(r) => setDeactivateConfirm(r)}
+            onDelete={(r) => {
+              if (alwaysActiveUserId === r.user_id) {
+                setError("This user cannot be deleted.");
+                return;
+              }
+              setDeleteConfirm(r);
+            }}
             onSendMessage={openSendMessage}
             pagination={{ page, limit, total, onPageChange: setPage }}
           />
@@ -846,33 +891,92 @@ export function Users() {
         )}
       </Modal>
 
-      {/* Deactivate Confirm Modal */}
-      {deactivateConfirm && (
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
         <Modal
-          open={!!deactivateConfirm}
-          onClose={() => setDeactivateConfirm(null)}
-          title="Deactivate User"
+          open={!!deleteConfirm}
+          onClose={() => setDeleteConfirm(null)}
+          title="Delete User"
         >
           <p className="text-zinc-600 text-sm mb-4">
-            Deactivate user{" "}
+            Permanently delete user{" "}
             <span className="font-semibold text-zinc-900">
-              {getFullName(deactivateConfirm) !== "—"
-                ? getFullName(deactivateConfirm)
-                : deactivateConfirm.phone}
+              {getFullName(deleteConfirm) !== "—"
+                ? getFullName(deleteConfirm)
+                : deleteConfirm.phone}
             </span>
-            ? Their account will be soft-disabled and they won't be able to log in.
+            ? This removes the user, any linked sub-profiles, and related bookings, assessments,
+            and engagement participation. This cannot be undone.
           </p>
           <div className="flex flex-col-reverse sm:flex-row gap-3">
             <button
-              onClick={() => handleDeactivate(deactivateConfirm)}
+              onClick={() => handleDeleteFirstConfirm(deleteConfirm)}
               disabled={submitting}
               className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
             >
-              {submitting ? "Deactivating..." : "Deactivate"}
+              {submitting ? "Checking..." : "Delete permanently"}
             </button>
             <button
-              onClick={() => setDeactivateConfirm(null)}
+              onClick={() => setDeleteConfirm(null)}
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Orphan engagement confirm (second step) */}
+      {orphanEngagementConfirm && (
+        <Modal
+          open={!!orphanEngagementConfirm}
+          onClose={() => setOrphanEngagementConfirm(null)}
+          title="Delete empty engagement(s)?"
+        >
+          <p className="text-zinc-600 text-sm mb-3">
+            Deleting{" "}
+            <span className="font-semibold text-zinc-900">
+              {getFullName(orphanEngagementConfirm.user) !== "—"
+                ? getFullName(orphanEngagementConfirm.user)
+                : orphanEngagementConfirm.user.phone}
+            </span>{" "}
+            leaves {orphanEngagementConfirm.engagements.length === 1 ? "this engagement" : "these engagements"}{" "}
+            with no participants:
+          </p>
+          <ul className="mb-4 max-h-40 overflow-y-auto rounded-lg border border-zinc-200 divide-y divide-zinc-100 text-sm">
+            {orphanEngagementConfirm.engagements.map((e) => (
+              <li key={e.engagement_id} className="px-3 py-2 text-zinc-800">
+                <span className="font-medium">{e.engagement_name || e.engagement_code}</span>
+                <span className="text-zinc-500 font-mono text-xs ml-2">{e.engagement_code}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-zinc-600 text-sm mb-4">
+            Do you want to permanently delete {orphanEngagementConfirm.engagements.length === 1 ? "this engagement" : "these engagements"} as well?
+            If you choose no, only the user is removed and the engagement(s) remain.
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => handleDeleteWithOrphanChoice(true)}
+              disabled={submitting}
+              className="w-full px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {submitting ? "Deleting..." : "Delete user and engagement(s)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteWithOrphanChoice(false)}
+              disabled={submitting}
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 text-zinc-800 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {submitting ? "Deleting..." : "Delete user only, keep engagement(s)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrphanEngagementConfirm(null)}
+              disabled={submitting}
+              className="w-full px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
             >
               Cancel
             </button>
