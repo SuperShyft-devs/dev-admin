@@ -18,7 +18,9 @@ import {
   Send,
   UserPlus,
   Link2,
+  Bell,
 } from "lucide-react";
+import { EngagementNotificationModal } from "./EngagementNotificationModal";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -726,6 +728,8 @@ export function Engagements() {
   const [qStatusData, setQStatusData] = useState<EngagementQuestionnaireStatusResponse | null>(null);
   const [qStatusLoading, setQStatusLoading] = useState(false);
   const [qStatusError, setQStatusError] = useState<string | null>(null);
+
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
 
   // ── Engagement Assessments modal state ─────────────────────
   const [assessmentsModalOpen, setAssessmentsModalOpen] = useState(false);
@@ -1593,6 +1597,16 @@ export function Engagements() {
                   }).catch(() => {});
                 }}
               />
+            </div>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setNotifyModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                Notification
+              </button>
             </div>
 
             {/* ── Questionnaire Status Section ── */}
@@ -2661,6 +2675,17 @@ export function Engagements() {
           </div>
         </div>
       </Modal>
+
+      <EngagementNotificationModal
+        open={notifyModalOpen}
+        onClose={() => setNotifyModalOpen(false)}
+        engagement={selected}
+        organizationLabel={
+          selected?.organization_id
+            ? getOrgName(selected.organization_id)
+            : undefined
+        }
+      />
 
       {/* ── Push Questionnaires Confirmation Modal ── */}
       <Modal

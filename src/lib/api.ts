@@ -1071,9 +1071,10 @@ export const participantsApi = {
       { params }
     ),
   // All participants across all engagements for an org
-  byOrganization: (orgId: number) =>
-    api.get<{ data: Participant[]; meta?: { total: number } }>(
-      `/organizations/${orgId}/participants`
+  byOrganization: (orgId: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
+      `/organizations/${orgId}/participants`,
+      { params }
     ),
   removeFromEngagement: (engagementId: number, userId: number) =>
     api.delete<{ data: { engagement_id: number; user_id: number } }>(
