@@ -885,6 +885,28 @@ export const engagementAssessmentPackagesApi = {
     }>(`/engagements/${engagementId}/push-questionnaires`, {
       package_id: packageId,
     }),
+  connectMetsightsRecords: (engagementId: number, packageId: number) =>
+    api.post<{
+      data: {
+        engagement_id: number;
+        package_id: number;
+        package_code: string;
+        assessment_type_code: string;
+        total: number;
+        connected: number;
+        skipped: number;
+        failed: number;
+        results: {
+          user_id: number;
+          assessment_instance_id: number;
+          status: string;
+          metsights_record_id?: string | null;
+          reason?: string | null;
+        }[];
+      };
+    }>(`/engagements/${engagementId}/connect-metsights-records`, {
+      package_id: packageId,
+    }, { timeout: 120_000 }),
 };
 
 // Questionnaire questions

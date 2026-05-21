@@ -17,6 +17,7 @@ import {
   CloudCog,
   Send,
   UserPlus,
+  Link2,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -745,6 +746,15 @@ export function Engagements() {
     errors: number;
   } | null>(null);
   const [assessmentSyncError, setAssessmentSyncError] = useState<string | null>(null);
+  const [assessmentConnectingPackageId, setAssessmentConnectingPackageId] = useState<number | null>(null);
+  const [assessmentConnectResult, setAssessmentConnectResult] = useState<{
+    package_id: number;
+    package_name: string;
+    connected: number;
+    skipped: number;
+    failed: number;
+  } | null>(null);
+  const [assessmentConnectError, setAssessmentConnectError] = useState<string | null>(null);
   const [selectedAssignPackageCode, setSelectedAssignPackageCode] = useState("");
   const [allActivePackages, setAllActivePackages] = useState<AssessmentPackage[]>([]);
 
@@ -955,6 +965,32 @@ export function Engagements() {
       setAssessmentSyncError(getApiError(err));
     } finally {
       setAssessmentSyncingPackageId(null);
+    }
+  }, [selected, loadAssessmentsForEngagement]);
+
+  const handleAssessmentConnectMetsights = useCallback(async (pkg: EngagementAssessmentPackageSummary) => {
+    if (!selected) return;
+    setAssessmentConnectingPackageId(pkg.package_id);
+    setAssessmentConnectResult(null);
+    setAssessmentConnectError(null);
+    try {
+      const res = await engagementAssessmentPackagesApi.connectMetsightsRecords(
+        selected.engagement_id,
+        pkg.package_id
+      );
+      const d = res.data.data;
+      setAssessmentConnectResult({
+        package_id: pkg.package_id,
+        package_name: pkg.display_name,
+        connected: d.connected,
+        skipped: d.skipped,
+        failed: d.failed,
+      });
+      await loadAssessmentsForEngagement(selected.engagement_id);
+    } catch (err) {
+      setAssessmentConnectError(getApiError(err));
+    } finally {
+      setAssessmentConnectingPackageId(null);
     }
   }, [selected, loadAssessmentsForEngagement]);
 
@@ -2329,6 +2365,23 @@ export function Engagements() {
             </div>
           )}
 
+          {!assessmentsLoading && !assessmentsError && assessmentConnectError && (
+            <p className="text-sm text-red-600">{assessmentConnectError}</p>
+          )}
+
+          {!assessmentsLoading && !assessmentsError && assessmentConnectResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-zinc-700">
+                Connect result for <span className="font-semibold">{assessmentConnectResult.package_name}</span>
+              </div>
+              <div className="text-emerald-700">Connected: {assessmentConnectResult.connected}</div>
+              <div className="text-zinc-500">Skipped: {assessmentConnectResult.skipped}</div>
+              {assessmentConnectResult.failed > 0 && (
+                <div className="text-red-600">Failed: {assessmentConnectResult.failed}</div>
+              )}
+            </div>
+          )}
+
           {!assessmentsLoading && !assessmentsError && assessmentsList.length === 0 && (
             <p className="text-xs text-zinc-400 italic py-4">
               No assessment packages assigned to this engagement.
@@ -2384,10 +2437,27 @@ export function Engagements() {
                   <div className="shrink-0 flex items-center gap-1">
                     <button
                       type="button"
+                      onClick={() => handleAssessmentConnectMetsights(pkg)}
+                      disabled={
+                        assessmentConnectingPackageId !== null ||
+                        assessmentSyncingPackageId !== null
+                      }
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                      title="Connect Metsights records for assigned participants"
+                    >
+                      <Link2
+                        className={`w-4 h-4 ${assessmentConnectingPackageId === pkg.package_id ? "animate-pulse" : ""}`}
+                      />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleAssessmentSyncPackage(pkg)}
-                      disabled={assessmentSyncingPackageId !== null}
+                      disabled={
+                        assessmentSyncingPackageId !== null ||
+                        assessmentConnectingPackageId !== null
+                      }
                       className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-50"
-                      title="Sync missing participants"
+                      title="Assign package to missing participants"
                     >
                       <RefreshCw
                         className={`w-4 h-4 ${assessmentSyncingPackageId === pkg.package_id ? "animate-spin" : ""}`}
@@ -2396,7 +2466,8 @@ export function Engagements() {
                     <button
                       type="button"
                       onClick={() => setAssessmentDeleteConfirm(pkg)}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      disabled={assessmentConnectingPackageId !== null || assessmentSyncingPackageId !== null}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                       title="Remove from engagement"
                     >
                       <Trash2 className="w-4 h-4" />
