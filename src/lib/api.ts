@@ -761,6 +761,24 @@ export const engagementsApi = {
       timeout: 120_000,
       ...config,
     }),
+  createMetsightsProfiles: (engagementId: number) =>
+    api.post<{
+      data: {
+        engagement_id: number;
+        total: number;
+        created: number;
+        skipped: number;
+        failed: number;
+        results: {
+          user_id: number;
+          status: string;
+          metsights_profile_id?: string | null;
+          reason?: string | null;
+        }[];
+      };
+    }>(`/engagements/${engagementId}/create-metsights-profiles`, undefined, {
+      timeout: 120_000,
+    }),
 };
 
 // Assessment packages

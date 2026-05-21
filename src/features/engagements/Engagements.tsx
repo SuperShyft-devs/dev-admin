@@ -16,6 +16,7 @@ import {
   Settings,
   CloudCog,
   Send,
+  UserPlus,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -754,6 +755,15 @@ export function Engagements() {
   const [pushError, setPushError] = useState<string | null>(null);
   const [advSettingsPackages, setAdvSettingsPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
   const [advSettingsLoading, setAdvSettingsLoading] = useState(false);
+  const [createProfilesOpen, setCreateProfilesOpen] = useState(false);
+  const [creatingProfiles, setCreatingProfiles] = useState(false);
+  const [createProfilesResult, setCreateProfilesResult] = useState<{
+    created: number;
+    skipped: number;
+    failed: number;
+    total: number;
+  } | null>(null);
+  const [createProfilesError, setCreateProfilesError] = useState<string | null>(null);
 
   const openChecklistModal = (row: EngagementListItem) => {
     setChecklistEngagement(row);
@@ -978,6 +988,27 @@ export function Engagements() {
       setAdvSettingsLoading(false);
     }
   }, []);
+
+  const handleCreateMetsightsProfiles = useCallback(async () => {
+    if (!selected) return;
+    setCreatingProfiles(true);
+    setCreateProfilesResult(null);
+    setCreateProfilesError(null);
+    try {
+      const res = await engagementsApi.createMetsightsProfiles(selected.engagement_id);
+      const d = res.data.data;
+      setCreateProfilesResult({
+        created: d.created,
+        skipped: d.skipped,
+        failed: d.failed,
+        total: d.total,
+      });
+    } catch (err) {
+      setCreateProfilesError(getApiError(err));
+    } finally {
+      setCreatingProfiles(false);
+    }
+  }, [selected]);
 
   const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
@@ -1667,6 +1698,18 @@ export function Engagements() {
                 >
                   <ClipboardList className="w-3.5 h-3.5" />
                   Manage Assessments
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateProfilesOpen(true);
+                    setCreateProfilesResult(null);
+                    setCreateProfilesError(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Create Profiles
                 </button>
               </div>
 
@@ -2465,6 +2508,84 @@ export function Engagements() {
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Create Metsights Profiles Confirmation Modal ── */}
+      <Modal
+        open={createProfilesOpen}
+        onClose={() => {
+          if (!creatingProfiles) {
+            setCreateProfilesOpen(false);
+            setCreateProfilesResult(null);
+            setCreateProfilesError(null);
+          }
+        }}
+        title="Create Profiles"
+      >
+        <div className="space-y-4">
+          {!createProfilesResult && !createProfilesError && !creatingProfiles && (
+            <>
+              <p className="text-sm text-zinc-700">
+                Create regular Metsights profiles for{" "}
+                <span className="font-semibold">all participants</span> of{" "}
+                <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span> who do not
+                already have a Metsights profile ID stored locally.
+              </p>
+              <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                <li>Uses Metsights <span className="font-mono">POST /profiles/</span> (not engagement registration).</li>
+                <li>Participants who already have <span className="font-mono">metsights_profile_id</span> are skipped.</li>
+                <li>Users missing required fields (name, phone, gender, DOB/age) are reported as failures.</li>
+              </ul>
+            </>
+          )}
+
+          {creatingProfiles && (
+            <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">Creating Metsights profiles…</span>
+            </div>
+          )}
+
+          {createProfilesError && <p className="text-sm text-red-600">{createProfilesError}</p>}
+
+          {createProfilesResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-emerald-700">Created: {createProfilesResult.created}</div>
+              <div className="text-zinc-500">
+                Skipped (already linked): {createProfilesResult.skipped}
+              </div>
+              {createProfilesResult.failed > 0 && (
+                <div className="text-red-600">Failed: {createProfilesResult.failed}</div>
+              )}
+              <div className="text-zinc-400">Total participants: {createProfilesResult.total}</div>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            {!createProfilesResult && !createProfilesError && (
+              <button
+                type="button"
+                onClick={handleCreateMetsightsProfiles}
+                disabled={creatingProfiles}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {creatingProfiles ? "Creating…" : "Create Profiles"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setCreateProfilesOpen(false);
+                setCreateProfilesResult(null);
+                setCreateProfilesError(null);
+              }}
+              disabled={creatingProfiles}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {createProfilesResult || createProfilesError ? "Close" : "Cancel"}
             </button>
           </div>
         </div>
