@@ -10,38 +10,14 @@ import {
   getApiError,
 } from "../../lib/api";
 
-function hasOrganization(orgId: number | null | undefined): boolean {
-  return orgId != null && orgId > 0;
-}
-
-async function fetchAllEngagementParticipants(engagement: Engagement): Promise<Participant[]> {
+async function fetchEngagementParticipants(engagement: Engagement): Promise<Participant[]> {
   const limit = 100;
   let page = 1;
   let total = 0;
   const all: Participant[] = [];
 
   do {
-    const res = engagement.engagement_code
-      ? await participantsApi.byEngagementCode(engagement.engagement_code, { page, limit })
-      : await participantsApi.public({ page, limit });
-    const chunk = res.data.data ?? [];
-    total = Number(res.data.meta?.total ?? chunk.length);
-    all.push(...chunk);
-    page += 1;
-    if (chunk.length === 0) break;
-  } while (all.length < total);
-
-  return all.filter((p) => p.engagement_id === engagement.engagement_id || p.engagement_id == null);
-}
-
-async function fetchAllOrganizationParticipants(orgId: number): Promise<Participant[]> {
-  const limit = 100;
-  let page = 1;
-  let total = 0;
-  const all: Participant[] = [];
-
-  do {
-    const res = await participantsApi.byOrganization(orgId, { page, limit });
+    const res = await participantsApi.byEngagementId(engagement.engagement_id, { page, limit });
     const chunk = res.data.data ?? [];
     total = Number(res.data.meta?.total ?? chunk.length);
     all.push(...chunk);
@@ -94,14 +70,12 @@ export interface EngagementNotificationModalProps {
   open: boolean;
   onClose: () => void;
   engagement: Engagement | null;
-  organizationLabel?: string;
 }
 
 export function EngagementNotificationModal({
   open,
   onClose,
   engagement,
-  organizationLabel,
 }: EngagementNotificationModalProps) {
   const [services, setServices] = useState<NotificationServiceItem[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
@@ -148,13 +122,8 @@ export function EngagementNotificationModal({
     setRecipientsLoading(true);
     setRecipientsError(null);
     try {
-      if (hasOrganization(engagement.organization_id)) {
-        const rows = await fetchAllOrganizationParticipants(engagement.organization_id!);
-        setRecipients(rows);
-      } else {
-        const rows = await fetchAllEngagementParticipants(engagement);
-        setRecipients(rows);
-      }
+      const rows = await fetchEngagementParticipants(engagement);
+      setRecipients(rows);
     } catch (err) {
       setRecipients([]);
       setRecipientsError(getApiError(err));
@@ -270,9 +239,7 @@ export function EngagementNotificationModal({
   };
 
   const scopeHint = engagement
-    ? hasOrganization(engagement.organization_id)
-      ? `All participants enrolled under ${organizationLabel ?? "this organisation"} (${totalRecipients} users).`
-      : `Participants on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
+    ? `Participants enrolled on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
     : "";
 
   return (
@@ -416,7 +383,7 @@ export function EngagementNotificationModal({
 
         {!recipientsLoading && totalRecipients === 0 && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            No recipients found. Add participants before sending notifications.
+            No participants found. Add participants before sending notifications.
           </p>
         )}
 

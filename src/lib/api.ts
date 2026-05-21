@@ -1058,6 +1058,11 @@ export interface Participant {
 }
 
 export const participantsApi = {
+  byEngagementId: (engagementId: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
+      `/engagements/${engagementId}/participants`,
+      { params }
+    ),
   // B2B: participants for a specific engagement by code
   byEngagementCode: (code: string, params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { total: number } }>(

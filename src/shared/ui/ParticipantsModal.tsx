@@ -6,6 +6,7 @@ import { participantsApi, type Participant, getApiError } from "../../lib/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Source =
+  | { kind: "engagement-id"; engagementId: number; name?: string }
   | { kind: "engagement-code"; code: string; name?: string }
   | { kind: "public" }
   | { kind: "organization"; orgId: number; orgName?: string };
@@ -24,6 +25,8 @@ function fullName(p: Participant): string {
 
 function modalTitle(source: Source): string {
   switch (source.kind) {
+    case "engagement-id":
+      return `Participants — ${source.name || `Engagement #${source.engagementId}`}`;
     case "engagement-code":
       return `Participants — ${source.name || source.code}`;
     case "public":
@@ -84,7 +87,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
         do {
           const res =
-            source.kind === "engagement-code"
+            source.kind === "engagement-id"
+              ? await participantsApi.byEngagementId(source.engagementId, { page, limit })
+              : source.kind === "engagement-code"
               ? await participantsApi.byEngagementCode(source.code, { page, limit })
               : await participantsApi.public({ page, limit });
           const chunk = res.data.data ?? [];
@@ -123,9 +128,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         );
       })
     : participants;
-  const canDeleteRows = source.kind === "engagement-code";
+  const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
   const engagementIdForDelete =
-    canDeleteRows && participants.length > 0 ? participants[0].engagement_id : undefined;
+    source.kind === "engagement-id"
+      ? source.engagementId
+      : canDeleteRows && participants.length > 0
+      ? participants[0].engagement_id
+      : undefined;
 
   const handleExportCsv = () => {
     if (participants.length === 0) return;
@@ -181,7 +190,12 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const codePart = source.kind === "engagement-code" ? source.code : source.kind;
+    const codePart =
+      source.kind === "engagement-id"
+        ? `engagement-${source.engagementId}`
+        : source.kind === "engagement-code"
+        ? source.code
+        : source.kind;
     const datePart = new Date().toISOString().slice(0, 10);
     link.href = url;
     link.setAttribute("download", `participants-${codePart}-${datePart}.csv`);

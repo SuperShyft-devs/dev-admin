@@ -29,6 +29,7 @@ import { OccupiedSlotsModal } from "../../shared/ui/OccupiedSlotsModal";
 import {
   engagementsApi,
   organizationsApi,
+  participantsApi,
   assessmentPackagesApi,
   diagnosticPackagesApi,
   employeesApi,
@@ -683,6 +684,7 @@ export function Engagements() {
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
 
   const [participantsSource, setParticipantsSource] = useState<
+    | { kind: "engagement-id"; engagementId: number; name?: string }
     | { kind: "engagement-code"; code: string; name?: string }
     | { kind: "public" }
     | null
@@ -877,16 +879,24 @@ export function Engagements() {
     setQStatusOpen(false);
     setQStatusData(null);
     setQStatusError(null);
+    setNotifyModalOpen(false);
     setAssessmentsModalOpen(false);
     setAssessmentsList([]);
     setAssessmentsError(null);
     setPushConfirmPkg(null);
     setAdvSettingsPackages([]);
-    engagementsApi.get(row.engagement_id).then((res) => {
-      setSelected(res.data.data);
-      setModalMode("view");
-      setModalOpen(true);
-    }).catch((err) => setError(getApiError(err)));
+    Promise.all([
+      engagementsApi.get(row.engagement_id),
+      participantsApi.byEngagementId(row.engagement_id, { page: 1, limit: 1 }),
+    ])
+      .then(([engRes, partRes]) => {
+        const engagement = engRes.data.data;
+        const liveCount = Number(partRes.data.meta?.total ?? engagement.participant_count ?? 0);
+        setSelected({ ...engagement, participant_count: liveCount });
+        setModalMode("view");
+        setModalOpen(true);
+      })
+      .catch((err) => setError(getApiError(err)));
   };
 
   const loadAssessmentsForEngagement = useCallback(async (engagementId: number) => {
@@ -1328,15 +1338,11 @@ export function Engagements() {
     : availableEmployees;
 
   const openParticipants = (row: EngagementListItem) => {
-    if (row.engagement_code) {
-      setParticipantsSource({
-        kind: "engagement-code",
-        code: row.engagement_code,
-        name: row.engagement_name ?? row.engagement_code,
-      });
-    } else {
-      setParticipantsSource({ kind: "public" });
-    }
+    setParticipantsSource({
+      kind: "engagement-id",
+      engagementId: row.engagement_id,
+      name: row.engagement_name ?? row.engagement_code ?? undefined,
+    });
   };
 
   const openOccupiedSlots = (row: EngagementListItem) => {
@@ -1573,15 +1579,11 @@ export function Engagements() {
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
-                  if (selected.engagement_code) {
-                    setParticipantsSource({
-                      kind: "engagement-code",
-                      code: selected.engagement_code,
-                      name: selected.engagement_name ?? selected.engagement_code,
-                    });
-                  } else {
-                    setParticipantsSource({ kind: "public" });
-                  }
+                  setParticipantsSource({
+                    kind: "engagement-id",
+                    engagementId: selected.engagement_id,
+                    name: selected.engagement_name ?? selected.engagement_code ?? undefined,
+                  });
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
               >
@@ -1592,9 +1594,20 @@ export function Engagements() {
                 engagementId={selected.engagement_id}
                 engagementName={selected.engagement_name ?? selected.engagement_code}
                 onComplete={() => {
-                  engagementsApi.get(selected.engagement_id).then((res) => {
-                    setSelected(res.data.data);
-                  }).catch(() => {});
+                  Promise.all([
+                    engagementsApi.get(selected.engagement_id),
+                    participantsApi.byEngagementId(selected.engagement_id, { page: 1, limit: 1 }),
+                  ])
+                    .then(([engRes, partRes]) => {
+                      const engagement = engRes.data.data;
+                      setSelected({
+                        ...engagement,
+                        participant_count: Number(
+                          partRes.data.meta?.total ?? engagement.participant_count ?? 0
+                        ),
+                      });
+                    })
+                    .catch(() => {});
                 }}
               />
             </div>
@@ -2680,11 +2693,6 @@ export function Engagements() {
         open={notifyModalOpen}
         onClose={() => setNotifyModalOpen(false)}
         engagement={selected}
-        organizationLabel={
-          selected?.organization_id
-            ? getOrgName(selected.organization_id)
-            : undefined
-        }
       />
 
       {/* ── Push Questionnaires Confirmation Modal ── */}
