@@ -1139,7 +1139,7 @@ export function Engagements() {
     if (!deleteConfirm || deleteConfirm.engagement_id !== row.engagement_id) return;
     setSubmitting(true);
     try {
-      await engagementsApi.updateStatus(row.engagement_id, "inactive");
+      await engagementsApi.delete(row.engagement_id);
       setDeleteConfirm(null);
       fetchList();
     } catch (err) {
@@ -1939,10 +1939,15 @@ export function Engagements() {
         <Modal
           open={!!deleteConfirm}
           onClose={() => setDeleteConfirm(null)}
-          title="Confirm Deactivate"
+          title="Delete Engagement"
         >
-          <p className="text-zinc-600 text-sm mb-4">
-            Deactivate engagement &quot;{deleteConfirm.engagement_name || deleteConfirm.engagement_code}&quot;? This will set status to inactive.
+          <p className="text-zinc-600 text-sm mb-2">
+            Permanently delete engagement &quot;{deleteConfirm.engagement_name || deleteConfirm.engagement_code}&quot;?
+          </p>
+          <p className="text-zinc-500 text-xs mb-4">
+            This removes the engagement and all data scoped to it: participants, assessment instances,
+            questionnaire responses, reports, checklists, and onboarding assistant assignments. User accounts
+            are not deleted.
           </p>
           <div className="flex flex-col-reverse sm:flex-row gap-3">
             <button
@@ -1950,7 +1955,7 @@ export function Engagements() {
               disabled={submitting}
               className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
             >
-              {submitting ? "Deactivating..." : "Deactivate"}
+              {submitting ? "Deleting..." : "Delete"}
             </button>
             <button
               onClick={() => setDeleteConfirm(null)}

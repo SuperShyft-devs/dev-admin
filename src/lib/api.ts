@@ -723,6 +723,22 @@ export const engagementsApi = {
       `/engagements/${id}/status`,
       { status }
     ),
+  delete: (id: number) =>
+    api.delete<{
+      data: {
+        engagement_id: number;
+        engagement_code?: string | null;
+        engagement_name?: string | null;
+        deleted_engagement_participants: number;
+        deleted_assessment_instances: number;
+        deleted_questionnaire_responses: number;
+        deleted_reports: number;
+        deleted_category_progress_rows: number;
+        deleted_organization_health_reports: number;
+        deleted_onboarding_assistant_assignments: number;
+        deleted_engagement_checklists: number;
+      };
+    }>(`/engagements/${id}`),
   assignParticipantsBatch: (
     engagementId: number,
     payload: { rows: { metsights_record_id: string; phone: string; email: string }[] },
