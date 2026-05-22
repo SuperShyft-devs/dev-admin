@@ -1067,7 +1067,11 @@ export interface Participant {
   engagement_name?: string | null;
   engagement_code?: string | null;
   engagement_type?: string | null;
+  address?: string | null;
+  pin_code?: string | null;
   city?: string | null;
+  state?: string | null;
+  country?: string | null;
 }
 
 export const participantsApi = {

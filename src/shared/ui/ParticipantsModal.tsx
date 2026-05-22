@@ -141,6 +141,11 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "last_name",
     "phone",
     "email",
+    "address",
+    "pin_code",
+    "city",
+    "state",
+    "country",
     "status",
     "participants_employee_id",
     "participant_department",
@@ -151,7 +156,6 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "is_profile_created_on_metsights",
     "is_primary_record_id_synced",
     "is_fitprint_record_id_synced",
-    "city",
   ];
 
   const discoveredColumns = new Set<string>();
