@@ -70,12 +70,15 @@ export interface EngagementNotificationModalProps {
   open: boolean;
   onClose: () => void;
   engagement: Engagement | null;
+  /** When set, notifications are limited to these participants (e.g. from Participants modal selection). */
+  scopedRecipients?: Participant[];
 }
 
 export function EngagementNotificationModal({
   open,
   onClose,
   engagement,
+  scopedRecipients,
 }: EngagementNotificationModalProps) {
   const [services, setServices] = useState<NotificationServiceItem[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
@@ -119,6 +122,12 @@ export function EngagementNotificationModal({
 
   const loadRecipients = useCallback(async () => {
     if (!engagement) return;
+    if (scopedRecipients != null) {
+      setRecipients(scopedRecipients);
+      setRecipientsLoading(false);
+      setRecipientsError(null);
+      return;
+    }
     setRecipientsLoading(true);
     setRecipientsError(null);
     try {
@@ -130,7 +139,7 @@ export function EngagementNotificationModal({
     } finally {
       setRecipientsLoading(false);
     }
-  }, [engagement]);
+  }, [engagement, scopedRecipients]);
 
   const loadNotified = useCallback(async () => {
     if (!engagement || !serviceKey) {
@@ -239,7 +248,9 @@ export function EngagementNotificationModal({
   };
 
   const scopeHint = engagement
-    ? `Participants enrolled on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
+    ? scopedRecipients != null
+      ? `Sending to ${totalRecipients} selected participant${totalRecipients === 1 ? "" : "s"} only.`
+      : `Participants enrolled on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
     : "";
 
   return (
