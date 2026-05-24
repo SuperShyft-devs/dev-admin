@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, Download, Loader2, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Loader2, Save } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   assessmentsApi,
@@ -69,6 +69,7 @@ export function ParticipantJourneyPage() {
   const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
     null
   );
+  const [togglingStatusInstanceId, setTogglingStatusInstanceId] = useState<number | null>(null);
 
   const loadSummary = useCallback(async () => {
     if (!Number.isFinite(userId)) return;
@@ -132,6 +133,28 @@ export function ParticipantJourneyPage() {
     }
   };
 
+  const handleToggleStatus = async (row: ParticipantJourneyInstanceSummary) => {
+    const instanceId = row.assessment_instance_id;
+    const isCompleted = (row.status ?? "").toLowerCase() === "completed";
+    const nextStatus = isCompleted ? "active" : "completed";
+
+    setTogglingStatusInstanceId(instanceId);
+    setImportFeedback(null);
+    try {
+      await assessmentsApi.updateStatus(instanceId, nextStatus);
+      setImportFeedback({
+        type: "success",
+        message: `Assessment marked as ${nextStatus === "completed" ? "complete" : "active"}.`,
+      });
+      await loadSummary();
+      await refreshDetailIfOpen(instanceId);
+    } catch (err) {
+      setImportFeedback({ type: "error", message: getApiError(err) });
+    } finally {
+      setTogglingStatusInstanceId(null);
+    }
+  };
+
   const openDetail = async (instanceId: number) => {
     if (!Number.isFinite(userId)) return;
     setDetailOpen(true);
@@ -185,7 +208,6 @@ export function ParticipantJourneyPage() {
   const renderImportButton = (row: ParticipantJourneyInstanceSummary, className = "") => {
     const hasRecord = Boolean((row.metsights_record_id ?? "").trim());
     const isImporting = importingInstanceId === row.assessment_instance_id;
-    const isBusy = importingInstanceId !== null;
 
     return (
       <button
@@ -194,7 +216,7 @@ export function ParticipantJourneyPage() {
           e.stopPropagation();
           void handleImportAnswers(row.assessment_instance_id);
         }}
-        disabled={!hasRecord || isBusy}
+        disabled={!hasRecord || importingInstanceId !== null}
         className={`p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-400 ${className}`}
         title={
           hasRecord
@@ -210,6 +232,36 @@ export function ParticipantJourneyPage() {
       </button>
     );
   };
+
+  const renderStatusToggle = (row: ParticipantJourneyInstanceSummary) => {
+    const isCompleted = (row.status ?? "").toLowerCase() === "completed";
+    const isToggling = togglingStatusInstanceId === row.assessment_instance_id;
+    const isBusy = togglingStatusInstanceId !== null || importingInstanceId !== null;
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleToggleStatus(row);
+        }}
+        disabled={isBusy}
+        className="p-1 rounded-lg transition-colors disabled:opacity-50 hover:bg-zinc-100"
+        title={isCompleted ? "Mark as active" : "Mark as complete"}
+      >
+        {isToggling ? (
+          <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+        ) : isCompleted ? (
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        ) : (
+          <Circle className="w-4 h-4 text-zinc-400" />
+        )}
+      </button>
+    );
+  };
+
+  const formatStatusLabel = (status?: string | null) =>
+    (status || "—").replace(/_/g, " ").replace(/^completed$/i, "complete");
 
   const fullName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(" ") || "—"
@@ -365,8 +417,9 @@ export function ParticipantJourneyPage() {
                         {row.engagement_name || row.engagement_code || `Engagement #${row.engagement_id}`}
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-medium text-zinc-600 capitalize">
-                      {(row.status || "—").replace(/_/g, " ")}
+                    <span className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-zinc-600 capitalize">
+                      {renderStatusToggle(row)}
+                      {formatStatusLabel(row.status)}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -417,8 +470,11 @@ export function ParticipantJourneyPage() {
                       <td className="px-4 py-3 text-zinc-700">
                         {row.engagement_name || row.engagement_code || `—`}
                       </td>
-                      <td className="px-4 py-3 capitalize text-zinc-700">
-                        {(row.status || "—").replace(/_/g, " ")}
+                      <td className="px-4 py-3 text-zinc-700">
+                        <div className="flex items-center gap-2 capitalize">
+                          {renderStatusToggle(row)}
+                          <span>{formatStatusLabel(row.status)}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-zinc-600 text-xs">
                         {row.questionnaire.response_count} responses · {row.questionnaire.draft_count} draft ·{" "}

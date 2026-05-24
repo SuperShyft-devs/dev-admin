@@ -412,6 +412,10 @@ export const assessmentsApi = {
       undefined,
       { timeout: 120_000 }
     ),
+  updateStatus: (assessmentInstanceId: number, status: "active" | "completed") =>
+    api.patch<{
+      data: { assessment_instance_id: number; status: string; completed_at: string | null };
+    }>(`/assessments/${assessmentInstanceId}/status`, { status }),
 };
 
 // Uploads
