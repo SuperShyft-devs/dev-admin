@@ -8,10 +8,12 @@ import {
   employeesApi,
   uploadsApi,
   notificationsApi,
+  participantJourneyApi,
   type UserListItem,
   type UserDetail,
   type UserCreate,
   type NotificationServiceItem,
+  type ParticipantJourneyInstanceSummary,
   getApiError,
 } from "../../lib/api";
 function hasMetsightsProfileId(user: UserListItem): boolean {
@@ -74,6 +76,8 @@ export function Users() {
 
   const [sendMsgUser, setSendMsgUser] = useState<UserListItem | null>(null);
   const [sendMsgServices, setSendMsgServices] = useState<NotificationServiceItem[]>([]);
+  const [sendMsgInstances, setSendMsgInstances] = useState<ParticipantJourneyInstanceSummary[]>([]);
+  const [sendMsgInstanceId, setSendMsgInstanceId] = useState<number | "">("");
   const [sendMsgKey, setSendMsgKey] = useState("");
   const [sendMsgSearch, setSendMsgSearch] = useState("");
   const [sendMsgDropdownOpen, setSendMsgDropdownOpen] = useState(false);
@@ -281,16 +285,48 @@ export function Users() {
     setSendMsgDropdownOpen(false);
     setSendMsgError(null);
     setSendMsgSuccess(null);
+    setSendMsgInstances([]);
+    setSendMsgInstanceId("");
     try {
-      const res = await notificationsApi.listServices();
-      setSendMsgServices(res.data.data.filter((s) => s.is_active));
+      const [servicesRes, journeyRes] = await Promise.all([
+        notificationsApi.listServices(),
+        participantJourneyApi.summary(row.user_id, { page: 1, limit: 100 }),
+      ]);
+      setSendMsgServices(servicesRes.data.data.filter((s) => s.is_active));
+      const withRecord = (journeyRes.data.data.instances ?? []).filter(
+        (i) => (i.metsights_record_id ?? "").trim().length > 0
+      );
+      setSendMsgInstances(withRecord);
+      if (withRecord.length === 1) {
+        setSendMsgInstanceId(withRecord[0].assessment_instance_id);
+      }
     } catch {
       setSendMsgServices([]);
+      setSendMsgInstances([]);
     }
   };
 
+  const selectedSendMsgService = sendMsgServices.find((s) => s.service_key === sendMsgKey);
+  const selectedSendMsgInstance =
+    sendMsgInstanceId === ""
+      ? null
+      : sendMsgInstances.find((i) => i.assessment_instance_id === sendMsgInstanceId) ?? null;
+
   const handleSendMessage = async () => {
     if (!sendMsgUser || !sendMsgKey) return;
+    const svc = selectedSendMsgService;
+    if (!svc) return;
+
+    const recordId = (selectedSendMsgInstance?.metsights_record_id ?? "").trim();
+    if (svc.require_record_id && !recordId && sendMsgInstances.length > 0) {
+      setSendMsgError("Select an assessment with a Metsights record ID.");
+      return;
+    }
+    if (svc.require_record_id && !recordId && sendMsgInstances.length === 0) {
+      setSendMsgError("No assessment with a Metsights record ID found for this user.");
+      return;
+    }
+
     setSendMsgSubmitting(true);
     setSendMsgError(null);
     setSendMsgSuccess(null);
@@ -298,7 +334,8 @@ export function Users() {
       await notificationsApi.dispatch({
         service_key: sendMsgKey,
         user_id: sendMsgUser.user_id,
-        engagement_id: null,
+        engagement_id: selectedSendMsgInstance?.engagement_id ?? null,
+        record_id: recordId || null,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1038,6 +1075,13 @@ export function Users() {
                             setSendMsgKey(s.service_key);
                             setSendMsgSearch(s.display_name);
                             setSendMsgDropdownOpen(false);
+                            if (
+                              s.require_record_id &&
+                              sendMsgInstanceId === "" &&
+                              sendMsgInstances.length === 1
+                            ) {
+                              setSendMsgInstanceId(sendMsgInstances[0].assessment_instance_id);
+                            }
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 flex items-center justify-between ${
                             sendMsgKey === s.service_key ? "bg-zinc-50 font-medium" : "text-zinc-700"
@@ -1065,11 +1109,43 @@ export function Users() {
               </div>
             </div>
 
+            {selectedSendMsgService?.require_record_id && sendMsgInstances.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Assessment (Metsights record)
+                </label>
+                <select
+                  value={sendMsgInstanceId}
+                  onChange={(e) =>
+                    setSendMsgInstanceId(e.target.value ? Number(e.target.value) : "")
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value="">Select assessment</option>
+                  {sendMsgInstances.map((inst) => (
+                    <option key={inst.assessment_instance_id} value={inst.assessment_instance_id}>
+                      {inst.package_display_name || inst.package_code || `Package #${inst.package_id}`}
+                      {" · "}
+                      {inst.engagement_name || inst.engagement_code || `Engagement #${inst.engagement_id}`}
+                      {inst.metsights_record_id ? ` · ${inst.metsights_record_id}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
               <button
                 type="button"
                 onClick={handleSendMessage}
-                disabled={sendMsgSubmitting || !sendMsgKey || !!sendMsgSuccess}
+                disabled={
+                  sendMsgSubmitting ||
+                  !sendMsgKey ||
+                  !!sendMsgSuccess ||
+                  (Boolean(selectedSendMsgService?.require_record_id) &&
+                    sendMsgInstances.length > 0 &&
+                    sendMsgInstanceId === "")
+                }
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
               >
                 {sendMsgSubmitting ? "Sending..." : "Send"}

@@ -321,6 +321,7 @@ export interface ParticipantJourneyInstanceSummary {
   status?: string | null;
   assigned_at?: string | null;
   completed_at?: string | null;
+  metsights_record_id?: string | null;
   package_id: number;
   package_code?: string | null;
   package_display_name?: string | null;
