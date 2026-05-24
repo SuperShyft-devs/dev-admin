@@ -1883,7 +1883,7 @@ export function Engagements() {
                   Organisation{modalMode === "add" ? " *" : ""}
                 </label>
                 <select
-                  value={formData.organization_id}
+                  value={formData.organization_id ?? 0}
                   onChange={(e) => setFormData({ ...formData, organization_id: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   required={modalMode === "add"}
