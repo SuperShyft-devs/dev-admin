@@ -219,6 +219,7 @@ export interface UserDetail {
   referred_by?: string | null;
   is_participant?: boolean | null;
   status?: string | null;
+  metsights_profile_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -281,6 +282,11 @@ export const usersApi = {
     api.post<{ data: { user_id: number } }>("/users", payload),
   update: (id: number, payload: UserUpdate) =>
     api.put<{ data: { user_id: number; status: string } }>(`/users/${id}`, payload),
+  updateMetsightsProfileId: (id: number, metsights_profile_id: string) =>
+    api.put<{ data: { user_id: number; metsights_profile_id: string | null } }>(
+      `/users/${id}/metsights-profile-id`,
+      { metsights_profile_id }
+    ),
   deactivate: (id: number) =>
     api.patch<{ data: { user_id: number; status: string } }>(`/users/${id}/deactivate`),
   deleteImpact: (id: number) =>

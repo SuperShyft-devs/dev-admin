@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   participantJourneyApi,
@@ -60,6 +60,10 @@ export function ParticipantJourneyPage() {
   const [detail, setDetail] = useState<ParticipantJourneyDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [openCategories, setOpenCategories] = useState<Record<number, boolean>>({});
+  const [metsightsProfileInput, setMetsightsProfileInput] = useState("");
+  const [metsightsProfileSaving, setMetsightsProfileSaving] = useState(false);
+  const [metsightsProfileError, setMetsightsProfileError] = useState<string | null>(null);
+  const [metsightsProfileSuccess, setMetsightsProfileSuccess] = useState<string | null>(null);
 
   const loadSummary = useCallback(async () => {
     if (!Number.isFinite(userId)) return;
@@ -70,7 +74,11 @@ export function ParticipantJourneyPage() {
         usersApi.get(userId),
         participantJourneyApi.summary(userId, { page: 1, limit: 100 }),
       ]);
-      setUser(userRes.data.data);
+      const userData = userRes.data.data;
+      setUser(userData);
+      setMetsightsProfileInput(userData.metsights_profile_id ?? "");
+      setMetsightsProfileError(null);
+      setMetsightsProfileSuccess(null);
       setInstances(journeyRes.data.data.instances ?? []);
       setMeta(journeyRes.data.meta);
     } catch (err) {
@@ -108,6 +116,35 @@ export function ParticipantJourneyPage() {
     setOpenCategories((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const saveMetsightsProfileId = async (value: string) => {
+    if (!Number.isFinite(userId)) return;
+    setMetsightsProfileSaving(true);
+    setMetsightsProfileError(null);
+    setMetsightsProfileSuccess(null);
+    try {
+      const res = await usersApi.updateMetsightsProfileId(userId, value);
+      const saved = res.data.data.metsights_profile_id ?? "";
+      setMetsightsProfileInput(saved);
+      setUser((prev) =>
+        prev ? { ...prev, metsights_profile_id: res.data.data.metsights_profile_id } : prev
+      );
+      setMetsightsProfileSuccess(
+        saved ? "Metsights profile ID saved." : "Metsights profile ID cleared."
+      );
+    } catch (err) {
+      setMetsightsProfileError(getApiError(err));
+    } finally {
+      setMetsightsProfileSaving(false);
+    }
+  };
+
+  const handleSaveMetsightsProfileId = () => saveMetsightsProfileId(metsightsProfileInput.trim());
+
+  const handleClearMetsightsProfileId = () => saveMetsightsProfileId("");
+
+  const metsightsProfileDirty =
+    (metsightsProfileInput.trim() || "") !== ((user?.metsights_profile_id ?? "").trim() || "");
+
   const fullName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(" ") || "—"
     : "—";
@@ -144,6 +181,72 @@ export function ParticipantJourneyPage() {
 
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
+
+      {!loading && user && (
+        <div className="mb-4 sm:mb-6 bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
+            <div className="flex-1 min-w-0">
+              <label
+                htmlFor="metsights-profile-id"
+                className="block text-sm font-medium text-zinc-700 mb-1"
+              >
+                Metsights profile ID
+              </label>
+              <input
+                id="metsights-profile-id"
+                type="text"
+                value={metsightsProfileInput}
+                onChange={(e) => {
+                  setMetsightsProfileInput(e.target.value);
+                  setMetsightsProfileSuccess(null);
+                  setMetsightsProfileError(null);
+                }}
+                placeholder="Paste Metsights profile UUID"
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Links this user to Metsights for records, Bio AI reports, and imports. Leave empty and
+                save to clear.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => void handleSaveMetsightsProfileId()}
+                disabled={metsightsProfileSaving || !metsightsProfileDirty}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 min-w-[5.5rem]"
+              >
+                {metsightsProfileSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {metsightsProfileSaving ? "Saving…" : "Save"}
+              </button>
+              {(user.metsights_profile_id ?? "").trim() ? (
+                <button
+                  type="button"
+                  onClick={() => void handleClearMetsightsProfileId()}
+                  disabled={metsightsProfileSaving}
+                  className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {metsightsProfileError && (
+            <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{metsightsProfileError}</div>
+          )}
+          {metsightsProfileSuccess && (
+            <div className="mt-3 p-3 rounded-lg bg-emerald-50 text-emerald-800 text-sm">
+              {metsightsProfileSuccess}
+            </div>
+          )}
+        </div>
       )}
 
       {loading ? (
