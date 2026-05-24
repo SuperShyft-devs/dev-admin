@@ -799,6 +799,33 @@ export function Engagements() {
       setError(getApiError(err));
     }
   }, []);
+
+  const ensureOrgInList = useCallback(async (organizationId: number | null | undefined) => {
+    if (!organizationId || organizationId <= 0) return;
+    try {
+      const res = await organizationsApi.get(organizationId);
+      const org = res.data.data;
+      setOrganizations((prev) => {
+        if (prev.some((o) => o.organization_id === organizationId)) return prev;
+        return [
+          ...prev,
+          {
+            organization_id: org.organization_id,
+            name: org.name,
+            organization_type: org.organization_type,
+            logo: org.logo,
+            website_url: org.website_url,
+            city: org.city,
+            state: org.state,
+            country: org.country,
+            status: org.status,
+          },
+        ];
+      });
+    } catch {
+      // Keep form usable even if the org lookup fails.
+    }
+  }, []);
   const fetchPackages = useCallback(() => {
     assessmentPackagesApi.list().then((r) => setAssessmentPackages(r.data.data));
   }, []);
@@ -1101,8 +1128,9 @@ export function Engagements() {
   }, [pendingEngagementPreset, organizations, assessmentPackages, modalOpen]);
 
   const openEdit = (row: EngagementListItem) => {
-    engagementsApi.get(row.engagement_id).then((res) => {
+    engagementsApi.get(row.engagement_id).then(async (res) => {
       const e = res.data.data;
+      await ensureOrgInList(e.organization_id);
       setSelected(e);
       setFormData({
         engagement_name: e.engagement_name ?? "",
@@ -1126,9 +1154,17 @@ export function Engagements() {
     }).catch((err) => setError(getApiError(err)));
   };
 
+  const resolveOrganizationId = () =>
+    formData.organization_id && formData.organization_id > 0 ? formData.organization_id : null;
+
   const handleSubmit = async () => {
-    if (!formData.organization_id || !formData.start_date || !formData.end_date) {
-      setError("Please fill required fields");
+    const missingOrg = modalMode === "add" && !resolveOrganizationId();
+    const missingDates = !formData.start_date || !formData.end_date;
+    if (missingOrg || missingDates) {
+      const parts: string[] = [];
+      if (missingOrg) parts.push("organisation");
+      if (missingDates) parts.push("start and end dates");
+      setError(`Please fill required fields: ${parts.join(", ")}`);
       return;
     }
 
@@ -1138,6 +1174,7 @@ export function Engagements() {
       if (modalMode === "add") {
         const createPayload: EngagementCreate = {
           ...formData,
+          organization_id: resolveOrganizationId()!,
           metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
           assessment_package_id:
             formData.assessment_package_id && formData.assessment_package_id > 0
@@ -1159,7 +1196,7 @@ export function Engagements() {
           engagement_name: formData.engagement_name,
           engagement_code: (formData.engagement_code ?? "").trim(),
           metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
-          organization_id: formData.organization_id,
+          organization_id: resolveOrganizationId(),
           engagement_type: formData.engagement_type,
           assessment_package_id:
             formData.assessment_package_id && formData.assessment_package_id > 0
@@ -1842,14 +1879,18 @@ export function Engagements() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Organisation *</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Organisation{modalMode === "add" ? " *" : ""}
+                </label>
                 <select
                   value={formData.organization_id}
                   onChange={(e) => setFormData({ ...formData, organization_id: Number(e.target.value) })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required
+                  required={modalMode === "add"}
                 >
-                  <option value={0}>Select organisation</option>
+                  <option value={0}>
+                    {modalMode === "edit" ? "None (B2C / public)" : "Select organisation"}
+                  </option>
                   {organizations.map((o) => (
                     <option key={o.organization_id} value={o.organization_id}>
                       {o.name ?? o.organization_id}

@@ -691,7 +691,7 @@ export interface EngagementListItem {
 export interface EngagementCreate {
   engagement_name?: string | null;
   metsights_engagement_id?: string | null;
-  organization_id: number;
+  organization_id?: number | null;
   engagement_type: EngagementKind;
   engagement_code?: string | null;
   assessment_package_id?: number | null;
@@ -729,7 +729,7 @@ export const engagementsApi = {
     api.get<{ data: Engagement }>(`/engagements/${id}`),
   create: (payload: EngagementCreate) =>
     api.post<{ data: { engagement_id: number } }>("/engagements", payload),
-  update: (id: number, payload: EngagementCreate) =>
+  update: (id: number, payload: Partial<EngagementCreate> & Pick<EngagementCreate, "engagement_type" | "start_date" | "end_date" | "slot_duration">) =>
     api.put<{ data: { engagement_id: number } }>(`/engagements/${id}`, payload),
   updateStatus: (id: number, status: string) =>
     api.patch<{ data: { engagement_id: number; status: string } }>(
