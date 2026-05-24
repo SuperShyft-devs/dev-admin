@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Download, Loader2, Save } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
+  assessmentsApi,
   participantJourneyApi,
   usersApi,
   getApiError,
@@ -64,6 +65,10 @@ export function ParticipantJourneyPage() {
   const [metsightsProfileSaving, setMetsightsProfileSaving] = useState(false);
   const [metsightsProfileError, setMetsightsProfileError] = useState<string | null>(null);
   const [metsightsProfileSuccess, setMetsightsProfileSuccess] = useState<string | null>(null);
+  const [importingInstanceId, setImportingInstanceId] = useState<number | null>(null);
+  const [importFeedback, setImportFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
+    null
+  );
 
   const loadSummary = useCallback(async () => {
     if (!Number.isFinite(userId)) return;
@@ -94,6 +99,38 @@ export function ParticipantJourneyPage() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  const refreshDetailIfOpen = async (instanceId: number) => {
+    if (!detailOpen || detail?.assessment_instance_id !== instanceId || !Number.isFinite(userId)) return;
+    try {
+      const res = await participantJourneyApi.detail(userId, instanceId);
+      setDetail(res.data.data);
+    } catch {
+      // Keep existing detail if refresh fails after import.
+    }
+  };
+
+  const handleImportAnswers = async (instanceId: number) => {
+    setImportingInstanceId(instanceId);
+    setImportFeedback(null);
+    try {
+      const res = await assessmentsApi.importMetsightsAnswers(instanceId);
+      const result = res.data.data;
+      const skipped = result.skipped_questions.length;
+      setImportFeedback({
+        type: "success",
+        message: `Imported ${result.responses_upserted} answer${result.responses_upserted === 1 ? "" : "s"} from Metsights${
+          skipped > 0 ? ` (${skipped} field${skipped === 1 ? "" : "s"} skipped)` : ""
+        }.`,
+      });
+      await loadSummary();
+      await refreshDetailIfOpen(instanceId);
+    } catch (err) {
+      setImportFeedback({ type: "error", message: getApiError(err) });
+    } finally {
+      setImportingInstanceId(null);
+    }
+  };
 
   const openDetail = async (instanceId: number) => {
     if (!Number.isFinite(userId)) return;
@@ -144,6 +181,35 @@ export function ParticipantJourneyPage() {
 
   const metsightsProfileDirty =
     (metsightsProfileInput.trim() || "") !== ((user?.metsights_profile_id ?? "").trim() || "");
+
+  const renderImportButton = (row: ParticipantJourneyInstanceSummary, className = "") => {
+    const hasRecord = Boolean((row.metsights_record_id ?? "").trim());
+    const isImporting = importingInstanceId === row.assessment_instance_id;
+    const isBusy = importingInstanceId !== null;
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleImportAnswers(row.assessment_instance_id);
+        }}
+        disabled={!hasRecord || isBusy}
+        className={`p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-400 ${className}`}
+        title={
+          hasRecord
+            ? "Import questionnaire answers from Metsights"
+            : "No Metsights record linked to this assessment"
+        }
+      >
+        {isImporting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Download className="w-4 h-4" />
+        )}
+      </button>
+    );
+  };
 
   const fullName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(" ") || "—"
@@ -261,6 +327,18 @@ export function ParticipantJourneyPage() {
             </span>
           </div>
 
+          {importFeedback && (
+            <div
+              className={`mb-4 p-3 rounded-lg text-sm ${
+                importFeedback.type === "success"
+                  ? "bg-emerald-50 text-emerald-800"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              {importFeedback.message}
+            </div>
+          )}
+
           {/* Mobile: cards */}
           <div className="flex flex-col gap-3 md:hidden">
             {instances.length === 0 ? (
@@ -269,13 +347,16 @@ export function ParticipantJourneyPage() {
               </div>
             ) : (
               instances.map((row) => (
-                <button
+                <div
                   key={row.assessment_instance_id}
-                  type="button"
-                  onClick={() => void openDetail(row.assessment_instance_id)}
-                  className="text-left bg-white rounded-xl border border-zinc-200 p-4 hover:border-zinc-300 hover:shadow-sm transition-shadow w-full"
+                  className="bg-white rounded-xl border border-zinc-200 p-4 hover:border-zinc-300 hover:shadow-sm transition-shadow w-full"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void openDetail(row.assessment_instance_id)}
+                    className="text-left w-full"
+                  >
+                    <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-medium text-zinc-900 truncate">
                         {row.package_display_name || row.package_code || `Package #${row.package_id}`}
@@ -296,7 +377,11 @@ export function ParticipantJourneyPage() {
                       Submitted: {row.questionnaire.submitted_count}
                     </span>
                   </div>
-                </button>
+                  </button>
+                  <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center justify-end">
+                    {renderImportButton(row)}
+                  </div>
+                </div>
               ))
             )}
           </div>
@@ -310,7 +395,7 @@ export function ParticipantJourneyPage() {
                   <th className="px-4 py-3 font-medium">Engagement</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Questionnaire</th>
-                  <th className="px-4 py-3 font-medium w-28"> </th>
+                  <th className="px-4 py-3 font-medium w-36"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -340,13 +425,16 @@ export function ParticipantJourneyPage() {
                         {row.questionnaire.submitted_count} submitted
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => void openDetail(row.assessment_instance_id)}
-                          className="text-zinc-900 font-medium text-xs hover:underline"
-                        >
-                          View detail
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          {renderImportButton(row)}
+                          <button
+                            type="button"
+                            onClick={() => void openDetail(row.assessment_instance_id)}
+                            className="text-zinc-900 font-medium text-xs hover:underline px-1.5 py-1"
+                          >
+                            View detail
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

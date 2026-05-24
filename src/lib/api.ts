@@ -397,6 +397,23 @@ export const participantJourneyApi = {
     ),
 };
 
+export interface MetsightsImportAnswersResult {
+  assessment_instance_id: number;
+  metsights_record_id: string;
+  responses_upserted: number;
+  skipped_categories: string[];
+  skipped_questions: string[];
+}
+
+export const assessmentsApi = {
+  importMetsightsAnswers: (assessmentInstanceId: number) =>
+    api.post<{ data: MetsightsImportAnswersResult }>(
+      `/assessments/${assessmentInstanceId}/metsights/import-answers`,
+      undefined,
+      { timeout: 120_000 }
+    ),
+};
+
 // Uploads
 export const uploadsApi = {
   uploadUserProfilePhoto: (file: File) => {
