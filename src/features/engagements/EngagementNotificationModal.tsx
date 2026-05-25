@@ -90,7 +90,6 @@ export function EngagementNotificationModal({
   const [serviceSearch, setServiceSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const [recordId, setRecordId] = useState("");
   const [notifiedIds, setNotifiedIds] = useState<Set<number>>(new Set());
   const [notifiedLoading, setNotifiedLoading] = useState(false);
 
@@ -161,7 +160,6 @@ export function EngagementNotificationModal({
     if (!open || !engagement) return;
     setServiceKey("");
     setServiceSearch("");
-    setRecordId("");
     setError(null);
     setSuccess(null);
     setSendProgress(null);
@@ -195,11 +193,6 @@ export function EngagementNotificationModal({
     const svc = selectedService;
     if (!svc) return;
 
-    if (svc.require_record_id && !recordId.trim()) {
-      setError("This service requires a record ID.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -217,7 +210,7 @@ export function EngagementNotificationModal({
           service_key: serviceKey,
           user_id: userId,
           engagement_id: engagement.engagement_id,
-          record_id: recordId.trim() || null,
+          record_id: null,
           participant_details:
             svc.require_participant_detail && participant
               ? participantDetailsFromRow(participant)
@@ -370,21 +363,6 @@ export function EngagementNotificationModal({
             </div>
           )}
         </div>
-
-        {selectedService?.require_record_id && (
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">
-              Record ID <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={recordId}
-              onChange={(e) => setRecordId(e.target.value)}
-              placeholder="e.g. D445236F209D"
-              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            />
-          </div>
-        )}
 
         {submitting && sendProgress && (
           <div className="text-xs text-zinc-500">
