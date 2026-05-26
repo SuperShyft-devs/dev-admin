@@ -157,6 +157,24 @@ export interface MetsightsProfilesImportPageResult {
   skipped_items: { metsights_profile_id: string; reason: string }[];
 }
 
+export interface QuestionnaireCategoryProgressRefreshStats {
+  assessment_instances_total: number;
+}
+
+/** One assessment instance processed per request. */
+export interface QuestionnaireCategoryProgressRefreshPageResult {
+  offset: number;
+  next_offset: number;
+  assessment_instances_total: number;
+  assessment_instance_id: number | null;
+  processed: number;
+  categories_synced: number;
+  marked_complete: number;
+  marked_incomplete: number;
+  unchanged: number;
+  has_more: boolean;
+}
+
 /** Summary from POST /platform-settings/questionnaire-category-progress/refresh-all */
 export interface QuestionnaireCategoryProgressRefreshResult {
   assessment_instances_total: number;
@@ -182,6 +200,16 @@ export const platformSettingsApi = {
   importMetsightsProfilesPage: (payload: { page: number }) =>
     api.post<{ data: MetsightsProfilesImportPageResult; meta: Record<string, unknown> }>(
       "/platform-settings/metsights-profiles/import-page",
+      payload,
+      { timeout: 120_000 }
+    ),
+  getQuestionnaireCategoryProgressRefreshStats: () =>
+    api.get<{ data: QuestionnaireCategoryProgressRefreshStats; meta: Record<string, unknown> }>(
+      "/platform-settings/questionnaire-category-progress/refresh-stats"
+    ),
+  refreshQuestionnaireCategoryProgressPage: (payload: { offset: number }) =>
+    api.post<{ data: QuestionnaireCategoryProgressRefreshPageResult; meta: Record<string, unknown> }>(
+      "/platform-settings/questionnaire-category-progress/refresh-page",
       payload,
       { timeout: 120_000 }
     ),

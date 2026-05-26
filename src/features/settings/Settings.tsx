@@ -9,7 +9,8 @@ import {
   type DiagnosticPackageListItem,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
-  type QuestionnaireCategoryProgressRefreshResult,
+  type QuestionnaireCategoryProgressRefreshPageResult,
+  type QuestionnaireCategoryProgressRefreshStats,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -95,14 +96,31 @@ export function Settings() {
   const [logOpen, setLogOpen] = useState(false);
   const [duplicatesModalOpen, setDuplicatesModalOpen] = useState(false);
 
-  const [categoryProgressRefreshing, setCategoryProgressRefreshing] = useState(false);
+  type CategoryProgressPhase = "idle" | "running" | "paused" | "completed" | "error";
+
+  const [categoryProgressStats, setCategoryProgressStats] =
+    useState<QuestionnaireCategoryProgressRefreshStats | null>(null);
+  const [categoryProgressStatsLoading, setCategoryProgressStatsLoading] = useState(false);
+  const [categoryProgressStatsError, setCategoryProgressStatsError] = useState<string | null>(null);
+  const [categoryProgressPhase, setCategoryProgressPhase] = useState<CategoryProgressPhase>("idle");
+  const [categoryProgressOffset, setCategoryProgressOffset] = useState(0);
+  const [categoryProgressProcessed, setCategoryProgressProcessed] = useState(0);
+  const [categoryProgressTotal, setCategoryProgressTotal] = useState(0);
   const [categoryProgressError, setCategoryProgressError] = useState<string | null>(null);
-  const [categoryProgressResult, setCategoryProgressResult] =
-    useState<QuestionnaireCategoryProgressRefreshResult | null>(null);
+  const [categoryProgressFailedOffset, setCategoryProgressFailedOffset] = useState<number | null>(null);
+  const [categoryProgressTotals, setCategoryProgressTotals] = useState({
+    categories_synced: 0,
+    marked_complete: 0,
+    marked_incomplete: 0,
+    unchanged: 0,
+  });
+  const [lastProcessedInstanceId, setLastProcessedInstanceId] = useState<number | null>(null);
 
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const runningRef = useRef(false);
+  const categoryPauseRef = useRef(false);
+  const categoryRunningRef = useRef(false);
 
   const loadB2c = useCallback(async () => {
     setLoading(true);
@@ -148,10 +166,26 @@ export function Settings() {
     }
   }, []);
 
+  const refreshCategoryProgressStats = useCallback(async () => {
+    setCategoryProgressStatsLoading(true);
+    setCategoryProgressStatsError(null);
+    try {
+      const res = await platformSettingsApi.getQuestionnaireCategoryProgressRefreshStats();
+      setCategoryProgressStats(res.data.data);
+      return res.data.data;
+    } catch (err) {
+      setCategoryProgressStatsError(getApiError(err));
+      return null;
+    } finally {
+      setCategoryProgressStatsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadB2c();
     void refreshMsStats();
-  }, [loadB2c, refreshMsStats]);
+    void refreshCategoryProgressStats();
+  }, [loadB2c, refreshMsStats, refreshCategoryProgressStats]);
 
   useEffect(() => {
     return () => {
@@ -317,25 +351,127 @@ export function Settings() {
     syncPhase !== "running" && !msStatsLoading && (msStats?.metsights_total ?? 0) > 0 && !msStatsError;
   const isSyncing = syncPhase === "running";
 
-  async function handleRefreshCategoryProgress() {
+  const applyCategoryProgressPage = useCallback((result: QuestionnaireCategoryProgressRefreshPageResult) => {
+    if (result.assessment_instances_total > 0) {
+      setCategoryProgressTotal(result.assessment_instances_total);
+    }
+    if (result.processed > 0) {
+      setCategoryProgressProcessed((prev) => {
+        const next = prev + result.processed;
+        return result.assessment_instances_total > 0
+          ? Math.min(next, result.assessment_instances_total)
+          : next;
+      });
+      if (result.assessment_instance_id != null) {
+        setLastProcessedInstanceId(result.assessment_instance_id);
+      }
+    }
+    setCategoryProgressTotals((prev) => ({
+      categories_synced: prev.categories_synced + result.categories_synced,
+      marked_complete: prev.marked_complete + result.marked_complete,
+      marked_incomplete: prev.marked_incomplete + result.marked_incomplete,
+      unchanged: prev.unchanged + result.unchanged,
+    }));
+    setCategoryProgressOffset(result.next_offset);
+  }, []);
+
+  const runCategoryProgressLoop = useCallback(
+    async (startOffset: number) => {
+      if (categoryRunningRef.current) return;
+      categoryRunningRef.current = true;
+      categoryPauseRef.current = false;
+      setCategoryProgressError(null);
+      setCategoryProgressFailedOffset(null);
+      setCategoryProgressPhase("running");
+
+      let offset = startOffset;
+      let total = categoryProgressTotal || categoryProgressStats?.assessment_instances_total || 0;
+
+      try {
+        while (!categoryPauseRef.current) {
+          const res = await platformSettingsApi.refreshQuestionnaireCategoryProgressPage({ offset });
+          const result = res.data.data;
+          applyCategoryProgressPage(result);
+          total = result.assessment_instances_total || total;
+          setCategoryProgressTotal(total);
+          offset = result.next_offset;
+
+          if (!result.has_more) {
+            setCategoryProgressPhase("completed");
+            await refreshCategoryProgressStats();
+            break;
+          }
+        }
+
+        if (categoryPauseRef.current) {
+          setCategoryProgressPhase("paused");
+        }
+      } catch (err) {
+        setCategoryProgressError(getApiError(err));
+        setCategoryProgressFailedOffset(offset);
+        setCategoryProgressPhase("error");
+      } finally {
+        categoryRunningRef.current = false;
+      }
+    },
+    [
+      applyCategoryProgressPage,
+      categoryProgressStats?.assessment_instances_total,
+      categoryProgressTotal,
+      refreshCategoryProgressStats,
+    ]
+  );
+
+  function handleStartCategoryProgressRefresh() {
+    const total = categoryProgressStats?.assessment_instances_total ?? 0;
     const confirmed = window.confirm(
-      "Recompute questionnaire category completion for every assessment instance in the database? " +
-        "This may take several minutes on large datasets."
+      `Recompute questionnaire category completion for ${total.toLocaleString()} assessment instance(s), ` +
+        "one at a time? You can pause and resume."
     );
     if (!confirmed) return;
 
-    setCategoryProgressRefreshing(true);
-    setCategoryProgressError(null);
-    setCategoryProgressResult(null);
-    try {
-      const res = await platformSettingsApi.refreshQuestionnaireCategoryProgressAll();
-      setCategoryProgressResult(res.data.data);
-    } catch (err) {
-      setCategoryProgressError(getApiError(err));
-    } finally {
-      setCategoryProgressRefreshing(false);
-    }
+    setCategoryProgressOffset(0);
+    setCategoryProgressProcessed(0);
+    setCategoryProgressTotals({
+      categories_synced: 0,
+      marked_complete: 0,
+      marked_incomplete: 0,
+      unchanged: 0,
+    });
+    setLastProcessedInstanceId(null);
+    setCategoryProgressTotal(total);
+    void runCategoryProgressLoop(0);
   }
+
+  function handlePauseCategoryProgress() {
+    categoryPauseRef.current = true;
+  }
+
+  function handleResumeCategoryProgress() {
+    if (categoryProgressPhase === "error" && categoryProgressFailedOffset != null) {
+      void runCategoryProgressLoop(categoryProgressFailedOffset);
+      return;
+    }
+    void runCategoryProgressLoop(categoryProgressOffset);
+  }
+
+  function handleRetryCategoryProgressPage() {
+    if (categoryProgressFailedOffset == null || categoryRunningRef.current) return;
+    setCategoryProgressPhase("running");
+    setCategoryProgressError(null);
+    void runCategoryProgressLoop(categoryProgressFailedOffset);
+  }
+
+  const categoryProgressPct =
+    categoryProgressTotal > 0
+      ? Math.min(100, Math.round((categoryProgressProcessed / categoryProgressTotal) * 100))
+      : 0;
+  const isCategoryProgressRunning = categoryProgressPhase === "running";
+  const canStartCategoryProgress =
+    categoryProgressPhase !== "running" &&
+    !categoryProgressStatsLoading &&
+    !categoryProgressStatsError &&
+    (categoryProgressStats?.assessment_instances_total ?? 0) >= 0;
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -604,61 +740,159 @@ export function Settings() {
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-900">Questionnaire category completion (backfill)</h2>
-          <p className="text-xs text-zinc-500 mt-1 max-w-2xl leading-relaxed">
-            Recomputes per-category progress for every assessment instance so{" "}
-            <code className="bg-zinc-100 px-1 rounded">GET /assessments/&#123;assessment_instance_id&#125;/status</code>{" "}
-            is accurate for existing participants. For each package category, a category is marked complete when all
-            visible required questions have answers (saved drafts
-            or profile prefill). Optional and hidden questions are ignored. New saves already update this automatically;
-            use this once to fix historical data.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Questionnaire category completion (backfill)</h2>
+            <p className="text-xs text-zinc-500 mt-1 max-w-2xl leading-relaxed">
+              Recomputes per-category progress for every assessment instance so{" "}
+              <code className="bg-zinc-100 px-1 rounded">GET /assessments/&#123;assessment_instance_id&#125;/status</code>{" "}
+              is accurate for existing participants. For each package category, a category is marked complete when all
+              visible required questions have answers (saved drafts or profile prefill). Optional and hidden questions
+              are ignored. New saves already update this automatically; use this once to fix historical data. Processes{" "}
+              <span className="text-zinc-700">one assessment instance per request</span> so large databases do not time
+              out.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshCategoryProgressStats()}
+            disabled={categoryProgressStatsLoading || isCategoryProgressRunning}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {categoryProgressStatsLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            Refresh count
+          </button>
         </div>
 
-        {categoryProgressError ? (
+        {categoryProgressStatsError ? (
           <p className="text-sm text-red-600" role="alert">
-            {categoryProgressError}
+            {categoryProgressStatsError}
           </p>
         ) : null}
 
-        {categoryProgressResult ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              { label: "Assessment instances", value: categoryProgressResult.assessment_instances_processed },
-              { label: "Categories checked", value: categoryProgressResult.categories_synced },
-              { label: "Marked complete", value: categoryProgressResult.marked_complete },
-              { label: "Marked incomplete", value: categoryProgressResult.marked_incomplete },
-              { label: "Unchanged", value: categoryProgressResult.unchanged },
-              { label: "Total instances", value: categoryProgressResult.assessment_instances_total },
-            ].map((tile) => (
-              <div key={tile.label} className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">{tile.label}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Assessment instances</p>
+            <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
+              {categoryProgressStatsLoading
+                ? "…"
+                : formatCount(categoryProgressStats?.assessment_instances_total)}
+            </p>
+          </div>
+          {categoryProgressPhase !== "idle" ? (
+            <>
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Marked complete</p>
                 <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
-                  {formatCount(tile.value)}
+                  {formatCount(categoryProgressTotals.marked_complete)}
                 </p>
               </div>
-            ))}
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Marked incomplete</p>
+                <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
+                  {formatCount(categoryProgressTotals.marked_incomplete)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">Unchanged</p>
+                <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
+                  {formatCount(categoryProgressTotals.unchanged)}
+                </p>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        {(isCategoryProgressRunning ||
+          categoryProgressPhase === "paused" ||
+          categoryProgressPhase === "completed" ||
+          categoryProgressPhase === "error") &&
+        categoryProgressProcessed > 0 ? (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-zinc-600">
+              <span>
+                {formatCount(categoryProgressProcessed)} / {formatCount(categoryProgressTotal)} instances
+              </span>
+              <span>
+                {categoryProgressPct}%{" "}
+                {lastProcessedInstanceId != null ? `(last #${lastProcessedInstanceId})` : ""}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+              <div
+                className="h-full bg-zinc-900 transition-all duration-300 ease-out"
+                style={{ width: `${categoryProgressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-zinc-600">
+              Categories checked: {formatCount(categoryProgressTotals.categories_synced)}
+            </p>
           </div>
         ) : null}
 
-        {categoryProgressResult ? (
+        {categoryProgressPhase === "completed" ? (
           <p className="text-sm text-emerald-700">Backfill finished.</p>
         ) : null}
+        {categoryProgressPhase === "paused" ? (
+          <p className="text-sm text-amber-700">
+            Paused. Resume to continue from instance {formatCount(categoryProgressOffset + 1)} of{" "}
+            {formatCount(categoryProgressTotal)}.
+          </p>
+        ) : null}
+        {categoryProgressError ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-red-600" role="alert">
+              {categoryProgressError}
+            </p>
+            {categoryProgressFailedOffset != null ? (
+              <button
+                type="button"
+                onClick={handleRetryCategoryProgressPage}
+                className="text-xs font-medium text-zinc-700 underline hover:text-zinc-900"
+              >
+                Retry at offset {categoryProgressFailedOffset}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={() => void handleRefreshCategoryProgress()}
-          disabled={categoryProgressRefreshing || isSyncing}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
-        >
-          {categoryProgressRefreshing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <ClipboardCheck className="w-4 h-4" />
-          )}
-          Refresh category completion for all assessments
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleStartCategoryProgressRefresh}
+            disabled={!canStartCategoryProgress || isSyncing || isCategoryProgressRunning}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isCategoryProgressRunning ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ClipboardCheck className="w-4 h-4" />
+            )}
+            Start backfill
+          </button>
+          <button
+            type="button"
+            onClick={handlePauseCategoryProgress}
+            disabled={!isCategoryProgressRunning}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Pause className="w-4 h-4" />
+            Pause
+          </button>
+          <button
+            type="button"
+            onClick={handleResumeCategoryProgress}
+            disabled={categoryProgressPhase !== "paused" && categoryProgressPhase !== "error"}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Play className="w-4 h-4" />
+            Resume
+          </button>
+        </div>
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
