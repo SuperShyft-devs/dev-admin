@@ -157,34 +157,6 @@ export interface MetsightsProfilesImportPageResult {
   skipped_items: { metsights_profile_id: string; reason: string }[];
 }
 
-export interface QuestionnaireCategoryProgressRefreshStats {
-  assessment_instances_total: number;
-}
-
-/** One assessment instance processed per request. */
-export interface QuestionnaireCategoryProgressRefreshPageResult {
-  offset: number;
-  next_offset: number;
-  assessment_instances_total: number;
-  assessment_instance_id: number | null;
-  processed: number;
-  categories_synced: number;
-  marked_complete: number;
-  marked_incomplete: number;
-  unchanged: number;
-  has_more: boolean;
-}
-
-/** Summary from POST /platform-settings/questionnaire-category-progress/refresh-all */
-export interface QuestionnaireCategoryProgressRefreshResult {
-  assessment_instances_total: number;
-  assessment_instances_processed: number;
-  categories_synced: number;
-  marked_complete: number;
-  marked_incomplete: number;
-  unchanged: number;
-}
-
 export const platformSettingsApi = {
   getB2cOnboarding: () =>
     api.get<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>("/platform-settings/b2c-onboarding"),
@@ -202,22 +174,6 @@ export const platformSettingsApi = {
       "/platform-settings/metsights-profiles/import-page",
       payload,
       { timeout: 120_000 }
-    ),
-  getQuestionnaireCategoryProgressRefreshStats: () =>
-    api.get<{ data: QuestionnaireCategoryProgressRefreshStats; meta: Record<string, unknown> }>(
-      "/platform-settings/questionnaire-category-progress/refresh-stats"
-    ),
-  refreshQuestionnaireCategoryProgressPage: (payload: { offset: number }) =>
-    api.post<{ data: QuestionnaireCategoryProgressRefreshPageResult; meta: Record<string, unknown> }>(
-      "/platform-settings/questionnaire-category-progress/refresh-page",
-      payload,
-      { timeout: 120_000 }
-    ),
-  refreshQuestionnaireCategoryProgressAll: () =>
-    api.post<{ data: QuestionnaireCategoryProgressRefreshResult; meta: Record<string, unknown> }>(
-      "/platform-settings/questionnaire-category-progress/refresh-all",
-      undefined,
-      { timeout: 600_000 }
     ),
 };
 
