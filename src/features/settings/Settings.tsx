@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardCheck, Loader2, Pause, Play, RefreshCw, Save, Users } from "lucide-react";
 import { DuplicatedUsersModal } from "./DuplicatedUsersModal";
 import {
   assessmentPackagesApi,
@@ -9,6 +9,7 @@ import {
   type DiagnosticPackageListItem,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
+  type QuestionnaireCategoryProgressRefreshResult,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -93,6 +94,11 @@ export function Settings() {
   const [activityLog, setActivityLog] = useState<PageLogEntry[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [duplicatesModalOpen, setDuplicatesModalOpen] = useState(false);
+
+  const [categoryProgressRefreshing, setCategoryProgressRefreshing] = useState(false);
+  const [categoryProgressError, setCategoryProgressError] = useState<string | null>(null);
+  const [categoryProgressResult, setCategoryProgressResult] =
+    useState<QuestionnaireCategoryProgressRefreshResult | null>(null);
 
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -311,12 +317,32 @@ export function Settings() {
     syncPhase !== "running" && !msStatsLoading && (msStats?.metsights_total ?? 0) > 0 && !msStatsError;
   const isSyncing = syncPhase === "running";
 
+  async function handleRefreshCategoryProgress() {
+    const confirmed = window.confirm(
+      "Recompute questionnaire category completion for every assessment instance in the database? " +
+        "This may take several minutes on large datasets."
+    );
+    if (!confirmed) return;
+
+    setCategoryProgressRefreshing(true);
+    setCategoryProgressError(null);
+    setCategoryProgressResult(null);
+    try {
+      const res = await platformSettingsApi.refreshQuestionnaireCategoryProgressAll();
+      setCategoryProgressResult(res.data.data);
+    } catch (err) {
+      setCategoryProgressError(getApiError(err));
+    } finally {
+      setCategoryProgressRefreshing(false);
+    }
+  }
+
   return (
     <div className="max-w-3xl space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-zinc-900 tracking-tight">Settings</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Platform defaults and Metsights profile synchronization.
+          Platform defaults, Metsights profile sync, and questionnaire maintenance.
         </p>
       </div>
 
@@ -575,6 +601,64 @@ export function Settings() {
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      <section className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900">Questionnaire category completion (backfill)</h2>
+          <p className="text-xs text-zinc-500 mt-1 max-w-2xl leading-relaxed">
+            Recomputes per-category progress for every assessment instance so{" "}
+            <code className="bg-zinc-100 px-1 rounded">GET /assessments/&#123;assessment_instance_id&#125;/status</code>{" "}
+            is accurate for existing participants. For each package category, a category is marked complete when all
+            visible required questions have answers (saved drafts
+            or profile prefill). Optional and hidden questions are ignored. New saves already update this automatically;
+            use this once to fix historical data.
+          </p>
+        </div>
+
+        {categoryProgressError ? (
+          <p className="text-sm text-red-600" role="alert">
+            {categoryProgressError}
+          </p>
+        ) : null}
+
+        {categoryProgressResult ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: "Assessment instances", value: categoryProgressResult.assessment_instances_processed },
+              { label: "Categories checked", value: categoryProgressResult.categories_synced },
+              { label: "Marked complete", value: categoryProgressResult.marked_complete },
+              { label: "Marked incomplete", value: categoryProgressResult.marked_incomplete },
+              { label: "Unchanged", value: categoryProgressResult.unchanged },
+              { label: "Total instances", value: categoryProgressResult.assessment_instances_total },
+            ].map((tile) => (
+              <div key={tile.label} className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-500">{tile.label}</p>
+                <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
+                  {formatCount(tile.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {categoryProgressResult ? (
+          <p className="text-sm text-emerald-700">Backfill finished.</p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => void handleRefreshCategoryProgress()}
+          disabled={categoryProgressRefreshing || isSyncing}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+        >
+          {categoryProgressRefreshing ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <ClipboardCheck className="w-4 h-4" />
+          )}
+          Refresh category completion for all assessments
+        </button>
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
