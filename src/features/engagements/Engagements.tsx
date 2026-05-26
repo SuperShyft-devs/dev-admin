@@ -48,6 +48,8 @@ import {
   engagementChecklistsApi,
   checklistTemplatesApi,
   checklistTasksApi,
+  notificationsApi,
+  type NotificationServiceItem,
   type EngagementChecklist,
   type ChecklistTemplate,
   type ChecklistTask,
@@ -639,6 +641,8 @@ function EngagementChecklistModal({
   );
 }
 
+const DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY = "booking-alert-whatsapp";
+
 export function Engagements() {
   const location = useLocation();
   const [data, setData] = useState<EngagementListItem[]>([]);
@@ -659,6 +663,7 @@ export function Engagements() {
   const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
   const [assessmentPackages, setAssessmentPackages] = useState<AssessmentPackage[]>([]);
   const [diagnosticPackages, setDiagnosticPackages] = useState<DiagnosticPackageListItem[]>([]);
+  const [notificationServices, setNotificationServices] = useState<NotificationServiceItem[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"view" | "add" | "edit">("view");
@@ -679,6 +684,7 @@ export function Engagements() {
     end_date: "",
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
+    notification_service_key: DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -864,6 +870,23 @@ export function Engagements() {
         setCityOptions([]);
       });
   }, []);
+
+  useEffect(() => {
+    notificationsApi
+      .listServices()
+      .then((res) => {
+        const active = (res.data.data ?? []).filter((s) => s.is_active);
+        setNotificationServices(active);
+      })
+      .catch(() => setNotificationServices([]));
+  }, []);
+
+  const notificationServiceLabel = (serviceKey: string | null | undefined) => {
+    const key = (serviceKey ?? "").trim();
+    if (!key) return "—";
+    const match = notificationServices.find((s) => s.service_key === key);
+    return match ? `${match.display_name} (${key})` : key;
+  };
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -1110,6 +1133,8 @@ export function Engagements() {
       end_date: preset?.end_date ?? today,
       create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
+      notification_service_key:
+        preset?.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1148,6 +1173,8 @@ export function Engagements() {
         end_date: (e.end_date ?? "").toString().slice(0, 10),
         create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
+        notification_service_key:
+          e.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1186,6 +1213,9 @@ export function Engagements() {
               : null,
           create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
+          notification_service_key:
+            formData.notification_service_key?.trim() ||
+            DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1214,6 +1244,9 @@ export function Engagements() {
           end_date: formData.end_date,
           create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
+          notification_service_key:
+            formData.notification_service_key?.trim() ||
+            DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1609,6 +1642,10 @@ export function Engagements() {
             <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
             <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
             <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>
+            <div>
+              <span className="text-zinc-500">Onboarding notification service:</span>{" "}
+              {notificationServiceLabel(selected.notification_service_key)}
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-zinc-500">Participants:</span>
               <span>{selected.participant_count ?? 0}</span>
@@ -2060,6 +2097,33 @@ export function Engagements() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   required
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Onboarding notification service
+                </label>
+                <select
+                  value={
+                    formData.notification_service_key ??
+                    DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY
+                  }
+                  onChange={(e) =>
+                    setFormData({ ...formData, notification_service_key: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  {notificationServices.length === 0 ? (
+                    <option value={DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY}>
+                      booking-alert-whatsapp
+                    </option>
+                  ) : (
+                    notificationServices.map((s) => (
+                      <option key={s.service_key} value={s.service_key}>
+                        {s.display_name} ({s.service_key})
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
             </div>
             <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">

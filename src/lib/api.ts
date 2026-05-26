@@ -693,6 +693,7 @@ export interface Engagement {
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
+  notification_service_key?: string | null;
 }
 
 export interface EngagementListItem {
@@ -713,6 +714,7 @@ export interface EngagementListItem {
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
+  notification_service_key?: string | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -732,6 +734,7 @@ export interface EngagementCreate {
   end_date: string;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
+  notification_service_key?: string | null;
 }
 
 export const engagementsApi = {
