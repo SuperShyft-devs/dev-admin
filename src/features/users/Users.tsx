@@ -333,7 +333,7 @@ export function Users() {
     try {
       await notificationsApi.dispatch({
         service_key: sendMsgKey,
-        user_id: sendMsgUser.user_id,
+        user_ids: [sendMsgUser.user_id],
         engagement_id: selectedSendMsgInstance?.engagement_id ?? null,
         record_id: recordId || null,
       });

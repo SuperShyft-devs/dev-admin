@@ -2042,7 +2042,7 @@ export interface NotificationItem {
   service_key: string;
   status: "pending" | "sent" | "failed";
   channel: "email" | "whatsapp";
-  user_id: number | null;
+  user: { user_ids: number[] } | null;
   engagement_id: number | null;
   assessment_instance_id: number | null;
   message: string | null;
@@ -2078,7 +2078,7 @@ export const notificationsApi = {
     ),
   dispatch: (body: {
     service_key: string;
-    user_id: number;
+    user_ids: number[];
     engagement_id: number | null;
     record_id?: string | null;
     participant_details?: Record<string, string> | null;

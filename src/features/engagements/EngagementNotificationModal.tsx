@@ -47,7 +47,11 @@ async function fetchNotifiedUserIds(
     const items = res.data.data ?? [];
     total = Number(res.data.meta?.total ?? items.length);
     for (const n of items) {
-      if (n.user_id != null) ids.add(n.user_id);
+      if (n.user?.user_ids) {
+        for (const uid of n.user.user_ids) {
+          ids.add(uid);
+        }
+      }
     }
     page += 1;
     if (items.length === 0) break;
@@ -199,44 +203,36 @@ export function EngagementNotificationModal({
     setSendProgress({ done: 0, total: pendingUserIds.length });
 
     const participantsByUserId = new Map(recipients.map((p) => [p.user_id, p]));
-    let succeeded = 0;
-    let failed = 0;
+    const firstParticipant = participantsByUserId.get(pendingUserIds[0]);
 
-    for (let i = 0; i < pendingUserIds.length; i++) {
-      const userId = pendingUserIds[i];
-      const participant = participantsByUserId.get(userId);
-      try {
-        await notificationsApi.dispatch({
-          service_key: serviceKey,
-          user_id: userId,
-          engagement_id: engagement.engagement_id,
-          record_id: null,
-          participant_details:
-            svc.require_participant_detail && participant
-              ? participantDetailsFromRow(participant)
-              : undefined,
-        });
-        succeeded += 1;
-        setNotifiedIds((prev) => new Set(prev).add(userId));
-      } catch {
-        failed += 1;
-      }
-      setSendProgress({ done: i + 1, total: pendingUserIds.length });
-    }
+    try {
+      await notificationsApi.dispatch({
+        service_key: serviceKey,
+        user_ids: pendingUserIds,
+        engagement_id: engagement.engagement_id,
+        record_id: null,
+        participant_details:
+          svc.require_participant_detail && firstParticipant
+            ? participantDetailsFromRow(firstParticipant)
+            : undefined,
+      });
+      setNotifiedIds((prev) => {
+        const next = new Set(prev);
+        for (const uid of pendingUserIds) next.add(uid);
+        return next;
+      });
+      setSendProgress({ done: pendingUserIds.length, total: pendingUserIds.length });
 
-    setSubmitting(false);
-
-    const newTotalNotified = alreadyNotifiedCount + succeeded;
-    if (failed === 0) {
+      const newTotalNotified = alreadyNotifiedCount + pendingUserIds.length;
       setSuccess(
         pendingUserIds.length === totalRecipients
           ? `Notifications sent to ${newTotalNotified}/${totalRecipients} users.`
-          : `Sent to ${succeeded} new user${succeeded === 1 ? "" : "s"}. ${newTotalNotified}/${totalRecipients} users notified for this service.`
+          : `Sent to ${pendingUserIds.length} new user${pendingUserIds.length === 1 ? "" : "s"}. ${newTotalNotified}/${totalRecipients} users notified for this service.`
       );
-    } else {
-      setError(
-        `Sent to ${succeeded} user${succeeded === 1 ? "" : "s"}, ${failed} failed. ${newTotalNotified}/${totalRecipients} users notified for this service.`
-      );
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
     }
   };
 

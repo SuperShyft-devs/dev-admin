@@ -143,11 +143,11 @@ function NotificationsTab() {
       render: (r) => <StatusBadge status={r.status} />,
     },
     {
-      key: "user_id",
-      label: "User ID",
+      key: "user",
+      label: "User IDs",
       sortable: false,
       hideOnMobile: true,
-      render: (r) => (r.user_id != null ? String(r.user_id) : "—"),
+      render: (r) => (r.user?.user_ids?.length ? r.user.user_ids.join(", ") : "—"),
     },
     {
       key: "engagement_id",
