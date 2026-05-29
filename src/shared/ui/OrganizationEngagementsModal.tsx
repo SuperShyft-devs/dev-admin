@@ -23,9 +23,16 @@ function formatDate(value?: string | null) {
 
 function statusClasses(status?: string | null) {
   const s = (status ?? "").toLowerCase();
-  if (s === "active") return "bg-emerald-50 text-emerald-700";
-  if (s === "inactive") return "bg-zinc-100 text-zinc-500";
-  return "bg-amber-50 text-amber-700";
+  if (s === "running") return "bg-emerald-50 text-emerald-700";
+  if (s === "completed") return "bg-zinc-100 text-zinc-500";
+  return "bg-zinc-100 text-zinc-500";
+}
+
+function formatEngagementStatusLabel(status?: string | null): string {
+  const normalized = (status ?? "").toLowerCase();
+  if (normalized === "running") return "Running";
+  if (normalized === "completed") return "Completed";
+  return status ?? "—";
 }
 
 export function OrganizationEngagementsModal({
@@ -170,7 +177,7 @@ export function OrganizationEngagementsModal({
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">{formatDate(e.end_date)}</td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 whitespace-nowrap">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusClasses(e.status)}`}>
-                        {e.status || "—"}
+                        {formatEngagementStatusLabel(e.status)}
                       </span>
                     </td>
                   </tr>

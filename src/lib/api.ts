@@ -673,6 +673,7 @@ export interface ChecklistReadiness {
 
 // Engagements
 export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
+export type EngagementStatus = "running" | "completed";
 
 export interface Engagement {
   engagement_id: number;
@@ -689,7 +690,7 @@ export interface Engagement {
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
-  status?: string | null;
+  status?: EngagementStatus | string | null;
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -710,7 +711,7 @@ export interface EngagementListItem {
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
-  status?: string | null;
+  status?: EngagementStatus | string | null;
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -762,8 +763,8 @@ export const engagementsApi = {
     api.post<{ data: { engagement_id: number } }>("/engagements", payload),
   update: (id: number, payload: Partial<EngagementCreate> & Pick<EngagementCreate, "engagement_type" | "start_date" | "end_date" | "slot_duration">) =>
     api.put<{ data: { engagement_id: number } }>(`/engagements/${id}`, payload),
-  updateStatus: (id: number, status: string) =>
-    api.patch<{ data: { engagement_id: number; status: string } }>(
+  updateStatus: (id: number, status: EngagementStatus) =>
+    api.patch<{ data: { engagement_id: number; status: EngagementStatus } }>(
       `/engagements/${id}/status`,
       { status }
     ),
