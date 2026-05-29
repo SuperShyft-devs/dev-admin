@@ -2037,13 +2037,23 @@ export const checklistTasksApi = {
 };
 
 // Notifications
+export interface NotificationRecipient {
+  user_id: number;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 export interface NotificationItem {
   notification_id: number;
   service_key: string;
+  service_display_name?: string | null;
   status: "pending" | "sent" | "failed";
   channel: "email" | "whatsapp";
   user: { user_ids: number[] } | null;
+  recipients?: NotificationRecipient[];
   engagement_id: number | null;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
   assessment_instance_id: number | null;
   message: string | null;
   triggered_by_user_id: number | null;
@@ -2069,8 +2079,11 @@ export const notificationsApi = {
     limit?: number;
     status?: string;
     service_key?: string;
+    channel?: string;
     user_id?: number;
     engagement_id?: number;
+    dispatched_from?: string;
+    dispatched_to?: string;
   }) =>
     api.get<{ data: NotificationItem[]; meta: { page: number; limit: number; total: number } }>(
       "/notifications",
