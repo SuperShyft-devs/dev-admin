@@ -673,6 +673,7 @@ export interface ChecklistReadiness {
 
 // Engagements
 export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
+export type EngagementStatus = "running" | "completed";
 
 export interface Engagement {
   engagement_id: number;
@@ -689,7 +690,7 @@ export interface Engagement {
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
-  status?: string | null;
+  status?: EngagementStatus | string | null;
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -710,7 +711,7 @@ export interface EngagementListItem {
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
-  status?: string | null;
+  status?: EngagementStatus | string | null;
   participant_count?: number | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -762,8 +763,8 @@ export const engagementsApi = {
     api.post<{ data: { engagement_id: number } }>("/engagements", payload),
   update: (id: number, payload: Partial<EngagementCreate> & Pick<EngagementCreate, "engagement_type" | "start_date" | "end_date" | "slot_duration">) =>
     api.put<{ data: { engagement_id: number } }>(`/engagements/${id}`, payload),
-  updateStatus: (id: number, status: string) =>
-    api.patch<{ data: { engagement_id: number; status: string } }>(
+  updateStatus: (id: number, status: EngagementStatus) =>
+    api.patch<{ data: { engagement_id: number; status: EngagementStatus } }>(
       `/engagements/${id}/status`,
       { status }
     ),
@@ -2037,13 +2038,23 @@ export const checklistTasksApi = {
 };
 
 // Notifications
+export interface NotificationRecipient {
+  user_id: number;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 export interface NotificationItem {
   notification_id: number;
   service_key: string;
+  service_display_name?: string | null;
   status: "pending" | "sent" | "failed";
   channel: "email" | "whatsapp";
   user: { user_ids: number[] } | null;
+  recipients?: NotificationRecipient[];
   engagement_id: number | null;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
   assessment_instance_id: number | null;
   message: string | null;
   triggered_by_user_id: number | null;
@@ -2069,8 +2080,11 @@ export const notificationsApi = {
     limit?: number;
     status?: string;
     service_key?: string;
+    channel?: string;
     user_id?: number;
     engagement_id?: number;
+    dispatched_from?: string;
+    dispatched_to?: string;
   }) =>
     api.get<{ data: NotificationItem[]; meta: { page: number; limit: number; total: number } }>(
       "/notifications",

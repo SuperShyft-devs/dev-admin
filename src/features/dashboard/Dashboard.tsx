@@ -27,13 +27,14 @@ interface StatCardProps {
   label: string;
   total: number | null;
   active: number | null;
+  activeLabel?: string;
   icon: React.ElementType;
   color: string;
   to: string;
   loading: boolean;
 }
 
-function StatCard({ label, total, active, icon: Icon, color, to, loading }: StatCardProps) {
+function StatCard({ label, total, active, activeLabel = "active", icon: Icon, color, to, loading }: StatCardProps) {
   const navigate = useNavigate();
   return (
     <button
@@ -60,7 +61,7 @@ function StatCard({ label, total, active, icon: Icon, color, to, loading }: Stat
           <p className="text-xs sm:text-sm text-zinc-500 font-medium">{label}</p>
           {active !== null && total !== null && (
             <p className="mt-1.5 text-xs text-emerald-600 font-medium">
-              {active} active
+              {active} {activeLabel}
             </p>
           )}
         </>
@@ -100,7 +101,7 @@ export function Dashboard() {
           organizationsApi.list({ limit: 1 }),
           organizationsApi.list({ limit: 1, status: "active" }),
           engagementsApi.list({ limit: 5 }),
-          engagementsApi.list({ limit: 1, status: "active" }),
+          engagementsApi.list({ limit: 1, status: "running" }),
           employeesApi.list({ limit: 1 }),
           employeesApi.list({ limit: 1, status: "active" }),
           usersApi.list({ limit: 1 }),
@@ -155,6 +156,7 @@ export function Dashboard() {
       label: "Engagements",
       total: stats?.totalEngagements ?? null,
       active: stats?.activeEngagements ?? null,
+      activeLabel: "running",
       icon: CalendarCheck,
       color: "bg-violet-50 text-violet-600",
       to: "/engagements",
@@ -346,7 +348,7 @@ export function Dashboard() {
           ) : (
             <div className="space-y-0.5">
               {recentEngagements.map((eng) => {
-                const isActive = (eng.status ?? "").toLowerCase() === "active";
+                const isRunning = (eng.status ?? "").toLowerCase() === "running";
                 return (
                   <button
                     key={eng.engagement_id}
@@ -383,7 +385,7 @@ export function Dashboard() {
                       )}
                       <span
                         className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-                          isActive ? "bg-emerald-400" : "bg-zinc-300"
+                          isRunning ? "bg-emerald-400" : "bg-zinc-300"
                         }`}
                       />
                     </div>

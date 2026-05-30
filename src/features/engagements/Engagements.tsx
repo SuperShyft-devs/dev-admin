@@ -19,6 +19,8 @@ import {
   UserPlus,
   Link2,
   Bell,
+  PlayCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { EngagementNotificationModal } from "./EngagementNotificationModal";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -62,7 +64,14 @@ import { useLocation } from "react-router-dom";
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
 
-const STATUS_OPTIONS = ["active", "inactive", "archived"];
+const STATUS_OPTIONS = ["running", "completed"] as const;
+
+function formatEngagementStatusLabel(status?: string | null): string {
+  const normalized = (status ?? "").toLowerCase();
+  if (normalized === "running") return "Running";
+  if (normalized === "completed") return "Completed";
+  return status ?? "—";
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -1519,29 +1528,27 @@ export function Engagements() {
       label: "Status",
       sortable: true,
       render: (row) => {
-        const isActive = (row.status ?? "").toLowerCase() === "active";
+        const isRunning = (row.status ?? "").toLowerCase() === "running";
         return (
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              const nextStatus = isActive ? "inactive" : "active";
+              const nextStatus = isRunning ? "completed" : "running";
               engagementsApi
                 .updateStatus(row.engagement_id, nextStatus)
                 .then(() => fetchList())
                 .catch((err) => setError(getApiError(err)));
             }}
-            className={`inline-flex items-center w-12 h-6 rounded-full transition ${
-              isActive ? "bg-emerald-500" : "bg-zinc-300"
-            }`}
-            aria-pressed={isActive}
-            aria-label={`Set ${row.engagement_name ?? "engagement"} ${isActive ? "inactive" : "active"}`}
+            className="inline-flex items-center justify-center p-1 rounded-md hover:bg-zinc-100 transition"
+            aria-label={`Set ${row.engagement_name ?? "engagement"} ${isRunning ? "completed" : "running"}`}
+            title={isRunning ? "Running — click to mark completed" : "Completed — click to mark running"}
           >
-            <span
-              className={`h-5 w-5 bg-white rounded-full shadow transform transition ${
-                isActive ? "translate-x-6" : "translate-x-0.5"
-              }`}
-            />
+            {isRunning ? (
+              <PlayCircle className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-zinc-500" aria-hidden="true" />
+            )}
           </button>
         );
       },
@@ -1617,7 +1624,7 @@ export function Engagements() {
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {formatEngagementStatusLabel(s)}
               </option>
             ))}
           </select>
@@ -1677,7 +1684,7 @@ export function Engagements() {
             <div><span className="text-zinc-500">Pincode:</span> {selected.pincode ?? "—"}</div>
             <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
             <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
-            <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
+            <div><span className="text-zinc-500">Status:</span> {formatEngagementStatusLabel(selected.status)}</div>
             <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
             <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>
             <div>

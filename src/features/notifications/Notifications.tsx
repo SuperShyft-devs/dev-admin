@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search, Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
+import { EngagementSearchPicker } from "../../shared/ui/EngagementSearchPicker";
 import {
   notificationsApi,
   type NotificationItem,
+  type NotificationRecipient,
   type NotificationServiceItem,
   getApiError,
 } from "../../lib/api";
@@ -15,6 +18,20 @@ const TAB_KEYS: TabKey[] = ["notifications", "services"];
 
 const STATUS_OPTIONS = ["pending", "sent", "failed"];
 const CHANNEL_OPTIONS = ["email", "whatsapp"];
+const FILTER_DEBOUNCE_MS = 300;
+
+type TimePreset = "" | "1h" | "24h" | "7d" | "30d" | "custom";
+
+const DEFAULT_TIME_PRESET: TimePreset = "1h";
+
+const TIME_PRESETS: { key: TimePreset; label: string }[] = [
+  { key: "", label: "All time" },
+  { key: "1h", label: "Last 1h" },
+  { key: "24h", label: "24h" },
+  { key: "7d", label: "7d" },
+  { key: "30d", label: "30d" },
+  { key: "custom", label: "Custom" },
+];
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -66,6 +83,67 @@ function formatDateTime(val: string | null | undefined): string {
   }
 }
 
+function localDatetimeToIso(val: string): string | undefined {
+  if (!val.trim()) return undefined;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+function getDispatchedRange(
+  preset: TimePreset,
+  customFrom: string,
+  customTo: string
+): { dispatched_from?: string; dispatched_to?: string } {
+  if (preset === "custom") {
+    return {
+      dispatched_from: localDatetimeToIso(customFrom),
+      dispatched_to: localDatetimeToIso(customTo),
+    };
+  }
+  if (!preset) return {};
+  const now = new Date();
+  const to = now.toISOString();
+  const hours: Record<string, number> = { "1h": 1, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
+  const h = hours[preset];
+  if (!h) return {};
+  const from = new Date(now.getTime() - h * 60 * 60 * 1000).toISOString();
+  return { dispatched_from: from, dispatched_to: to };
+}
+
+function recipientDisplayName(r: NotificationRecipient): string {
+  const first = (r.first_name ?? "").trim();
+  const last = (r.last_name ?? "").trim();
+  const name = [first, last].filter(Boolean).join(" ").trim();
+  return name || `User #${r.user_id}`;
+}
+
+function formatRecipientsCell(row: NotificationItem): { text: string; title: string } {
+  const recipients = row.recipients ?? [];
+  if (recipients.length > 0) {
+    const names = recipients.map(recipientDisplayName);
+    return { text: names.join(", "), title: names.join(", ") };
+  }
+  const ids = row.user?.user_ids ?? [];
+  if (!ids.length) return { text: "—", title: "" };
+  const text = ids.map((id) => `User #${id}`).join(", ");
+  return { text, title: text };
+}
+
+function formatEngagementCell(row: NotificationItem): string {
+  if (row.engagement_id == null) return "—";
+  const name = (row.engagement_name ?? row.engagement_code ?? "").trim();
+  return name || `Engagement #${row.engagement_id}`;
+}
+
+function filterChipClass(active: boolean): string {
+  return `px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+    active
+      ? "bg-zinc-900 text-white border-zinc-900"
+      : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400"
+  }`;
+}
+
 // ── Notifications Tab ──────────────────────────────────────────────────
 
 function NotificationsTab() {
@@ -73,12 +151,25 @@ function NotificationsTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [timePreset, setTimePreset] = useState<TimePreset>(DEFAULT_TIME_PRESET);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [serviceKeyFilter, setServiceKeyFilter] = useState("");
-  const [userIdFilter, setUserIdFilter] = useState("");
-  const [engagementIdFilter, setEngagementIdFilter] = useState("");
+  const [channelFilter, setChannelFilter] = useState("");
+  const [userIdFilter, setUserIdFilter] = useState(0);
+  const [engagementIdFilter, setEngagementIdFilter] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [debouncedStatusFilters, setDebouncedStatusFilters] = useState<string[]>([]);
+  const [debouncedTimePreset, setDebouncedTimePreset] = useState<TimePreset>(DEFAULT_TIME_PRESET);
+  const [debouncedCustomFrom, setDebouncedCustomFrom] = useState("");
+  const [debouncedCustomTo, setDebouncedCustomTo] = useState("");
+  const [debouncedServiceKey, setDebouncedServiceKey] = useState("");
+  const [debouncedChannel, setDebouncedChannel] = useState("");
+  const [debouncedUserId, setDebouncedUserId] = useState(0);
+  const [debouncedEngagementId, setDebouncedEngagementId] = useState(0);
 
   const [services, setServices] = useState<NotificationServiceItem[]>([]);
 
@@ -86,18 +177,61 @@ function NotificationsTab() {
     notificationsApi.listServices().then((r) => setServices(r.data.data)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedStatusFilters(statusFilters);
+      setDebouncedTimePreset(timePreset);
+      setDebouncedCustomFrom(customFrom);
+      setDebouncedCustomTo(customTo);
+      setDebouncedServiceKey(serviceKeyFilter);
+      setDebouncedChannel(channelFilter);
+      setDebouncedUserId(userIdFilter);
+      setDebouncedEngagementId(engagementIdFilter);
+    }, FILTER_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    statusFilters,
+    timePreset,
+    customFrom,
+    customTo,
+    serviceKeyFilter,
+    channelFilter,
+    userIdFilter,
+    engagementIdFilter,
+  ]);
+
+  const listQueryParams = useMemo(() => {
+    const range = getDispatchedRange(debouncedTimePreset, debouncedCustomFrom, debouncedCustomTo);
+    return {
+      page,
+      limit,
+      status: debouncedStatusFilters.length
+        ? debouncedStatusFilters.join(",")
+        : undefined,
+      service_key: debouncedServiceKey || undefined,
+      channel: debouncedChannel || undefined,
+      user_id: debouncedUserId > 0 ? debouncedUserId : undefined,
+      engagement_id: debouncedEngagementId > 0 ? debouncedEngagementId : undefined,
+      ...range,
+    };
+  }, [
+    page,
+    limit,
+    debouncedStatusFilters,
+    debouncedServiceKey,
+    debouncedChannel,
+    debouncedUserId,
+    debouncedEngagementId,
+    debouncedTimePreset,
+    debouncedCustomFrom,
+    debouncedCustomTo,
+  ]);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await notificationsApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-        service_key: serviceKeyFilter || undefined,
-        user_id: userIdFilter ? Number(userIdFilter) : undefined,
-        engagement_id: engagementIdFilter ? Number(engagementIdFilter) : undefined,
-      });
+      const res = await notificationsApi.list(listQueryParams);
       setData(res.data.data);
       setTotal(res.data.meta.total);
     } catch (err) {
@@ -105,11 +239,70 @@ function NotificationsTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, serviceKeyFilter, userIdFilter, engagementIdFilter]);
+  }, [listQueryParams]);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  const resetPage = () => setPage(1);
+
+  const toggleStatus = (status: string) => {
+    setStatusFilters((prev) => {
+      if (prev.includes(status)) return prev.filter((s) => s !== status);
+      return [...prev, status];
+    });
+    resetPage();
+  };
+
+  const clearAllFilters = () => {
+    setStatusFilters([]);
+    setTimePreset(DEFAULT_TIME_PRESET);
+    setCustomFrom("");
+    setCustomTo("");
+    setServiceKeyFilter("");
+    setChannelFilter("");
+    setUserIdFilter(0);
+    setEngagementIdFilter(0);
+    resetPage();
+  };
+
+  const hasActiveFilters =
+    statusFilters.length > 0 ||
+    (timePreset !== "" && timePreset !== DEFAULT_TIME_PRESET) ||
+    serviceKeyFilter !== "" ||
+    channelFilter !== "" ||
+    userIdFilter > 0 ||
+    engagementIdFilter > 0;
+
+  const activeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    if (statusFilters.length) labels.push(`Status: ${statusFilters.join(", ")}`);
+    if (timePreset === "custom") {
+      if (customFrom || customTo) labels.push("Custom date range");
+    } else if (timePreset && timePreset !== DEFAULT_TIME_PRESET) {
+      const presetLabel = TIME_PRESETS.find((p) => p.key === timePreset)?.label;
+      if (presetLabel) labels.push(presetLabel);
+    }
+    if (serviceKeyFilter) {
+      const svc = services.find((s) => s.service_key === serviceKeyFilter);
+      labels.push(`Service: ${svc?.display_name ?? serviceKeyFilter}`);
+    }
+    if (channelFilter) labels.push(`Channel: ${channelFilter}`);
+    if (userIdFilter > 0) labels.push(`User #${userIdFilter}`);
+    if (engagementIdFilter > 0) labels.push(`Engagement #${engagementIdFilter}`);
+    return labels;
+  }, [
+    statusFilters,
+    timePreset,
+    customFrom,
+    customTo,
+    serviceKeyFilter,
+    channelFilter,
+    userIdFilter,
+    engagementIdFilter,
+    services,
+  ]);
 
   const handleDelete = async (row: NotificationItem) => {
     if (!window.confirm(`Delete notification #${row.notification_id}? This cannot be undone.`)) return;
@@ -124,10 +317,17 @@ function NotificationsTab() {
   const columns: Column<NotificationItem>[] = [
     { key: "notification_id", label: "ID", sortable: false, className: "w-16" },
     {
-      key: "service_key",
+      key: "service_display_name",
       label: "Service",
       sortable: false,
-      render: (r) => <span className="font-medium">{r.service_key}</span>,
+      render: (r) => {
+        const display = r.service_display_name || r.service_key;
+        return (
+          <span className="font-medium" title={r.service_key}>
+            {display}
+          </span>
+        );
+      },
     },
     {
       key: "channel",
@@ -143,18 +343,38 @@ function NotificationsTab() {
       render: (r) => <StatusBadge status={r.status} />,
     },
     {
-      key: "user",
-      label: "User IDs",
+      key: "recipients",
+      label: "Recipients",
       sortable: false,
       hideOnMobile: true,
-      render: (r) => (r.user?.user_ids?.length ? r.user.user_ids.join(", ") : "—"),
+      render: (r) => {
+        const { text, title } = formatRecipientsCell(r);
+        return (
+          <span className="block max-w-[10rem] truncate" title={title || undefined}>
+            {text}
+          </span>
+        );
+      },
     },
     {
-      key: "engagement_id",
+      key: "engagement_name",
       label: "Engagement",
       sortable: false,
       hideOnTablet: true,
-      render: (r) => (r.engagement_id != null ? String(r.engagement_id) : "—"),
+      render: (r) => {
+        const label = formatEngagementCell(r);
+        const title =
+          r.engagement_id != null
+            ? [r.engagement_name, r.engagement_code, `#${r.engagement_id}`]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined;
+        return (
+          <span className="block max-w-[12rem] truncate" title={title}>
+            {label}
+          </span>
+        );
+      },
     },
     {
       key: "message",
@@ -189,47 +409,156 @@ function NotificationsTab() {
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
       )}
 
-      <div className="mb-4 flex flex-col sm:flex-row gap-3 flex-wrap">
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-        >
-          <option value="">All statuses</option>
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-zinc-500 w-full sm:w-auto">Status</span>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilters([]);
+              resetPage();
+            }}
+            className={filterChipClass(statusFilters.length === 0)}
+          >
+            All
+          </button>
           {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleStatus(s)}
+              className={filterChipClass(statusFilters.includes(s))}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
           ))}
-        </select>
-        <select
-          value={serviceKeyFilter}
-          onChange={(e) => { setServiceKeyFilter(e.target.value); setPage(1); }}
-          className="sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-        >
-          <option value="">All services</option>
-          {services.map((s) => (
-            <option key={s.service_key} value={s.service_key}>{s.display_name}</option>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-zinc-500 w-full sm:w-auto">Dispatched</span>
+          {TIME_PRESETS.map((p) => (
+            <button
+              key={p.key || "all"}
+              type="button"
+              onClick={() => {
+                setTimePreset(p.key);
+                resetPage();
+              }}
+              className={filterChipClass(timePreset === p.key)}
+            >
+              {p.label}
+            </button>
           ))}
-        </select>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="User ID"
+        </div>
+
+        {timePreset === "custom" && (
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+            <label className="block">
+              <span className="text-xs text-zinc-500">From</span>
+              <input
+                type="datetime-local"
+                value={customFrom}
+                onChange={(e) => {
+                  setCustomFrom(e.target.value);
+                  resetPage();
+                }}
+                className="mt-1 block px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-zinc-500">To</span>
+              <input
+                type="datetime-local"
+                value={customTo}
+                onChange={(e) => {
+                  setCustomTo(e.target.value);
+                  resetPage();
+                }}
+                className="mt-1 block px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </label>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3 items-end">
+          <label className="block">
+            <span className="text-xs text-zinc-500">Service</span>
+            <select
+              value={serviceKeyFilter}
+              onChange={(e) => {
+                setServiceKeyFilter(e.target.value);
+                resetPage();
+              }}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="">All services</option>
+              {services.map((s) => (
+                <option key={s.service_key} value={s.service_key}>
+                  {s.display_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-zinc-500">Channel</span>
+            <select
+              value={channelFilter}
+              onChange={(e) => {
+                setChannelFilter(e.target.value);
+                resetPage();
+              }}
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            >
+              <option value="">All channels</option>
+              {CHANNEL_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c.charAt(0).toUpperCase() + c.slice(1)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <UserSearchPicker
             value={userIdFilter}
-            onChange={(e) => { setUserIdFilter(e.target.value.replace(/\D/g, "")); setPage(1); }}
-            className="pl-9 pr-4 py-2 w-32 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            onChange={(id) => {
+              setUserIdFilter(id);
+              resetPage();
+            }}
+            label="User"
+            className="min-w-0"
           />
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Engagement ID"
+          <EngagementSearchPicker
             value={engagementIdFilter}
-            onChange={(e) => { setEngagementIdFilter(e.target.value.replace(/\D/g, "")); setPage(1); }}
-            className="pl-9 pr-4 py-2 w-40 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            onChange={(id) => {
+              setEngagementIdFilter(id);
+              resetPage();
+            }}
+            label="Engagement"
+            className="min-w-0"
           />
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <X className="w-4 h-4" />
+              Clear filters
+            </button>
+          )}
         </div>
+
+        {activeFilterLabels.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {activeFilterLabels.map((label) => (
+              <span
+                key={label}
+                className="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-zinc-100 text-zinc-700 border border-zinc-200"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
