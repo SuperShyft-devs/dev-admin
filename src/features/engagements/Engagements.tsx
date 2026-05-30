@@ -730,6 +730,9 @@ export function Engagements() {
   const [addChecklistPromptOpen, setAddChecklistPromptOpen] = useState(false);
   const [addChecklistPromptEngagementId, setAddChecklistPromptEngagementId] = useState<number | null>(null);
   const [addChecklistPromptBusy, setAddChecklistPromptBusy] = useState(false);
+  // Tracks the newly-created engagement whose Onboarding Assistants panel should
+  // auto-open once the post-creation checklist prompt flow finishes.
+  const [pendingAssistantsEngagementId, setPendingAssistantsEngagementId] = useState<number | null>(null);
 
   // ── Questionnaire Status state ──────────────────────────────
   const [qStatusOpen, setQStatusOpen] = useState(false);
@@ -795,6 +798,13 @@ export function Engagements() {
   const closeChecklistModal = () => {
     setChecklistModalOpen(false);
     setChecklistEngagement(null);
+    // If we arrived here from a fresh engagement creation, auto-open the
+    // Onboarding Assistants panel so the user can assign assistants next.
+    const pendingId = pendingAssistantsEngagementId;
+    if (pendingId != null) {
+      setPendingAssistantsEngagementId(null);
+      void openAssistantsModalById(pendingId);
+    }
   };
 
   const fetchOrgs = useCallback(async () => {
@@ -1220,6 +1230,9 @@ export function Engagements() {
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
         setAddChecklistPromptEngagementId(engagementId);
+        // Remember this ID so the Onboarding Assistants panel can auto-open
+        // once the checklist prompt flow (Yes → checklist modal, or No) finishes.
+        setPendingAssistantsEngagementId(engagementId);
         setAddChecklistPromptOpen(true);
       } else if (selected) {
         const payload = {
@@ -1325,6 +1338,31 @@ export function Engagements() {
     setEmployeeSearch("");
     setAssistantsModalOpen(true);
     void fetchAssistants(row.engagement_id);
+  };
+
+  // Fetches the engagement by ID then opens the Onboarding Assistants panel.
+  // Used after new-engagement creation to auto-navigate the user into assistants.
+  const openAssistantsModalById = async (engagementId: number) => {
+    try {
+      const res = await engagementsApi.get(engagementId);
+      const e = res.data.data;
+      openAssistantsModal({
+        engagement_id: e.engagement_id,
+        engagement_name: e.engagement_name ?? "",
+        engagement_code: e.engagement_code ?? "",
+        engagement_type: (e.engagement_type as EngagementKind | undefined) ?? "doctor",
+        organization_id: e.organization_id ?? 0,
+        city: e.city ?? "",
+        slot_duration: e.slot_duration ?? null,
+        start_date: e.start_date ?? null,
+        end_date: e.end_date ?? null,
+        status: e.status ?? null,
+        participant_count: e.participant_count ?? null,
+        readiness: null,
+      } as EngagementListItem);
+    } catch (err) {
+      setError(getApiError(err));
+    }
   };
 
   const closeAssistantsModal = () => {
@@ -2182,8 +2220,12 @@ export function Engagements() {
         <Modal
           open={addChecklistPromptOpen}
           onClose={() => {
+            // Backdrop/X close — treat same as "No": open assistants directly.
+            const id = pendingAssistantsEngagementId;
             setAddChecklistPromptOpen(false);
             setAddChecklistPromptEngagementId(null);
+            setPendingAssistantsEngagementId(null);
+            if (id != null) void openAssistantsModalById(id);
           }}
           title="Add a checklist?"
           maxWidthClassName="max-w-md"
@@ -2198,6 +2240,9 @@ export function Engagements() {
                 const id = addChecklistPromptEngagementId;
                 setAddChecklistPromptOpen(false);
                 setAddChecklistPromptEngagementId(null);
+                // pendingAssistantsEngagementId intentionally left set here.
+                // closeChecklistModal will consume it and open the assistants panel
+                // once the user closes the checklist modal.
                 if (id != null) void openChecklistForEngagementId(id);
               }}
               disabled={addChecklistPromptBusy || addChecklistPromptEngagementId == null}
@@ -2208,8 +2253,12 @@ export function Engagements() {
             <button
               type="button"
               onClick={() => {
+                // "No" — skip checklist and open the Onboarding Assistants panel directly.
+                const id = pendingAssistantsEngagementId;
                 setAddChecklistPromptOpen(false);
                 setAddChecklistPromptEngagementId(null);
+                setPendingAssistantsEngagementId(null);
+                if (id != null) void openAssistantsModalById(id);
               }}
               disabled={addChecklistPromptBusy}
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
