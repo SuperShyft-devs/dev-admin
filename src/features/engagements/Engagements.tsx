@@ -419,11 +419,10 @@ function EngagementChecklistModal({
                                     type="button"
                                     disabled={busy || assigning}
                                     onClick={() => void toggleTaskStatus(task.task_id, task.status)}
-                                    className={`mt-1 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                      doneTask
+                                    className={`mt-1 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${doneTask
                                         ? "bg-emerald-500 border-emerald-500 text-white"
                                         : "border-zinc-300 bg-white hover:border-zinc-400"
-                                    } disabled:opacity-60`}
+                                      } disabled:opacity-60`}
                                     aria-label={doneTask ? "Mark pending" : "Mark done"}
                                   >
                                     {busy ? (
@@ -711,7 +710,7 @@ export function Engagements() {
     | null
   >(null);
 
-  // ── Onboarding Assistants state ──────────────────────────────
+  // ── Onboarding Assistants states ──────────────────────────────
   const [assistantsEngagement, setAssistantsEngagement] = useState<EngagementListItem | null>(null);
   const [assistantsModalOpen, setAssistantsModalOpen] = useState(false);
   const [assistants, setAssistants] = useState<OnboardingAssistant[]>([]);
@@ -1444,14 +1443,14 @@ export function Engagements() {
   const availableEmployees = allEmployees.filter((e) => !assignedIds.has(e.employee_id));
   const filteredEmployees = employeeSearch.trim()
     ? availableEmployees.filter((e) => {
-        const q = employeeSearch.trim().toLowerCase();
-        const name = getEmployeeDisplayName(e, {}).toLowerCase();
-        return (
-          String(e.employee_id).includes(q) ||
-          (e.role ?? "").toLowerCase().includes(q) ||
-          name.includes(q)
-        );
-      })
+      const q = employeeSearch.trim().toLowerCase();
+      const name = getEmployeeDisplayName(e, {}).toLowerCase();
+      return (
+        String(e.employee_id).includes(q) ||
+        (e.role ?? "").toLowerCase().includes(q) ||
+        name.includes(q)
+      );
+    })
     : availableEmployees;
 
   const openParticipants = (row: EngagementListItem) => {
@@ -1566,7 +1565,7 @@ export function Engagements() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <button
-            onClick={() => openAdd()}
+          onClick={() => openAdd()}
           className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
@@ -1668,8 +1667,8 @@ export function Engagements() {
           modalMode === "add"
             ? "Add Engagement"
             : modalMode === "edit"
-            ? "Edit Engagement"
-            : "View Engagement"
+              ? "Edit Engagement"
+              : "View Engagement"
         }
       >
         {modalMode === "view" && selected ? (
@@ -1726,7 +1725,7 @@ export function Engagements() {
                         ),
                       });
                     })
-                    .catch(() => {});
+                    .catch(() => { });
                 }}
               />
             </div>
@@ -1836,19 +1835,18 @@ export function Engagements() {
                                   </td>
                                   <td className="px-3 py-2 text-center">
                                     <span
-                                      className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                                        row.questionnaire_state === "submitted"
+                                      className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${row.questionnaire_state === "submitted"
                                           ? "bg-emerald-100 text-emerald-700"
                                           : row.questionnaire_state === "drafted"
-                                          ? "bg-amber-100 text-amber-700"
-                                          : "bg-zinc-100 text-zinc-500"
-                                      }`}
+                                            ? "bg-amber-100 text-amber-700"
+                                            : "bg-zinc-100 text-zinc-500"
+                                        }`}
                                     >
                                       {row.questionnaire_state === "submitted"
                                         ? "Submitted"
                                         : row.questionnaire_state === "drafted"
-                                        ? "Drafted"
-                                        : "Not Started"}
+                                          ? "Drafted"
+                                          : "Not Started"}
                                     </span>
                                   </td>
                                   <td className="px-3 py-2 text-center text-zinc-600">
@@ -2360,11 +2358,10 @@ export function Engagements() {
                           <p className="text-xs text-zinc-500 truncate">
                             {a.role ? `Role: ${a.role}` : "No role"}{" "}
                             <span
-                              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ml-1 ${
-                                a.status === "active"
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ml-1 ${a.status === "active"
                                   ? "bg-green-100 text-green-700"
                                   : "bg-zinc-100 text-zinc-500"
-                              }`}
+                                }`}
                             >
                               {a.status ?? "—"}
                             </span>
@@ -2443,9 +2440,8 @@ export function Engagements() {
                     return (
                       <li
                         key={e.employee_id}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
-                          checked ? "bg-zinc-50" : "bg-white"
-                        }`}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${checked ? "bg-zinc-50" : "bg-white"
+                          }`}
                         onClick={() => toggleEmployeeSelection(e.employee_id)}
                       >
                         <input
@@ -2493,7 +2489,7 @@ export function Engagements() {
                   Cancel
                 </button>
               </div>
-              </div>
+            </div>
           )}
         </div>
       </Modal>
@@ -2588,11 +2584,10 @@ export function Engagements() {
                       <span className="text-sm font-medium text-zinc-900">{pkg.display_name}</span>
                       <span className="text-[11px] text-zinc-400 font-mono">{pkg.package_code}</span>
                       <span
-                        className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          pkg.status === "active"
+                        className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${pkg.status === "active"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-zinc-100 text-zinc-500"
-                        }`}
+                          }`}
                       >
                         {pkg.status}
                       </span>
