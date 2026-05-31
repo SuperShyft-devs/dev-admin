@@ -2071,6 +2071,7 @@ export interface NotificationServiceItem {
   is_active: boolean;
   require_record_id: boolean;
   require_participant_detail: boolean;
+  require_otp: boolean;
   created_at: string | null;
 }
 
@@ -2096,6 +2097,7 @@ export const notificationsApi = {
     engagement_id: number | null;
     record_id?: string | null;
     participant_details?: Record<string, string> | null;
+    otp?: string | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
 
   listServices: () =>
@@ -2108,6 +2110,7 @@ export const notificationsApi = {
     is_active?: boolean;
     require_record_id?: boolean;
     require_participant_detail?: boolean;
+    require_otp?: boolean;
   }) =>
     api.post<{ data: NotificationServiceItem; meta: Record<string, unknown> }>("/notifications/services", body),
   updateService: (
@@ -2119,6 +2122,7 @@ export const notificationsApi = {
       is_active?: boolean;
       require_record_id?: boolean;
       require_participant_detail?: boolean;
+      require_otp?: boolean;
     }
   ) =>
     api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(

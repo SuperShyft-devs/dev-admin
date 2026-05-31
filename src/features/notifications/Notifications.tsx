@@ -591,6 +591,7 @@ interface ServiceFormData {
   is_active: boolean;
   require_record_id: boolean;
   require_participant_detail: boolean;
+  require_otp: boolean;
 }
 
 const EMPTY_SERVICE_FORM: ServiceFormData = {
@@ -601,6 +602,7 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   is_active: true,
   require_record_id: true,
   require_participant_detail: false,
+  require_otp: false,
 };
 
 function ServicesTab() {
@@ -648,6 +650,7 @@ function ServicesTab() {
       is_active: row.is_active,
       require_record_id: row.require_record_id,
       require_participant_detail: row.require_participant_detail,
+      require_otp: row.require_otp,
     });
     setEditingId(row.notification_service_id);
     setModalMode("edit");
@@ -685,6 +688,7 @@ function ServicesTab() {
           is_active: formData.is_active,
           require_record_id: formData.require_record_id,
           require_participant_detail: formData.require_participant_detail,
+          require_otp: formData.require_otp,
         });
       }
       setModalOpen(false);
@@ -732,6 +736,13 @@ function ServicesTab() {
       sortable: false,
       hideOnTablet: true,
       render: (r) => (r.require_participant_detail ? "Yes" : "No"),
+    },
+    {
+      key: "require_otp",
+      label: "Requires OTP",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (r.require_otp ? "Yes" : "No"),
     },
     {
       key: "created_at",
@@ -869,6 +880,32 @@ function ServicesTab() {
               />
               <span className="text-sm text-zinc-700">Require Participant Detail</span>
             </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Require OTP</label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="require_otp"
+                  checked={formData.require_otp === true}
+                  onChange={() => setFormData({ ...formData, require_otp: true })}
+                  className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                <span className="text-sm text-zinc-700">Yes</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="require_otp"
+                  checked={formData.require_otp === false}
+                  onChange={() => setFormData({ ...formData, require_otp: false })}
+                  className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                <span className="text-sm text-zinc-700">No</span>
+              </label>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
