@@ -27,7 +27,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    isAuthenticated: !!localStorage.getItem("access_token"),
+    isAuthenticated: !!sessionStorage.getItem("access_token"),
     userId: null,
     userProfile: null,
     isLoading: true,
@@ -46,8 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const res = await authApi.verifyOtp(phone, otp);
     const { user_id, tokens } = res.data.data;
-    localStorage.setItem("access_token", tokens.access_token);
-    localStorage.setItem("refresh_token", tokens.refresh_token);
+    sessionStorage.setItem("access_token", tokens.access_token);
+    sessionStorage.setItem("refresh_token", tokens.refresh_token);
     const profileRes = await usersApi.me();
     setState({
       isAuthenticated: true,
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    const refresh = localStorage.getItem("refresh_token");
+    const refresh = sessionStorage.getItem("refresh_token");
     if (refresh) {
       try {
         await authApi.logout(refresh);
@@ -66,13 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("refresh_token");
     setState({ isAuthenticated: false, userId: null, userProfile: null, isLoading: false });
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const token = sessionStorage.getItem("access_token");
     if (!token) {
       setState((s) => ({
         ...s,
@@ -94,8 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
         }));
       } catch {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        sessionStorage.removeItem("access_token");
+        sessionStorage.removeItem("refresh_token");
         setState((s) => ({
           ...s,
           isAuthenticated: false,
