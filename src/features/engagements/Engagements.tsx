@@ -790,6 +790,7 @@ export function Engagements() {
   const [advSettingsLoading, setAdvSettingsLoading] = useState(false);
   const [createProfilesOpen, setCreateProfilesOpen] = useState(false);
   const [creatingProfiles, setCreatingProfiles] = useState(false);
+  const [createProfilesMode, setCreateProfilesMode] = useState<"enrol_force" | "enrol" | "profile">("profile");
   const [createProfilesResult, setCreateProfilesResult] = useState<{
     created: number;
     skipped: number;
@@ -1113,7 +1114,7 @@ export function Engagements() {
     setCreateProfilesResult(null);
     setCreateProfilesError(null);
     try {
-      const res = await engagementsApi.createMetsightsProfiles(selected.engagement_id);
+      const res = await engagementsApi.createMetsightsProfiles(selected.engagement_id, createProfilesMode);
       const d = res.data.data;
       setCreateProfilesResult({
         created: d.created,
@@ -1126,7 +1127,7 @@ export function Engagements() {
     } finally {
       setCreatingProfiles(false);
     }
-  }, [selected]);
+  }, [selected, createProfilesMode]);
 
   const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
@@ -1883,6 +1884,7 @@ export function Engagements() {
                   type="button"
                   onClick={() => {
                     setCreateProfilesOpen(true);
+                    setCreateProfilesMode("profile");
                     setCreateProfilesResult(null);
                     setCreateProfilesError(null);
                   }}
@@ -2086,6 +2088,13 @@ export function Engagements() {
                     No
                   </label>
                 </div>
+                {Boolean(formData.create_profile_on_metsights) && (
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {(formData.metsights_engagement_id ?? "").trim()
+                      ? "Users will be registered to the Metsights engagement on onboarding."
+                      : "A standalone Metsights profile will be created for each user on onboarding (no engagement registration)."}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Enroll For FitPrint Full</label>
@@ -2782,17 +2791,91 @@ export function Engagements() {
         <div className="space-y-4">
           {!createProfilesResult && !createProfilesError && !creatingProfiles && (
             <>
-              <p className="text-sm text-zinc-700">
-                Create regular Metsights profiles for{" "}
-                <span className="font-semibold">all participants</span> of{" "}
-                <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span> who do not
-                already have a Metsights profile ID stored locally.
+              <p className="text-sm text-zinc-700 mb-3">
+                Select a mode to create Metsights profiles for participants of{" "}
+                <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span>.
               </p>
-              <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
-                <li>Uses Metsights <span className="font-mono">POST /profiles/</span> (not engagement registration).</li>
-                <li>Participants who already have <span className="font-mono">metsights_profile_id</span> are skipped.</li>
-                <li>Users missing required fields (name, phone, gender, DOB/age) are reported as failures.</li>
-              </ul>
+              <div className="space-y-3">
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    createProfilesMode === "enrol_force"
+                      ? "border-zinc-900 bg-zinc-50"
+                      : "border-zinc-200 hover:bg-zinc-50"
+                  } ${!(selected?.metsights_engagement_id ?? "").trim() ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="create_profiles_mode"
+                    value="enrol_force"
+                    checked={createProfilesMode === "enrol_force"}
+                    onChange={() => setCreateProfilesMode("enrol_force")}
+                    disabled={!(selected?.metsights_engagement_id ?? "").trim()}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-zinc-800">Enrol for engagement (Force)</div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Register <span className="font-semibold">all</span> participants via engagement registration,
+                      even if they already have a Metsights profile ID.
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    createProfilesMode === "enrol"
+                      ? "border-zinc-900 bg-zinc-50"
+                      : "border-zinc-200 hover:bg-zinc-50"
+                  } ${!(selected?.metsights_engagement_id ?? "").trim() ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="create_profiles_mode"
+                    value="enrol"
+                    checked={createProfilesMode === "enrol"}
+                    onChange={() => setCreateProfilesMode("enrol")}
+                    disabled={!(selected?.metsights_engagement_id ?? "").trim()}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-zinc-800">Enrol for engagement</div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Register only participants who do not already have a Metsights profile ID
+                      via engagement registration. Existing profiles are skipped.
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                    createProfilesMode === "profile"
+                      ? "border-zinc-900 bg-zinc-50"
+                      : "border-zinc-200 hover:bg-zinc-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="create_profiles_mode"
+                    value="profile"
+                    checked={createProfilesMode === "profile"}
+                    onChange={() => setCreateProfilesMode("profile")}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-zinc-800">User Profile</div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Create standalone Metsights profiles for participants who do not already
+                      have a Metsights profile ID. Existing profiles are skipped.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {!(selected?.metsights_engagement_id ?? "").trim() && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Engagement enrolment options are disabled because no Metsights Engagement ID is set.
+                </p>
+              )}
             </>
           )}
 

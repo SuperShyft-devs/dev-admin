@@ -806,7 +806,7 @@ export const engagementsApi = {
       timeout: 120_000,
       ...config,
     }),
-  createMetsightsProfiles: (engagementId: number) =>
+  createMetsightsProfiles: (engagementId: number, mode: "enrol_force" | "enrol" | "profile" = "profile") =>
     api.post<{
       data: {
         engagement_id: number;
@@ -821,7 +821,7 @@ export const engagementsApi = {
           reason?: string | null;
         }[];
       };
-    }>(`/engagements/${engagementId}/create-metsights-profiles`, undefined, {
+    }>(`/engagements/${engagementId}/create-metsights-profiles`, { mode }, {
       timeout: 120_000,
     }),
 };
