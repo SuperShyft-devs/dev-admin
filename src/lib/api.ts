@@ -763,6 +763,8 @@ export interface Engagement {
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
+  questionnaire_reminder_1?: string | null;
+  questionnaire_reminder_2?: string | null;
 }
 
 export interface EngagementListItem {
@@ -784,6 +786,8 @@ export interface EngagementListItem {
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
+  questionnaire_reminder_1?: string | null;
+  questionnaire_reminder_2?: string | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -804,6 +808,8 @@ export interface EngagementCreate {
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
   notification_service_key?: string | null;
+  questionnaire_reminder_1?: string | null;
+  questionnaire_reminder_2?: string | null;
 }
 
 export const engagementsApi = {

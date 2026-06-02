@@ -693,6 +693,8 @@ export function Engagements() {
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
     notification_service_key: DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+    questionnaire_reminder_1: null,
+    questionnaire_reminder_2: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -1154,6 +1156,8 @@ export function Engagements() {
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
       notification_service_key:
         preset?.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+      questionnaire_reminder_1: preset?.questionnaire_reminder_1 ?? null,
+      questionnaire_reminder_2: preset?.questionnaire_reminder_2 ?? null,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1194,6 +1198,8 @@ export function Engagements() {
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
         notification_service_key:
           e.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+        questionnaire_reminder_1: e.questionnaire_reminder_1 ?? null,
+        questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1235,6 +1241,8 @@ export function Engagements() {
           notification_service_key:
             formData.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
+          questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1269,6 +1277,8 @@ export function Engagements() {
           notification_service_key:
             formData.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
+          questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1690,6 +1700,14 @@ export function Engagements() {
             <div>
               <span className="text-zinc-500">Onboarding notification service:</span>{" "}
               {notificationServiceLabel(selected.notification_service_key)}
+            </div>
+            <div>
+              <span className="text-zinc-500">Questionnaire Reminder 1 (day before):</span>{" "}
+              {notificationServiceLabel(selected.questionnaire_reminder_1)}
+            </div>
+            <div>
+              <span className="text-zinc-500">Questionnaire Reminder 2 (day after):</span>{" "}
+              {notificationServiceLabel(selected.questionnaire_reminder_2)}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-zinc-500">Participants:</span>
@@ -2175,6 +2193,44 @@ export function Engagements() {
                       </option>
                     ))
                   )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Questionnaire Reminder 1 (day before)
+                </label>
+                <select
+                  value={formData.questionnaire_reminder_1 ?? ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, questionnaire_reminder_1: e.target.value || null })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value="">None</option>
+                  {notificationServices.map((s) => (
+                    <option key={s.service_key} value={s.service_key}>
+                      {s.display_name} ({s.service_key})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Questionnaire Reminder 2 (day after)
+                </label>
+                <select
+                  value={formData.questionnaire_reminder_2 ?? ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, questionnaire_reminder_2: e.target.value || null })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value="">None</option>
+                  {notificationServices.map((s) => (
+                    <option key={s.service_key} value={s.service_key}>
+                      {s.display_name} ({s.service_key})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
