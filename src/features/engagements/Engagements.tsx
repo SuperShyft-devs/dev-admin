@@ -695,6 +695,8 @@ export function Engagements() {
     notification_service_key: DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
     questionnaire_reminder_1: null,
     questionnaire_reminder_2: null,
+    blood_report_notification: null,
+    bioai_report_notification: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -1158,6 +1160,8 @@ export function Engagements() {
         preset?.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
       questionnaire_reminder_1: preset?.questionnaire_reminder_1 ?? null,
       questionnaire_reminder_2: preset?.questionnaire_reminder_2 ?? null,
+      blood_report_notification: preset?.blood_report_notification ?? null,
+      bioai_report_notification: preset?.bioai_report_notification ?? null,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1200,6 +1204,8 @@ export function Engagements() {
           e.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
         questionnaire_reminder_1: e.questionnaire_reminder_1 ?? null,
         questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
+        blood_report_notification: e.blood_report_notification ?? null,
+        bioai_report_notification: e.bioai_report_notification ?? null,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1243,6 +1249,8 @@ export function Engagements() {
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
           questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
+          blood_report_notification: formData.blood_report_notification || null,
+          bioai_report_notification: formData.bioai_report_notification || null,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1279,6 +1287,8 @@ export function Engagements() {
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
           questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
+          blood_report_notification: formData.blood_report_notification || null,
+          bioai_report_notification: formData.bioai_report_notification || null,
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1703,11 +1713,27 @@ export function Engagements() {
             </div>
             <div>
               <span className="text-zinc-500">Questionnaire Reminder 1 (day before):</span>{" "}
-              {notificationServiceLabel(selected.questionnaire_reminder_1)}
+              {selected.questionnaire_reminder_1
+                ? selected.questionnaire_reminder_1.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
+                : "—"}
             </div>
             <div>
               <span className="text-zinc-500">Questionnaire Reminder 2 (day after):</span>{" "}
-              {notificationServiceLabel(selected.questionnaire_reminder_2)}
+              {selected.questionnaire_reminder_2
+                ? selected.questionnaire_reminder_2.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
+                : "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Blood Report Notification:</span>{" "}
+              {selected.blood_report_notification
+                ? selected.blood_report_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
+                : "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">BioAI Report Notification:</span>{" "}
+              {selected.bioai_report_notification
+                ? selected.bioai_report_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
+                : "—"}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-zinc-500">Participants:</span>
@@ -2195,44 +2221,65 @@ export function Engagements() {
                   )}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">
-                  Questionnaire Reminder 1 (day before)
-                </label>
-                <select
-                  value={formData.questionnaire_reminder_1 ?? ""}
-                  onChange={(e) =>
-                    setFormData({ ...formData, questionnaire_reminder_1: e.target.value || null })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  <option value="">None</option>
-                  {notificationServices.map((s) => (
-                    <option key={s.service_key} value={s.service_key}>
-                      {s.display_name} ({s.service_key})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">
-                  Questionnaire Reminder 2 (day after)
-                </label>
-                <select
-                  value={formData.questionnaire_reminder_2 ?? ""}
-                  onChange={(e) =>
-                    setFormData({ ...formData, questionnaire_reminder_2: e.target.value || null })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  <option value="">None</option>
-                  {notificationServices.map((s) => (
-                    <option key={s.service_key} value={s.service_key}>
-                      {s.display_name} ({s.service_key})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {([
+                { field: "questionnaire_reminder_1" as const, label: "Questionnaire Reminder 1 (day before)" },
+                { field: "questionnaire_reminder_2" as const, label: "Questionnaire Reminder 2 (day after)" },
+                { field: "blood_report_notification" as const, label: "Blood Report Notification" },
+                { field: "bioai_report_notification" as const, label: "BioAI Report Notification" },
+              ] as const).map(({ field, label }) => {
+                const currentValue = formData[field] as string | null;
+                const selectedKeys = currentValue ? currentValue.split(",").filter(Boolean) : [];
+                const isEnabled = currentValue !== null;
+                return (
+                  <div key={field} className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-zinc-700 mb-1">{label}</label>
+                    <div className="flex items-center gap-4 mb-2">
+                      <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`${field}_toggle`}
+                          checked={!isEnabled}
+                          onChange={() => setFormData({ ...formData, [field]: null })}
+                        />
+                        No
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`${field}_toggle`}
+                          checked={isEnabled}
+                          onChange={() => setFormData({ ...formData, [field]: "" })}
+                        />
+                        Yes
+                      </label>
+                    </div>
+                    {isEnabled && (
+                      <div className="border border-zinc-300 rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
+                        {notificationServices.length === 0 ? (
+                          <p className="text-xs text-zinc-400">No notification services available</p>
+                        ) : (
+                          notificationServices.map((s) => (
+                            <label key={s.service_key} className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer hover:bg-zinc-50 px-1 py-0.5 rounded">
+                              <input
+                                type="checkbox"
+                                checked={selectedKeys.includes(s.service_key)}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...selectedKeys, s.service_key]
+                                    : selectedKeys.filter((k) => k !== s.service_key);
+                                  setFormData({ ...formData, [field]: next.length > 0 ? next.join(",") : "" });
+                                }}
+                                className="rounded border-zinc-300"
+                              />
+                              {s.display_name} ({s.service_key})
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
               <button

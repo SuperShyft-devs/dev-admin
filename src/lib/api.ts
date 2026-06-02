@@ -765,6 +765,8 @@ export interface Engagement {
   notification_service_key?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
+  blood_report_notification?: string | null;
+  bioai_report_notification?: string | null;
 }
 
 export interface EngagementListItem {
@@ -788,6 +790,8 @@ export interface EngagementListItem {
   notification_service_key?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
+  blood_report_notification?: string | null;
+  bioai_report_notification?: string | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -810,6 +814,8 @@ export interface EngagementCreate {
   notification_service_key?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
+  blood_report_notification?: string | null;
+  bioai_report_notification?: string | null;
 }
 
 export const engagementsApi = {
