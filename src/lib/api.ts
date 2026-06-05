@@ -763,6 +763,7 @@ export interface Engagement {
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
+  pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
@@ -788,6 +789,7 @@ export interface EngagementListItem {
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
+  pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
@@ -812,6 +814,7 @@ export interface EngagementCreate {
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
   notification_service_key?: string | null;
+  pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;

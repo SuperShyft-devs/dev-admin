@@ -693,6 +693,7 @@ export function Engagements() {
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
     notification_service_key: DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+    pretest_guidelines_notification: null,
     questionnaire_reminder_1: null,
     questionnaire_reminder_2: null,
     blood_report_notification: null,
@@ -1158,6 +1159,7 @@ export function Engagements() {
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
       notification_service_key:
         preset?.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+      pretest_guidelines_notification: preset?.pretest_guidelines_notification ?? null,
       questionnaire_reminder_1: preset?.questionnaire_reminder_1 ?? null,
       questionnaire_reminder_2: preset?.questionnaire_reminder_2 ?? null,
       blood_report_notification: preset?.blood_report_notification ?? null,
@@ -1202,6 +1204,7 @@ export function Engagements() {
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
         notification_service_key:
           e.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+        pretest_guidelines_notification: e.pretest_guidelines_notification ?? null,
         questionnaire_reminder_1: e.questionnaire_reminder_1 ?? null,
         questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
         blood_report_notification: e.blood_report_notification ?? null,
@@ -1247,6 +1250,7 @@ export function Engagements() {
           notification_service_key:
             formData.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          pretest_guidelines_notification: formData.pretest_guidelines_notification || null,
           questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
@@ -1285,6 +1289,7 @@ export function Engagements() {
           notification_service_key:
             formData.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          pretest_guidelines_notification: formData.pretest_guidelines_notification || null,
           questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
@@ -1710,6 +1715,12 @@ export function Engagements() {
             <div>
               <span className="text-zinc-500">Onboarding notification service:</span>{" "}
               {notificationServiceLabel(selected.notification_service_key)}
+            </div>
+            <div>
+              <span className="text-zinc-500">Pretest Guidelines Notification:</span>{" "}
+              {selected.pretest_guidelines_notification
+                ? selected.pretest_guidelines_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
+                : "—"}
             </div>
             <div>
               <span className="text-zinc-500">Questionnaire Reminder 1 (day before):</span>{" "}
@@ -2222,6 +2233,7 @@ export function Engagements() {
                 </select>
               </div>
               {([
+                { field: "pretest_guidelines_notification" as const, label: "Pretest Guidelines Notification" },
                 { field: "questionnaire_reminder_1" as const, label: "Questionnaire Reminder 1 (day before)" },
                 { field: "questionnaire_reminder_2" as const, label: "Questionnaire Reminder 2 (day after)" },
                 { field: "blood_report_notification" as const, label: "Blood Report Notification" },
