@@ -651,7 +651,13 @@ function EngagementChecklistModal({
 
 const DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY = "booking-alert-whatsapp";
 
-export function Engagements() {
+export function Engagements({
+  asModalForEngagementId,
+  onCloseModal,
+}: {
+  asModalForEngagementId?: number;
+  onCloseModal?: () => void;
+} = {}) {
   const location = useLocation();
   const [data, setData] = useState<EngagementListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -667,6 +673,18 @@ export function Engagements() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (asModalForEngagementId) {
+      engagementsApi.get(asModalForEngagementId)
+        .then((res) => {
+          setSelected(res.data.data as any);
+          setModalMode("view");
+          setModalOpen(true);
+        })
+        .catch(() => {});
+    }
+  }, [asModalForEngagementId]);
 
   const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
   const [assessmentPackages, setAssessmentPackages] = useState<AssessmentPackage[]>([]);
@@ -1587,8 +1605,9 @@ export function Engagements() {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3 mb-6">
+    <>
+      <div className={asModalForEngagementId ? "hidden" : ""}>
+        <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <button
           onClick={() => openAdd()}
@@ -1685,10 +1704,14 @@ export function Engagements() {
           />
         )}
       </div>
+      </div>
 
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={() => {
+          setModalOpen(false);
+          if (onCloseModal) onCloseModal();
+        }}
         title={
           modalMode === "add"
             ? "Add Engagement"
@@ -3124,6 +3147,6 @@ export function Engagements() {
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   );
 }
