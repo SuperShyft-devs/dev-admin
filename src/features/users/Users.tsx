@@ -10,13 +10,11 @@ import {
   uploadsApi,
   notificationsApi,
   participantJourneyApi,
-  engagementsApi,
   type UserListItem,
   type UserDetail,
   type UserCreate,
   type NotificationServiceItem,
   type ParticipantJourneyInstanceSummary,
-  type Engagement,
   getApiError,
 } from "../../lib/api";
 function hasMetsightsProfileId(user: UserListItem): boolean {
