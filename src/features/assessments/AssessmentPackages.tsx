@@ -8,7 +8,8 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, ScrollText, Search, X } from "lucide-react";
+import { IntegrationSyncLogsModal } from "./IntegrationSyncLogsModal";
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -31,6 +32,7 @@ import {
   type QuestionnaireQuestionUpdate,
   type QuestionnaireVisibilityCondition,
   type MetsightsSyncConfig,
+  type MetsightsSyncGapsResponse,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -995,9 +997,14 @@ export function AssessmentPackages() {
   const [syncPushParamsJson, setSyncPushParamsJson] = useState("");
 
   // Unsync'd questions warning state
-  const [unsyncWarning, setUnsyncWarning] = useState<{ count: number; questions: { question_id: number; question_key?: string | null; question_text?: string | null }[] }>({ count: 0, questions: [] });
+  const [unsyncWarning, setUnsyncWarning] = useState<MetsightsSyncGapsResponse>({
+    count: 0,
+    summary: { not_configured: 0, pull_disabled: 0, push_disabled: 0 },
+    questions: [],
+  });
   const [unsyncWarningExpanded, setUnsyncWarningExpanded] = useState(false);
   const [unsyncWarningLoading, setUnsyncWarningLoading] = useState(false);
+  const [syncLogsOpen, setSyncLogsOpen] = useState(false);
 
   const fetchHabitRulesForQuestion = useCallback(async (questionId: number) => {
     setHabitRulesLoading(true);
@@ -1792,6 +1799,7 @@ export function AssessmentPackages() {
       setSelectedQ(res.data.data);
       setSyncModalOpen(false);
       fetchQuestions();
+      void fetchUnsyncWarning();
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : getApiError(error));
     } finally {
@@ -1799,44 +1807,31 @@ export function AssessmentPackages() {
     }
   };
 
+  const openSyncModalFromGap = async (questionId: number) => {
+    try {
+      const res = await questionnaireQuestionsApi.get(questionId);
+      const question = res.data.data;
+      setSelectedQ(question);
+      setQModalMode("view");
+      setQModalOpen(true);
+      openSyncModal(question);
+    } catch (error) {
+      setQError(getApiError(error));
+    }
+  };
+
   // Unsync'd questions warning
   const fetchUnsyncWarning = useCallback(async () => {
     setUnsyncWarningLoading(true);
     try {
-      const metsightsCats = await fetchAllPages<QuestionnaireCategory>((page, limit) =>
-        questionnaireCategoriesApi.list({ page, limit, category_of: "metsights" })
-      );
-      if (metsightsCats.length === 0) {
-        setUnsyncWarning({ count: 0, questions: [] });
-        return;
-      }
-      const questionMap = new Map<number, QuestionnaireQuestion>();
-      await Promise.all(
-        metsightsCats.map(async (cat) => {
-          try {
-            const res = await questionnaireCategoriesApi.listQuestions(cat.category_id);
-            for (const q of res.data.data) {
-              questionMap.set(q.question_id, q);
-            }
-          } catch { /* skip */ }
-        })
-      );
-      const unsynced = Array.from(questionMap.values()).filter((q) => {
-        const ms = q.metsights_sync;
-        if (!ms) return true;
-        if (!ms.pull?.enabled || !ms.push?.enabled) return true;
-        return false;
-      });
-      setUnsyncWarning({
-        count: unsynced.length,
-        questions: unsynced.map((q) => ({
-          question_id: q.question_id,
-          question_key: q.question_key,
-          question_text: q.question_text,
-        })),
-      });
+      const res = await questionnaireQuestionsApi.listMetsightsSyncGaps();
+      setUnsyncWarning(res.data.data);
     } catch {
-      setUnsyncWarning({ count: 0, questions: [] });
+      setUnsyncWarning({
+        count: 0,
+        summary: { not_configured: 0, pull_disabled: 0, push_disabled: 0 },
+        questions: [],
+      });
     } finally {
       setUnsyncWarningLoading(false);
     }
@@ -2038,6 +2033,16 @@ export function AssessmentPackages() {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Assessments</h1>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSyncLogsOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
+            title="View Metsights push/pull sync logs"
+          >
+            <ScrollText className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Sync Logs</span>
+          </button>
         {activeTab === "packages" && (
           <button
             onClick={openAddPackage}
@@ -2065,7 +2070,10 @@ export function AssessmentPackages() {
             <span className="hidden sm:inline">Add Question</span>
           </button>
         )}
+        </div>
       </div>
+
+      <IntegrationSyncLogsModal open={syncLogsOpen} onClose={() => setSyncLogsOpen(false)} />
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
         {TAB_KEYS.map((tab) => (
@@ -2317,23 +2325,83 @@ export function AssessmentPackages() {
                 onClick={() => setUnsyncWarningExpanded((v) => !v)}
                 className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
               >
-                <div className="flex items-center gap-2 text-sm text-amber-800">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>
-                    <span className="font-semibold">{unsyncWarning.count}</span> question{unsyncWarning.count !== 1 ? "s" : ""} in Metsights categories {unsyncWarning.count !== 1 ? "have" : "has"} incomplete sync config
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-amber-800 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>
+                      <span className="font-semibold">{unsyncWarning.count}</span> question{unsyncWarning.count !== 1 ? "s" : ""} in Metsights categories need sync configuration
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pl-6 sm:pl-0">
+                    {unsyncWarning.summary.not_configured > 0 && (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                        {unsyncWarning.summary.not_configured} not configured
+                      </span>
+                    )}
+                    {unsyncWarning.summary.pull_disabled > 0 && (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                        {unsyncWarning.summary.pull_disabled} pull off
+                      </span>
+                    )}
+                    {unsyncWarning.summary.push_disabled > 0 && (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                        {unsyncWarning.summary.push_disabled} push off
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-amber-600 transition-transform ${unsyncWarningExpanded ? "rotate-180" : ""}`} />
+                <ChevronDown className={`w-4 h-4 text-amber-600 transition-transform shrink-0 ${unsyncWarningExpanded ? "rotate-180" : ""}`} />
               </button>
               {unsyncWarningExpanded && (
-                <div className="px-4 pb-3 max-h-48 overflow-y-auto">
+                <div className="px-4 pb-3 max-h-64 overflow-y-auto">
                   <ul className="divide-y divide-amber-200">
                     {unsyncWarning.questions.map((q) => (
-                      <li key={q.question_id} className="py-2 flex items-start gap-2 text-sm">
-                        <span className="font-mono text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
-                          {q.question_key ?? `#${q.question_id}`}
-                        </span>
-                        <span className="text-zinc-700 line-clamp-1">{q.question_text ?? "—"}</span>
+                      <li
+                        key={q.question_id}
+                        className="py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 text-sm"
+                      >
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await questionnaireQuestionsApi.get(q.question_id);
+                              setSelectedQ(res.data.data);
+                              setQModalMode("view");
+                              setQModalOpen(true);
+                            } catch (error) {
+                              setQError(getApiError(error));
+                            }
+                          }}
+                          className="flex-1 min-w-0 flex items-start gap-2 text-left hover:opacity-80"
+                        >
+                          <span className="font-mono text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                            {q.question_key ?? `#${q.question_id}`}
+                          </span>
+                          <span className="text-zinc-700 line-clamp-1">{q.question_text ?? "—"}</span>
+                        </button>
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                          {q.metsights_categories.map((cat) => (
+                            <span
+                              key={cat.category_id}
+                              className="inline-flex px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-100"
+                            >
+                              {cat.category_key ?? cat.display_name}
+                            </span>
+                          ))}
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs border ${q.sync_gaps.pull_disabled ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"}`}>
+                            Pull {q.sync_gaps.pull_disabled ? "OFF" : "ON"}
+                          </span>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-xs border ${q.sync_gaps.push_disabled ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"}`}>
+                            Push {q.sync_gaps.push_disabled ? "OFF" : "ON"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void openSyncModalFromGap(q.question_id)}
+                            className="px-2 py-0.5 rounded text-xs font-medium text-blue-700 hover:bg-blue-50"
+                          >
+                            Configure
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>

@@ -1367,6 +1367,66 @@ export const questionnaireQuestionsApi = {
       `/questionnaire/questions/${id}/metsights-sync`,
       { metsights_sync }
     ),
+  listMetsightsSyncGaps: () =>
+    api.get<{ data: MetsightsSyncGapsResponse }>("/questionnaire/questions/metsights-sync-gaps"),
+};
+
+export interface MetsightsSyncGapsCategoryRef {
+  category_id: number;
+  category_key?: string | null;
+  display_name?: string | null;
+}
+
+export interface MetsightsSyncGapsItem {
+  question_id: number;
+  question_key?: string | null;
+  question_text?: string | null;
+  metsights_categories: MetsightsSyncGapsCategoryRef[];
+  sync_gaps: {
+    not_configured: boolean;
+    pull_disabled: boolean;
+    push_disabled: boolean;
+  };
+}
+
+export interface MetsightsSyncGapsResponse {
+  count: number;
+  summary: {
+    not_configured: number;
+    pull_disabled: number;
+    push_disabled: number;
+  };
+  questions: MetsightsSyncGapsItem[];
+}
+
+export interface IntegrationSyncLog {
+  sync_log_id: number;
+  engagement_id?: number | null;
+  user_id?: number | null;
+  provider: string;
+  api_endpoint_url: string;
+  request_payload?: Record<string, unknown> | unknown[] | null;
+  response_payload?: Record<string, unknown> | unknown[] | null;
+  status?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
+export const integrationSyncLogsApi = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    provider?: string;
+    status?: string;
+    user_id?: number;
+    engagement_id?: number;
+    from?: string;
+    to?: string;
+  }) =>
+    api.get<{ data: IntegrationSyncLog[]; meta: { page: number; limit: number; total: number } }>(
+      "/audit/integration-sync-logs",
+      { params }
+    ),
 };
 
 export const questionnaireHealthyHabitRulesApi = {
