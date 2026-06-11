@@ -8,8 +8,18 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, ScrollText, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, ScrollText, Search } from "lucide-react";
 import { IntegrationSyncLogsModal } from "./IntegrationSyncLogsModal";
+import { MetsightsSyncConfigModal } from "./questions/MetsightsSyncConfigModal";
+import { QuestionDetailDrawer, type QuestionDrawerTab } from "./questions/QuestionDetailDrawer";
+import { QuestionForm } from "./questions/QuestionForm";
+import {
+  BLANK_QUESTION,
+  OPTION_SUPPORTED_TYPES,
+  Q_STATUS_OPTIONS,
+  StatusBadge,
+  cap,
+} from "./questions/questionUi";
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -17,21 +27,15 @@ import { Modal } from "../../shared/ui/Modal";
 import {
   assessmentPackagesApi,
   questionnaireCategoriesApi,
-  questionnaireHealthyHabitRulesApi,
   questionnaireQuestionsApi,
   type AssessmentPackage,
   type AssessmentPackageCategory,
   type AssessmentPackageCreate,
   type QuestionnaireCategory,
   type QuestionnaireCategoryCreate,
-  type QuestionnaireHealthyHabitRule,
-  type QuestionnaireHealthyHabitRulePayload,
-  type QuestionnaireOption,
   type QuestionnaireQuestion,
   type QuestionnaireQuestionCreate,
   type QuestionnaireQuestionUpdate,
-  type QuestionnaireVisibilityCondition,
-  type MetsightsSyncConfig,
   type MetsightsSyncGapsResponse,
   getApiError,
 } from "../../lib/api";
@@ -39,821 +43,23 @@ import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const PKG_STATUS_OPTIONS = ["active", "inactive", "archived"] as const;
 const CAT_STATUS_OPTIONS = ["active", "inactive"] as const;
-const Q_STATUS_OPTIONS = ["active", "inactive"] as const;
 const QUESTION_TYPES = [
   { value: "text", label: "Text (free answer)" },
   { value: "single_choice", label: "Single Choice" },
   { value: "multiple_choice", label: "Multiple Choice" },
   { value: "scale", label: "Scale" },
 ] as const;
-const OPTION_SUPPORTED_TYPES = new Set(["single_choice", "multiple_choice", "scale"]);
-const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
 
 const CATEGORY_OF_OPTIONS = ["supershyft", "metsights"] as const;
 
-const PULL_STRATEGIES = [
-  "passthrough",
-  "scale_ingest",
-  "choice_ingest",
-  "scale_to_bucket",
-  "string_boolean",
-  "list_to_single",
-] as const;
-
-const PUSH_STRATEGIES = [
-  "passthrough",
-  "scale_emit",
-  "choice_remap",
-  "bucket_to_scale",
-  "boolean_string",
-  "single_to_list",
-  "list_to_single",
-  "skip_if_only",
-] as const;
-
-const STRATEGY_HAS_JSON_PARAMS = new Set([
-  "scale_to_bucket",
-  "choice_remap",
-  "bucket_to_scale",
-  "choice_ingest",
-  "scale_ingest",
-  "scale_emit",
-  "skip_if_only",
-]);
-
 type TabKey = "packages" | "categories" | "questions";
 const TAB_KEYS: TabKey[] = ["packages", "categories", "questions"];
-
-const BLANK_QUESTION: QuestionnaireQuestionCreate = {
-  question_key: "",
-  question_text: "",
-  question_type: "",
-  is_required: false,
-  is_read_only: false,
-  help_text: "",
-  options: null,
-  visibility_rules: null,
-  prefill_from: null,
-  status: "active",
-};
 
 const BLANK_CATEGORY: QuestionnaireCategoryCreate = {
   category_key: "",
   display_name: "",
   category_of: "supershyft",
 };
-
-function cap(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function StatusBadge({ status }: { status?: string | null }) {
-  const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium";
-  if (status === "active") return <span className={`${base} bg-green-100 text-green-700`}>Active</span>;
-  if (status === "inactive") return <span className={`${base} bg-zinc-100 text-zinc-600`}>Inactive</span>;
-  if (status === "archived") return <span className={`${base} bg-amber-100 text-amber-700`}>Archived</span>;
-  if (status === "complete") return <span className={`${base} bg-emerald-100 text-emerald-700`}>Complete</span>;
-  if (status === "incomplete") return <span className={`${base} bg-orange-100 text-orange-700`}>Incomplete</span>;
-  return <span className={`${base} bg-zinc-100 text-zinc-500`}>{status ?? "—"}</span>;
-}
-
-interface QuestionFormProps {
-  value: QuestionnaireQuestionCreate;
-  onChange: (value: QuestionnaireQuestionCreate) => void;
-  availableQuestionKeys?: string[];
-  mode: "add" | "edit";
-  error: string | null;
-  submitting: boolean;
-  currentStatus?: string | null;
-  togglingStatus?: boolean;
-  onToggleStatus?: () => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-}
-
-function QuestionForm({
-  value,
-  onChange,
-  availableQuestionKeys,
-  mode,
-  error,
-  submitting,
-  currentStatus,
-  togglingStatus,
-  onToggleStatus,
-  onSubmit,
-  onCancel,
-}: QuestionFormProps) {
-  type ConditionOperator = "equals" | "not_equals" | "contains" | "not_contains" | "in" | "not_in";
-  type EditableVisibilityCondition = {
-    type: "question_answer" | "user_preference";
-    operator: ConditionOperator;
-    question_key: string;
-    preference_key: "diet_preference" | "allergies" | "";
-    value: unknown;
-  };
-  type VisibilityConditionPatch = Partial<
-    Pick<EditableVisibilityCondition, "type" | "operator" | "question_key" | "preference_key" | "value">
-  >;
-  const CONDITION_OPERATORS = [
-    { value: "equals", label: "Equals" },
-    { value: "not_equals", label: "Does not equal" },
-    { value: "contains", label: "Contains" },
-    { value: "not_contains", label: "Does not contain" },
-    { value: "in", label: "In list" },
-    { value: "not_in", label: "Not in list" },
-  ] as const;
-  const showOptions = OPTION_SUPPORTED_TYPES.has(value.question_type);
-  const options = value.options ?? [];
-  const visibilityRules = value.visibility_rules ?? null;
-  const visibilityConditions = Array.isArray(visibilityRules?.conditions) ? visibilityRules.conditions : [];
-  const hasConditionalVisibility = visibilityConditions.length > 0;
-  const matchMode = visibilityRules?.match === "any" ? "any" : "all";
-  const prefillPreferenceKey = value.prefill_from?.preference_key ?? "";
-  const [showOptionKeys, setShowOptionKeys] = useState(false);
-  const availableParentKeys = useMemo(
-    () =>
-      (availableQuestionKeys ?? [])
-        .filter((item) => item && item !== value.question_key)
-        .sort((a, b) => a.localeCompare(b)),
-    [availableQuestionKeys, value.question_key]
-  );
-  const getSuggestedOptionValue = (displayName: string, index: number) => {
-    const normalized = displayName
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    return normalized || `option_${index + 1}`;
-  };
-
-  const setField = (patch: Partial<QuestionnaireQuestionCreate>) => {
-    onChange({ ...value, ...patch });
-  };
-
-  const parseRuleValue = (operator: ConditionOperator, rawValue: string): unknown => {
-    if (operator === "in" || operator === "not_in") {
-      return rawValue
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-    return rawValue;
-  };
-
-  const stringifyRuleValue = (rawValue: unknown): string => {
-    if (Array.isArray(rawValue)) return rawValue.join(", ");
-    if (rawValue == null) return "";
-    return String(rawValue);
-  };
-
-  const normalizeVisibilityRule = (condition: QuestionnaireVisibilityCondition): EditableVisibilityCondition => {
-    const normalizedType: EditableVisibilityCondition["type"] =
-      condition.type === "user_preference" ? "user_preference" : "question_answer";
-    const normalizedOperator = CONDITION_OPERATORS.some((item) => item.value === condition.operator)
-      ? (condition.operator as ConditionOperator)
-      : "equals";
-    return {
-      type: normalizedType,
-      operator: normalizedOperator,
-      question_key:
-        normalizedType === "question_answer" && typeof condition.question_key === "string"
-          ? condition.question_key
-          : "",
-      preference_key:
-        normalizedType === "user_preference" &&
-        (condition.preference_key === "diet_preference" || condition.preference_key === "allergies")
-          ? (condition.preference_key as "diet_preference" | "allergies")
-          : "",
-      value: condition.value,
-    };
-  };
-
-  const getEditableVisibilityConditions = (): EditableVisibilityCondition[] =>
-    visibilityConditions.map((condition) => normalizeVisibilityRule(condition));
-
-  const persistVisibilityRules = (
-    conditions: EditableVisibilityCondition[],
-    nextMatch: "all" | "any" = matchMode
-  ) => {
-    if (conditions.length === 0) {
-      setField({ visibility_rules: null });
-      return;
-    }
-    setField({
-      visibility_rules: {
-        match: nextMatch,
-        conditions: conditions.map((condition) =>
-          condition.type === "question_answer"
-            ? {
-                type: "question_answer" as const,
-                operator: condition.operator,
-                question_key: condition.question_key.trim().toLowerCase(),
-                value: condition.value,
-              }
-            : {
-                type: "user_preference" as const,
-                operator: condition.operator,
-                preference_key: condition.preference_key || "diet_preference",
-                value: condition.value,
-              }
-        ),
-      },
-    });
-  };
-
-  const setConditionalVisibilityEnabled = (enabled: boolean) => {
-    if (!enabled) {
-      setField({ visibility_rules: null });
-      return;
-    }
-    if (visibilityConditions.length > 0) return;
-    persistVisibilityRules([
-      {
-        type: "question_answer",
-        operator: "equals",
-        question_key: "",
-        preference_key: "",
-        value: "",
-      },
-    ]);
-  };
-
-  const updateVisibilityCondition = (index: number, patch: VisibilityConditionPatch) => {
-    const normalized = getEditableVisibilityConditions();
-    const current = normalized[index];
-    if (!current) return;
-    const nextType: EditableVisibilityCondition["type"] =
-      patch.type === "user_preference" ? "user_preference" : patch.type === "question_answer" ? "question_answer" : current.type;
-    const nextOperator = CONDITION_OPERATORS.some((item) => item.value === patch.operator)
-      ? (patch.operator as ConditionOperator)
-      : current.operator;
-    const nextRawValue = patch.value ?? current.value;
-    const nextCondition: EditableVisibilityCondition = {
-      type: nextType,
-      operator: nextOperator,
-      question_key:
-        nextType === "question_answer"
-          ? String(patch.question_key ?? current.question_key ?? "")
-          : "",
-      preference_key:
-        nextType === "user_preference"
-          ? (patch.preference_key === "diet_preference" || patch.preference_key === "allergies"
-              ? patch.preference_key
-              : (current.preference_key || "diet_preference")) as "diet_preference" | "allergies"
-          : "",
-      value:
-        typeof nextRawValue === "string"
-          ? parseRuleValue(nextOperator, nextRawValue)
-          : nextRawValue,
-    };
-    normalized[index] = nextCondition;
-    persistVisibilityRules(normalized, matchMode);
-  };
-
-  const addVisibilityCondition = () => {
-    const normalized = getEditableVisibilityConditions();
-    normalized.push({
-      type: "question_answer",
-      operator: "equals",
-      question_key: "",
-      preference_key: "",
-      value: "",
-    });
-    persistVisibilityRules(normalized, matchMode);
-  };
-
-  const removeVisibilityCondition = (index: number) => {
-    const normalized = getEditableVisibilityConditions();
-    persistVisibilityRules(
-      normalized.filter((_, itemIndex) => itemIndex !== index),
-      matchMode
-    );
-  };
-
-  const addOption = () => {
-    const index = options.length;
-    const next: QuestionnaireOption[] = [
-      ...options,
-      { option_value: `option_${index + 1}`, display_name: "", tooltip_text: "" },
-    ];
-    setField({ options: next });
-  };
-
-  const updateOption = (index: number, patch: Partial<QuestionnaireOption>) => {
-    const next = [...options];
-    const current = next[index];
-    const currentSuggested = getSuggestedOptionValue(current.display_name, index);
-    const isAutoValue =
-      !current.option_value?.trim() || current.option_value === currentSuggested;
-    const displayName =
-      patch.display_name !== undefined ? patch.display_name : current.display_name;
-    const nextPatch: Partial<QuestionnaireOption> = { ...patch };
-    if (
-      patch.display_name !== undefined &&
-      patch.option_value === undefined &&
-      isAutoValue
-    ) {
-      nextPatch.option_value = getSuggestedOptionValue(displayName, index);
-    }
-    next[index] = { ...current, ...nextPatch };
-    setField({ options: next });
-  };
-
-  const removeOption = (index: number) => {
-    setField({ options: options.filter((_, i) => i !== index) });
-  };
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-      className="space-y-4"
-    >
-      {error && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
-      )}
-
-      <div className="rounded-xl border border-zinc-200 p-4 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900">1) Question basics</h3>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Define the question identity, wording, and answer format.
-          </p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Question Key <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={value.question_key}
-            onChange={(e) => setField({ question_key: e.target.value.toLowerCase() })}
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-            placeholder="e.g. diet_preference"
-            required
-          />
-          <p className="mt-1 text-xs text-zinc-500">
-            Stable key used for logic, preferences, and exports.
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Question Text <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            rows={3}
-            value={value.question_text}
-            onChange={(e) => setField({ question_text: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
-            placeholder="Enter question text..."
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Question Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={value.question_type}
-            onChange={(e) =>
-              setField({
-                question_type: e.target.value,
-                options: OPTION_SUPPORTED_TYPES.has(e.target.value)
-                  ? options.length > 0
-                    ? options
-                    : [{ option_value: "", display_name: "", tooltip_text: "" }]
-                  : null,
-              })
-            }
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            required
-          >
-            <option value="">Select type...</option>
-            {QUESTION_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-zinc-500">
-            Choice and scale types need configured values.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={!!value.is_required}
-              onChange={(e) => setField({ is_required: e.target.checked })}
-              className="h-4 w-4 rounded border-zinc-300"
-            />
-            Required
-          </label>
-          <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={!!value.is_read_only}
-              onChange={(e) => setField({ is_read_only: e.target.checked })}
-              className="h-4 w-4 rounded border-zinc-300"
-            />
-            Read only
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">Help Text</label>
-          <textarea
-            rows={2}
-            value={value.help_text ?? ""}
-            onChange={(e) => setField({ help_text: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
-            placeholder="Optional hint shown under the question..."
-          />
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-zinc-200 p-4 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900">2) Visibility and auto-fill</h3>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Configure when this question appears and whether a default answer should come from preferences.
-          </p>
-        </div>
-
-        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            checked={hasConditionalVisibility}
-            onChange={(e) => setConditionalVisibilityEnabled(e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300"
-          />
-          Show this question conditionally
-        </label>
-
-        {hasConditionalVisibility && (
-          <div className="space-y-3 rounded-lg border border-zinc-200 p-3 bg-zinc-50">
-            {visibilityConditions.map((rawCondition, index) => {
-              const condition = normalizeVisibilityRule(rawCondition);
-              const conditionValue = stringifyRuleValue(condition.value);
-              const valuePlaceholder =
-                condition.operator === "in" || condition.operator === "not_in"
-                  ? "Comma separated values, e.g. yes, maybe"
-                  : condition.type === "user_preference" && condition.preference_key === "allergies"
-                    ? "e.g. dairy"
-                    : "e.g. yes";
-              return (
-                <div key={index} className="rounded-lg border border-zinc-200 bg-white p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-zinc-600">Condition {index + 1}</p>
-                    <button
-                      type="button"
-                      onClick={() => removeVisibilityCondition(index)}
-                      className="p-1.5 rounded text-zinc-400 hover:text-red-500 hover:bg-red-50"
-                      aria-label="Remove condition"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Condition type</span>
-                      <select
-                        value={condition.type}
-                        onChange={(e) =>
-                          updateVisibilityCondition(index, {
-                            type: e.target.value === "user_preference" ? "user_preference" : "question_answer",
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-                      >
-                        <option value="question_answer">Another question answer</option>
-                        <option value="user_preference">User preference</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Operator</span>
-                      <select
-                        value={condition.operator}
-                        onChange={(e) =>
-                          updateVisibilityCondition(index, {
-                            operator: (CONDITION_OPERATORS.some((item) => item.value === e.target.value)
-                              ? e.target.value
-                              : "equals") as ConditionOperator,
-                            value: conditionValue,
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-                      >
-                        {CONDITION_OPERATORS.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {condition.type === "question_answer" ? (
-                      <label>
-                        <span className="mb-1 block text-xs font-medium text-zinc-600">Question key</span>
-                        <input
-                          type="text"
-                          value={condition.question_key}
-                          list="assessment-question-keys"
-                          onChange={(e) => updateVisibilityCondition(index, { question_key: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-                          placeholder="e.g. consume_coffee_or_tea"
-                        />
-                        <datalist id="assessment-question-keys">
-                          {availableParentKeys.map((key) => (
-                            <option key={key} value={key} />
-                          ))}
-                        </datalist>
-                      </label>
-                    ) : (
-                      <label>
-                        <span className="mb-1 block text-xs font-medium text-zinc-600">Preference field</span>
-                        <select
-                          value={condition.preference_key}
-                          onChange={(e) =>
-                            updateVisibilityCondition(index, {
-                              preference_key:
-                                e.target.value === "diet_preference" || e.target.value === "allergies"
-                                  ? e.target.value
-                                  : "",
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-                        >
-                          <option value="">Select preference...</option>
-                          {PREFILL_PREFERENCE_KEYS.map((key) => (
-                            <option key={key} value={key}>
-                              {key}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Expected value</span>
-                      <input
-                        type="text"
-                        value={conditionValue}
-                        onChange={(e) => updateVisibilityCondition(index, { value: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                        placeholder={valuePlaceholder}
-                      />
-                    </label>
-                  </div>
-                </div>
-              );
-            })}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={addVisibilityCondition}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-100"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add condition
-              </button>
-              {visibilityConditions.length > 1 && (
-                <label className="inline-flex items-center gap-2 text-xs text-zinc-600">
-                  Match
-                  <select
-                    value={matchMode}
-                    onChange={(e) =>
-                      persistVisibilityRules(
-                        getEditableVisibilityConditions(),
-                        e.target.value === "any" ? "any" : "all"
-                      )
-                    }
-                    className="px-2 py-1 rounded border border-zinc-300 bg-white text-xs focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  >
-                    <option value="all">All conditions</option>
-                    <option value="any">Any condition</option>
-                  </select>
-                </label>
-              )}
-            </div>
-          </div>
-        )}
-
-        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            checked={Boolean(prefillPreferenceKey)}
-            onChange={(e) =>
-              setField({
-                prefill_from: e.target.checked
-                  ? {
-                      source: "user_preference",
-                      preference_key: "diet_preference",
-                    }
-                  : null,
-              })
-            }
-            className="h-4 w-4 rounded border-zinc-300"
-          />
-          Auto-fill answer from user preference
-        </label>
-
-        {prefillPreferenceKey && (
-          <label className="block max-w-md">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">Auto-fill source</span>
-            <select
-              value={prefillPreferenceKey}
-              onChange={(e) =>
-                setField({
-                  prefill_from: {
-                    source: "user_preference",
-                    preference_key: (e.target.value || "diet_preference") as "diet_preference" | "allergies",
-                  },
-                })
-              }
-              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-            >
-              {PREFILL_PREFERENCE_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-        <p className="text-xs text-zinc-600">
-          Category mapping is managed from{" "}
-          <span className="font-medium text-zinc-700">Categories &rarr; Manage Questions</span>.
-        </p>
-      </div>
-
-      {showOptions && (
-        <div className="rounded-xl border border-zinc-200 p-4 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-900">
-                {value.question_type === "scale" ? "3) Accepted Units" : "3) Options"}{" "}
-                <span className="text-red-500">*</span>
-              </h3>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                {value.question_type === "scale"
-                  ? "Add every accepted unit users can submit (for example cm, ft)."
-                  : "Add answer choices users will see. Internal keys are auto-generated from labels."}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowOptionKeys((prev) => !prev)}
-              className="px-2.5 py-1.5 rounded-lg border border-zinc-300 text-xs text-zinc-700 hover:bg-zinc-50"
-            >
-              {showOptionKeys ? "Hide internal keys" : "Edit internal keys"}
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {options.map((option, index) => (
-              <div key={index} className="rounded-lg border border-zinc-200 p-3 space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label>
-                    <span className="mb-1 block text-xs font-medium text-zinc-600">
-                      Label shown to users
-                    </span>
-                    <input
-                      type="text"
-                      value={option.display_name}
-                      onChange={(e) => updateOption(index, { display_name: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                      placeholder={value.question_type === "scale" ? "e.g. Centimeters" : "e.g. Coastal"}
-                      required
-                    />
-                  </label>
-
-                  {showOptionKeys ? (
-                    <label>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Internal key</span>
-                      <input
-                        type="text"
-                        value={option.option_value}
-                        onChange={(e) => updateOption(index, { option_value: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono"
-                        placeholder={
-                          value.question_type === "scale"
-                            ? "e.g. cm"
-                            : `e.g. ${getSuggestedOptionValue(option.display_name, index)}`
-                        }
-                        required
-                      />
-                    </label>
-                  ) : (
-                    <div>
-                      <span className="mb-1 block text-xs font-medium text-zinc-600">Internal key</span>
-                      <div className="w-full px-3 py-2 rounded-lg border border-zinc-200 text-sm font-mono bg-zinc-50 text-zinc-600">
-                        {option.option_value || getSuggestedOptionValue(option.display_name, index)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={option.tooltip_text ?? ""}
-                    onChange={(e) => updateOption(index, { tooltip_text: e.target.value })}
-                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    placeholder={
-                      value.question_type === "scale"
-                        ? "Optional note for this unit"
-                        : "Tooltip text (optional)"
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeOption(index)}
-                    className="p-2 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50"
-                    aria-label="Remove option"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={addOption}
-              className="inline-flex items-center gap-1.5 text-sm text-zinc-600 hover:text-zinc-900"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add option
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mode === "add" && (
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">Status</label>
-          <select
-            value={value.status ?? "active"}
-            onChange={(e) => setField({ status: e.target.value })}
-            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-          >
-            {Q_STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>
-                {cap(status)}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {mode === "edit" && onToggleStatus && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 border border-zinc-200">
-          <div>
-            <p className="text-sm font-medium text-zinc-700">Status</p>
-            <StatusBadge status={currentStatus} />
-          </div>
-          <button
-            type="button"
-            onClick={onToggleStatus}
-            disabled={togglingStatus}
-            className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 transition-colors"
-          >
-            {togglingStatus ? "Updating..." : currentStatus === "active" ? "Deactivate" : "Activate"}
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-        >
-          {submitting ? "Saving..." : mode === "add" ? "Create Question" : "Save Changes"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
 
 export function AssessmentPackages() {
   const navigate = useNavigate();
@@ -961,40 +167,18 @@ export function AssessmentPackages() {
   const [qLoading, setQLoading] = useState(false);
   const [qError, setQError] = useState<string | null>(null);
 
-  // Question modal
+  // Question add/edit modal + view drawer
   const [qModalOpen, setQModalOpen] = useState(false);
-  const [qModalMode, setQModalMode] = useState<"view" | "add" | "edit">("add");
+  const [qModalMode, setQModalMode] = useState<"add" | "edit">("add");
+  const [qDrawerOpen, setQDrawerOpen] = useState(false);
+  const [qDrawerQuestionId, setQDrawerQuestionId] = useState<number | null>(null);
+  const [qDrawerTab, setQDrawerTab] = useState<QuestionDrawerTab>("overview");
   const [selectedQ, setSelectedQ] = useState<QuestionnaireQuestion | null>(null);
   const [qForm, setQForm] = useState<QuestionnaireQuestionCreate>({ ...BLANK_QUESTION });
   const [qSubmitting, setQSubmitting] = useState(false);
   const [qFormError, setQFormError] = useState<string | null>(null);
   const [qTogglingStatus, setQTogglingStatus] = useState(false);
-
-  const [habitRules, setHabitRules] = useState<QuestionnaireHealthyHabitRule[]>([]);
-  const [habitRulesLoading, setHabitRulesLoading] = useState(false);
-  const [habitRulesError, setHabitRulesError] = useState<string | null>(null);
-  const [habitRuleSaving, setHabitRuleSaving] = useState(false);
-  const [habitRuleFormError, setHabitRuleFormError] = useState<string | null>(null);
-  const [habitRuleEditingId, setHabitRuleEditingId] = useState<number | null>(null);
-  const [habitRuleForm, setHabitRuleForm] = useState({
-    habit_key: "",
-    habit_label: "",
-    display_order: "",
-    condition_type: "option_match" as "option_match" | "scale_range",
-    matched_option_values: [] as string[],
-    scale_min: "",
-    scale_max: "",
-    scale_unit: "",
-    status: "active",
-  });
-
-  // Metsights Sync modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [syncConfig, setSyncConfig] = useState<MetsightsSyncConfig>({});
-  const [syncSaving, setSyncSaving] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [syncPullParamsJson, setSyncPullParamsJson] = useState("");
-  const [syncPushParamsJson, setSyncPushParamsJson] = useState("");
 
   // Unsync'd questions warning state
   const [unsyncWarning, setUnsyncWarning] = useState<MetsightsSyncGapsResponse>({
@@ -1007,62 +191,15 @@ export function AssessmentPackages() {
   const [syncLogsOpen, setSyncLogsOpen] = useState(false);
   const unsyncDropdownRef = useRef<HTMLDivElement>(null);
 
-  const fetchHabitRulesForQuestion = useCallback(async (questionId: number) => {
-    setHabitRulesLoading(true);
-    setHabitRulesError(null);
-    try {
-      const res = await questionnaireHealthyHabitRulesApi.list(questionId);
-      setHabitRules(res.data.data ?? []);
-    } catch (error) {
-      setHabitRulesError(getApiError(error));
-      setHabitRules([]);
-    } finally {
-      setHabitRulesLoading(false);
-    }
-  }, []);
-
-  const resetHabitRuleForm = useCallback((questionType?: string | null) => {
-    setHabitRuleEditingId(null);
-    setHabitRuleFormError(null);
-    setHabitRuleForm({
-      habit_key: "",
-      habit_label: "",
-      display_order: "",
-      condition_type: questionType === "scale" ? "scale_range" : "option_match",
-      matched_option_values: [],
-      scale_min: "",
-      scale_max: "",
-      scale_unit: "",
-      status: "active",
-    });
-  }, []);
-
   const closeQuestionModal = useCallback(() => {
     setQModalOpen(false);
-    setHabitRules([]);
-    setHabitRulesError(null);
-    resetHabitRuleForm();
-  }, [resetHabitRuleForm]);
+  }, []);
 
-  useEffect(() => {
-    if (!qModalOpen || qModalMode !== "view" || !selectedQ?.question_id) {
-      return;
-    }
-    if (selectedQ.question_type === "text") {
-      setHabitRules([]);
-      resetHabitRuleForm("text");
-      return;
-    }
-    resetHabitRuleForm(selectedQ.question_type);
-    void fetchHabitRulesForQuestion(selectedQ.question_id);
-  }, [
-    qModalOpen,
-    qModalMode,
-    selectedQ?.question_id,
-    selectedQ?.question_type,
-    fetchHabitRulesForQuestion,
-    resetHabitRuleForm,
-  ]);
+  const closeQuestionDrawer = useCallback(() => {
+    setQDrawerOpen(false);
+    setQDrawerQuestionId(null);
+    setQDrawerTab("overview");
+  }, []);
 
   const fetchPackages = useCallback(async () => {
     setPkgLoading(true);
@@ -1495,17 +632,18 @@ export function AssessmentPackages() {
     setQModalOpen(true);
   };
 
+  const openQuestionDrawer = (questionId: number, tab: QuestionDrawerTab = "overview") => {
+    setQDrawerQuestionId(questionId);
+    setQDrawerTab(tab);
+    setQDrawerOpen(true);
+  };
+
   const openViewQuestion = (question: QuestionnaireQuestion) => {
-    questionnaireQuestionsApi.get(question.question_id)
-      .then((res) => {
-        setSelectedQ(res.data.data);
-        setQModalMode("view");
-        setQModalOpen(true);
-      })
-      .catch((error) => setQError(getApiError(error)));
+    openQuestionDrawer(question.question_id);
   };
 
   const openEditQuestion = (question: QuestionnaireQuestion) => {
+    setQDrawerOpen(false);
     questionnaireQuestionsApi.get(question.question_id)
       .then((res) => {
         const item = res.data.data;
@@ -1527,110 +665,6 @@ export function AssessmentPackages() {
         setQModalOpen(true);
       })
       .catch((error) => setQError(getApiError(error)));
-  };
-
-  const buildHealthyHabitPayload = (): QuestionnaireHealthyHabitRulePayload => {
-    const displayRaw = habitRuleForm.display_order.trim();
-    let displayOrder: number | null = null;
-    if (displayRaw !== "") {
-      const n = Number.parseInt(displayRaw, 10);
-      if (Number.isNaN(n)) {
-        throw new Error("Display order must be a whole number.");
-      }
-      displayOrder = n;
-    }
-    const base: QuestionnaireHealthyHabitRulePayload = {
-      habit_key: habitRuleForm.habit_key.trim() || null,
-      habit_label: habitRuleForm.habit_label.trim(),
-      display_order: displayOrder,
-      condition_type: habitRuleForm.condition_type,
-      status: habitRuleForm.status,
-      matched_option_values: null,
-      scale_min: null,
-      scale_max: null,
-      scale_unit: null,
-    };
-    if (!base.habit_label) {
-      throw new Error("Habit label is required.");
-    }
-    if (habitRuleForm.condition_type === "option_match") {
-      if (habitRuleForm.matched_option_values.length === 0) {
-        throw new Error("Select at least one option that counts as this habit.");
-      }
-      base.matched_option_values = [...habitRuleForm.matched_option_values];
-      return base;
-    }
-    const lo = Number.parseFloat(habitRuleForm.scale_min);
-    const hi = Number.parseFloat(habitRuleForm.scale_max);
-    if (Number.isNaN(lo) || Number.isNaN(hi)) {
-      throw new Error("Scale min and max must be valid numbers.");
-    }
-    if (!habitRuleForm.scale_unit.trim()) {
-      throw new Error("Select the unit for the scale range.");
-    }
-    base.scale_min = lo;
-    base.scale_max = hi;
-    base.scale_unit = habitRuleForm.scale_unit.trim();
-    return base;
-  };
-
-  const handleSaveHabitRule = async () => {
-    if (!selectedQ?.question_id) return;
-    setHabitRuleFormError(null);
-    let payload: QuestionnaireHealthyHabitRulePayload;
-    try {
-      payload = buildHealthyHabitPayload();
-    } catch (e) {
-      setHabitRuleFormError(e instanceof Error ? e.message : "Invalid form.");
-      return;
-    }
-    setHabitRuleSaving(true);
-    try {
-      if (habitRuleEditingId != null) {
-        await questionnaireHealthyHabitRulesApi.update(selectedQ.question_id, habitRuleEditingId, payload);
-      } else {
-        await questionnaireHealthyHabitRulesApi.create(selectedQ.question_id, payload);
-      }
-      await fetchHabitRulesForQuestion(selectedQ.question_id);
-      resetHabitRuleForm(selectedQ.question_type);
-    } catch (error) {
-      setHabitRuleFormError(getApiError(error));
-    } finally {
-      setHabitRuleSaving(false);
-    }
-  };
-
-  const handleDeleteHabitRule = async (ruleId: number) => {
-    if (!selectedQ?.question_id) return;
-    setHabitRuleSaving(true);
-    setHabitRuleFormError(null);
-    try {
-      await questionnaireHealthyHabitRulesApi.delete(selectedQ.question_id, ruleId);
-      await fetchHabitRulesForQuestion(selectedQ.question_id);
-      if (habitRuleEditingId === ruleId) {
-        resetHabitRuleForm(selectedQ.question_type);
-      }
-    } catch (error) {
-      setHabitRuleFormError(getApiError(error));
-    } finally {
-      setHabitRuleSaving(false);
-    }
-  };
-
-  const startEditHabitRule = (rule: QuestionnaireHealthyHabitRule) => {
-    setHabitRuleEditingId(rule.rule_id);
-    setHabitRuleFormError(null);
-    setHabitRuleForm({
-      habit_key: rule.habit_key ?? "",
-      habit_label: rule.habit_label,
-      display_order: rule.display_order != null ? String(rule.display_order) : "",
-      condition_type: rule.condition_type === "scale_range" ? "scale_range" : "option_match",
-      matched_option_values: rule.matched_option_values ? [...rule.matched_option_values] : [],
-      scale_min: rule.scale_min != null ? String(rule.scale_min) : "",
-      scale_max: rule.scale_max != null ? String(rule.scale_max) : "",
-      scale_unit: rule.scale_unit ?? "",
-      status: rule.status ?? "active",
-    });
   };
 
   const normalizeQuestionPayload = (form: QuestionnaireQuestionCreate): QuestionnaireQuestionUpdate => {
@@ -1714,6 +748,11 @@ export function AssessmentPackages() {
       }
       closeQuestionModal();
       fetchQuestions();
+      void fetchUnsyncWarning();
+      if (selectedQ && qDrawerQuestionId === selectedQ.question_id) {
+        const refreshed = await questionnaireQuestionsApi.get(selectedQ.question_id);
+        setSelectedQ(refreshed.data.data);
+      }
     } catch (error) {
       setQFormError(getApiError(error));
     } finally {
@@ -1736,76 +775,9 @@ export function AssessmentPackages() {
     }
   };
 
-  // Metsights Sync modal helpers
   const openSyncModal = (question: QuestionnaireQuestion) => {
-    const config = question.metsights_sync ?? {};
-    setSyncConfig(config);
-    setSyncError(null);
-    const { pull, push } = config;
-    const pullExtra = pull ? { ...pull } : {};
-    delete pullExtra.enabled;
-    delete pullExtra.strategy;
-    setSyncPullParamsJson(
-      Object.keys(pullExtra).length > 0 ? JSON.stringify(pullExtra, null, 2) : ""
-    );
-    const pushExtra = push ? { ...push } : {};
-    delete pushExtra.enabled;
-    delete pushExtra.strategy;
-    setSyncPushParamsJson(
-      Object.keys(pushExtra).length > 0 ? JSON.stringify(pushExtra, null, 2) : ""
-    );
+    setSelectedQ(question);
     setSyncModalOpen(true);
-  };
-
-  const updateSyncPull = (patch: Record<string, unknown>) => {
-    setSyncConfig((prev) => ({
-      ...prev,
-      pull: { ...prev.pull, ...patch },
-    }));
-  };
-
-  const updateSyncPush = (patch: Record<string, unknown>) => {
-    setSyncConfig((prev) => ({
-      ...prev,
-      push: { ...prev.push, ...patch },
-    }));
-  };
-
-  const handleSaveSyncConfig = async () => {
-    if (!selectedQ) return;
-    setSyncSaving(true);
-    setSyncError(null);
-    try {
-      let pullParams: Record<string, unknown> = {};
-      if (syncPullParamsJson.trim()) {
-        try { pullParams = JSON.parse(syncPullParamsJson); } catch { throw new Error("Pull params: invalid JSON"); }
-      }
-      let pushParams: Record<string, unknown> = {};
-      if (syncPushParamsJson.trim()) {
-        try { pushParams = JSON.parse(syncPushParamsJson); } catch { throw new Error("Push params: invalid JSON"); }
-      }
-      const finalConfig: MetsightsSyncConfig = {
-        pull: {
-          enabled: syncConfig.pull?.enabled ?? false,
-          strategy: syncConfig.pull?.strategy ?? "",
-          ...pullParams,
-        },
-        push: {
-          enabled: syncConfig.push?.enabled ?? false,
-          strategy: syncConfig.push?.strategy ?? "",
-          ...pushParams,
-        },
-      };
-      const res = await questionnaireQuestionsApi.updateMetsightsSync(selectedQ.question_id, finalConfig);
-      setSelectedQ(res.data.data);
-      setSyncModalOpen(false);
-      fetchQuestions();
-      void fetchUnsyncWarning();
-    } catch (error) {
-      setSyncError(error instanceof Error ? error.message : getApiError(error));
-    } finally {
-      setSyncSaving(false);
-    }
   };
 
   const openSyncModalFromGap = async (questionId: number) => {
@@ -1813,12 +785,17 @@ export function AssessmentPackages() {
       const res = await questionnaireQuestionsApi.get(questionId);
       const question = res.data.data;
       setSelectedQ(question);
-      setQModalMode("view");
-      setQModalOpen(true);
-      openSyncModal(question);
+      openQuestionDrawer(questionId, "sync");
+      setSyncModalOpen(true);
     } catch (error) {
       setQError(getApiError(error));
     }
+  };
+
+  const handleSyncSaved = (updated: QuestionnaireQuestion) => {
+    setSelectedQ(updated);
+    fetchQuestions();
+    void fetchUnsyncWarning();
   };
 
   // Unsync'd questions warning
@@ -2032,7 +1009,7 @@ export function AssessmentPackages() {
                 .then(() => fetchQuestions())
                 .catch((error) => setQError(getApiError(error)));
             }}
-            className={`inline-flex items-center w-12 h-6 rounded-full transition-colors ${isActive ? "bg-emerald-500" : "bg-zinc-300"}`}
+            className={`inline-flex items-center w-12 h-6 rounded-full transition-colors ${isActive ? "bg-zinc-900" : "bg-zinc-300"}`}
             aria-pressed={isActive}
             aria-label={`Set question ${isActive ? "inactive" : "active"}`}
           >
@@ -2098,16 +1075,9 @@ export function AssessmentPackages() {
                         <div className="flex items-start justify-between gap-2">
                           <button
                             type="button"
-                            onClick={async () => {
+                            onClick={() => {
                               setUnsyncWarningExpanded(false);
-                              try {
-                                const res = await questionnaireQuestionsApi.get(q.question_id);
-                                setSelectedQ(res.data.data);
-                                setQModalMode("view");
-                                setQModalOpen(true);
-                              } catch (error) {
-                                setQError(getApiError(error));
-                              }
+                              openQuestionDrawer(q.question_id);
                             }}
                             className="min-w-0 flex-1 text-left"
                           >
@@ -2122,7 +1092,7 @@ export function AssessmentPackages() {
                               setUnsyncWarningExpanded(false);
                               void openSyncModalFromGap(q.question_id);
                             }}
-                            className="shrink-0 text-[10px] font-medium text-blue-600 hover:text-blue-800"
+                            className="shrink-0 text-[10px] font-medium text-zinc-700 hover:text-zinc-900"
                           >
                             Configure
                           </button>
@@ -2131,15 +1101,15 @@ export function AssessmentPackages() {
                           {q.metsights_categories.map((cat) => (
                             <span
                               key={cat.category_id}
-                              className="inline-flex px-1 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700"
+                              className="inline-flex px-1 py-0.5 rounded text-[10px] bg-zinc-100 text-zinc-700"
                             >
                               {cat.category_key ?? cat.display_name}
                             </span>
                           ))}
-                          <span className={`inline-flex px-1 py-0.5 rounded text-[10px] ${q.sync_gaps.pull_disabled ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                          <span className={`inline-flex px-1 py-0.5 rounded text-[10px] ${q.sync_gaps.pull_disabled ? "bg-red-50 text-red-600" : "bg-zinc-100 text-zinc-700"}`}>
                             Pull {q.sync_gaps.pull_disabled ? "OFF" : "ON"}
                           </span>
-                          <span className={`inline-flex px-1 py-0.5 rounded text-[10px] ${q.sync_gaps.push_disabled ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>
+                          <span className={`inline-flex px-1 py-0.5 rounded text-[10px] ${q.sync_gaps.push_disabled ? "bg-red-50 text-red-600" : "bg-zinc-100 text-zinc-700"}`}>
                             Push {q.sync_gaps.push_disabled ? "OFF" : "ON"}
                           </span>
                         </div>
@@ -3164,484 +2134,49 @@ export function AssessmentPackages() {
         </div>
       </Modal>
 
+      <QuestionDetailDrawer
+        open={qDrawerOpen}
+        questionId={qDrawerQuestionId}
+        initialTab={qDrawerTab}
+        onClose={closeQuestionDrawer}
+        onEdit={(question) => openEditQuestion(question)}
+        onConfigureSync={(question) => openSyncModal(question)}
+        onUpdated={(question) => {
+          setSelectedQ(question);
+          fetchQuestions();
+        }}
+      />
+
       <Modal
         open={qModalOpen}
         onClose={closeQuestionModal}
-        title={qModalMode === "add" ? "Add Question" : qModalMode === "edit" ? "Edit Question" : "Question Details"}
-        maxWidthClassName="max-w-3xl"
-      >
-        {qModalMode === "view" && selectedQ ? (
-          <div className="space-y-4">
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-zinc-500 mb-1">Question Key</dt>
-                <dd className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded inline-block">
-                  {selectedQ.question_key ?? "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-zinc-500 mb-1">Question Text</dt>
-                <dd className="text-zinc-900 font-medium leading-relaxed">{selectedQ.question_text ?? "—"}</dd>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-zinc-500 mb-1">Type</dt>
-                  <dd>
-                    <span className="font-mono text-xs bg-zinc-100 px-1.5 py-0.5 rounded">
-                      {selectedQ.question_type ?? "—"}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-zinc-500 mb-1">Status</dt>
-                  <dd>
-                    <StatusBadge status={selectedQ.status} />
-                  </dd>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <dt className="text-zinc-500 mb-1">Required</dt>
-                  <dd className="text-zinc-900">{selectedQ.is_required ? "Yes" : "No"}</dd>
-                </div>
-                <div>
-                  <dt className="text-zinc-500 mb-1">Read Only</dt>
-                  <dd className="text-zinc-900">{selectedQ.is_read_only ? "Yes" : "No"}</dd>
-                </div>
-              </div>
-              {selectedQ.help_text && (
-                <div>
-                  <dt className="text-zinc-500 mb-1">Help Text</dt>
-                  <dd className="text-zinc-700">{selectedQ.help_text}</dd>
-                </div>
-              )}
-              {(selectedQ.visibility_rules || selectedQ.prefill_from) && (
-                <div>
-                  <dt className="text-zinc-500 mb-1">Conditional Logic</dt>
-                  <dd className="text-zinc-700 text-xs">
-                    {selectedQ.visibility_rules ? JSON.stringify(selectedQ.visibility_rules) : "No visibility rules"}
-                    {selectedQ.prefill_from ? ` | Prefill: ${JSON.stringify(selectedQ.prefill_from)}` : ""}
-                  </dd>
-                </div>
-              )}
-              {selectedQ.options && selectedQ.options.length > 0 && (
-                <div>
-                  <dt className="text-zinc-500 mb-1">
-                    {selectedQ.question_type === "scale" ? "Accepted Units" : "Options"}
-                  </dt>
-                  <dd>
-                    <ul className="space-y-2">
-                      {selectedQ.options.map((option, index) => (
-                        <li key={`${option.option_value}-${index}`} className="p-2 rounded border border-zinc-200 bg-zinc-50">
-                          <p className="text-sm text-zinc-900">
-                            <span className="font-mono">{option.option_value}</span> - {option.display_name}
-                          </p>
-                          {option.tooltip_text && (
-                            <p className="text-xs text-zinc-500 mt-0.5">{option.tooltip_text}</p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </dd>
-                </div>
-              )}
-            </dl>
-            {selectedQ.question_type !== "text" && (
-              <div className="border border-emerald-200 bg-emerald-50/40 rounded-lg p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-zinc-900">Healthy habit rules</h3>
-                <p className="text-xs text-zinc-600">
-                  When a participant&apos;s answer matches a rule, the habit can appear in their report overview (top
-                  three by display order).
-                </p>
-                {habitRulesLoading ? (
-                  <p className="text-sm text-zinc-500">Loading rules…</p>
-                ) : habitRulesError ? (
-                  <p className="text-sm text-red-600">{habitRulesError}</p>
-                ) : habitRules.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No rules yet.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {habitRules.map((rule) => (
-                      <li
-                        key={rule.rule_id}
-                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 rounded border border-zinc-200 bg-white text-sm"
-                      >
-                        <div>
-                          <span className="font-medium text-zinc-900">{rule.habit_label}</span>
-                          {rule.habit_key && (
-                            <span className="ml-2 font-mono text-xs text-zinc-500">{rule.habit_key}</span>
-                          )}
-                          <div className="text-xs text-zinc-500 mt-0.5">
-                            {rule.condition_type}
-                            {rule.condition_type === "option_match" && rule.matched_option_values?.length
-                              ? ` · ${rule.matched_option_values.join(", ")}`
-                              : ""}
-                            {rule.condition_type === "scale_range"
-                              ? ` · ${rule.scale_unit ?? ""} ${rule.scale_min ?? ""}–${rule.scale_max ?? ""}`
-                              : ""}
-                            {" · "}
-                            order {rule.display_order ?? "—"} · {rule.status}
-                          </div>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => startEditHabitRule(rule)}
-                            className="px-2 py-1 text-xs rounded border border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteHabitRule(rule.rule_id)}
-                            disabled={habitRuleSaving}
-                            className="px-2 py-1 text-xs rounded border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {habitRuleFormError && <p className="text-sm text-red-600">{habitRuleFormError}</p>}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-emerald-200 pt-3">
-                  <label className="block text-xs text-zinc-600 sm:col-span-2">
-                    Habit label *
-                    <input
-                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                      value={habitRuleForm.habit_label}
-                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, habit_label: e.target.value }))}
-                      placeholder="e.g. No Alcohol"
-                    />
-                  </label>
-                  <label className="block text-xs text-zinc-600">
-                    Habit key (optional)
-                    <input
-                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm font-mono"
-                      value={habitRuleForm.habit_key}
-                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, habit_key: e.target.value }))}
-                      placeholder="slug_for_app"
-                    />
-                  </label>
-                  <label className="block text-xs text-zinc-600">
-                    Display order
-                    <input
-                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                      value={habitRuleForm.display_order}
-                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, display_order: e.target.value }))}
-                      placeholder="lower first"
-                    />
-                  </label>
-                  <label className="block text-xs text-zinc-600 sm:col-span-2">
-                    Condition
-                    <select
-                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                      value={habitRuleForm.condition_type}
-                      onChange={(e) =>
-                        setHabitRuleForm((p) => ({
-                          ...p,
-                          condition_type: e.target.value as "option_match" | "scale_range",
-                          matched_option_values: [],
-                          scale_min: "",
-                          scale_max: "",
-                          scale_unit: "",
-                        }))
-                      }
-                    >
-                      <option value="option_match">Option match (single / multiple choice)</option>
-                      {selectedQ.question_type === "scale" && <option value="scale_range">Scale range</option>}
-                    </select>
-                  </label>
-                  {habitRuleForm.condition_type === "option_match" &&
-                    selectedQ.options &&
-                    selectedQ.options.length > 0 && (
-                      <div className="sm:col-span-2">
-                        <p className="text-xs text-zinc-600 mb-1">Matching option values</p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedQ.options.map((opt) => {
-                            const v = opt.option_value ?? "";
-                            const checked = habitRuleForm.matched_option_values.includes(v);
-                            return (
-                              <label key={v} className="inline-flex items-center gap-1 text-xs text-zinc-800">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    setHabitRuleForm((p) => ({
-                                      ...p,
-                                      matched_option_values: checked
-                                        ? p.matched_option_values.filter((x) => x !== v)
-                                        : [...p.matched_option_values, v],
-                                    }))
-                                  }
-                                />
-                                <span className="font-mono">{v}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  {habitRuleForm.condition_type === "scale_range" && (
-                    <>
-                      <label className="block text-xs text-zinc-600 sm:col-span-2">
-                        Unit
-                        <select
-                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                          value={habitRuleForm.scale_unit}
-                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_unit: e.target.value }))}
-                        >
-                          <option value="">Select unit</option>
-                          {(selectedQ.options ?? []).map((opt) => (
-                            <option key={opt.option_value} value={opt.option_value ?? ""}>
-                              {opt.option_value} — {opt.display_name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block text-xs text-zinc-600">
-                        Min (inclusive)
-                        <input
-                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                          value={habitRuleForm.scale_min}
-                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_min: e.target.value }))}
-                        />
-                      </label>
-                      <label className="block text-xs text-zinc-600">
-                        Max (inclusive)
-                        <input
-                          className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                          value={habitRuleForm.scale_max}
-                          onChange={(e) => setHabitRuleForm((p) => ({ ...p, scale_max: e.target.value }))}
-                        />
-                      </label>
-                    </>
-                  )}
-                  <label className="block text-xs text-zinc-600 sm:col-span-2">
-                    Rule status
-                    <select
-                      className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-                      value={habitRuleForm.status}
-                      onChange={(e) => setHabitRuleForm((p) => ({ ...p, status: e.target.value }))}
-                    >
-                      <option value="active">active</option>
-                      <option value="inactive">inactive</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveHabitRule()}
-                    disabled={habitRuleSaving}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 disabled:opacity-50"
-                  >
-                    {habitRuleSaving ? "Saving…" : habitRuleEditingId != null ? "Update rule" : "Add rule"}
-                  </button>
-                  {habitRuleEditingId != null && (
-                    <button
-                      type="button"
-                      onClick={() => resetHabitRuleForm(selectedQ.question_type)}
-                      disabled={habitRuleSaving}
-                      className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                    >
-                      Cancel edit
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {/* Metsights Sync summary */}
-            {selectedQ.metsights_sync && (
-              <div className="border border-blue-200 bg-blue-50/40 rounded-lg p-3 text-sm">
-                <p className="font-medium text-zinc-800 mb-1">Metsights Sync</p>
-                <div className="flex flex-wrap gap-3 text-xs text-zinc-600">
-                  <span>Pull: {selectedQ.metsights_sync.pull?.enabled ? "Enabled" : "Disabled"}{selectedQ.metsights_sync.pull?.strategy ? ` (${selectedQ.metsights_sync.pull.strategy})` : ""}</span>
-                  <span>Push: {selectedQ.metsights_sync.push?.enabled ? "Enabled" : "Disabled"}{selectedQ.metsights_sync.push?.strategy ? ` (${selectedQ.metsights_sync.push.strategy})` : ""}</span>
-                </div>
-              </div>
-            )}
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <button
-                onClick={() => openEditQuestion(selectedQ)}
-                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors"
-              >
-                Edit Question
-              </button>
-              <button
-                onClick={() => openSyncModal(selectedQ)}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                Configure Metsights Sync
-              </button>
-              <button
-                onClick={async () => {
-                  const next = selectedQ.status === "active" ? "inactive" : "active";
-                  setQTogglingStatus(true);
-                  try {
-                    await questionnaireQuestionsApi.updateStatus(selectedQ.question_id, next);
-                    setSelectedQ({ ...selectedQ, status: next });
-                    fetchQuestions();
-                  } catch (error) {
-                    setQError(getApiError(error));
-                  } finally {
-                    setQTogglingStatus(false);
-                  }
-                }}
-                disabled={qTogglingStatus}
-                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 transition-colors"
-              >
-                {qTogglingStatus ? "Updating..." : selectedQ.status === "active" ? "Deactivate" : "Activate"}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <QuestionForm
-            value={qForm}
-            onChange={setQForm}
-            availableQuestionKeys={qData
-              .map((question) => question.question_key ?? "")
-              .filter((item) => item.length > 0)}
-            mode={qModalMode as "add" | "edit"}
-            error={qFormError}
-            submitting={qSubmitting}
-            currentStatus={selectedQ?.status}
-            togglingStatus={qTogglingStatus}
-            onToggleStatus={handleToggleQuestionStatus}
-            onSubmit={handleQuestionSubmit}
-            onCancel={closeQuestionModal}
-          />
-        )}
-      </Modal>
-
-      {/* Metsights Sync Config Modal */}
-      <Modal
-        open={syncModalOpen}
-        onClose={() => setSyncModalOpen(false)}
-        title="Configure Metsights Sync"
+        title={qModalMode === "add" ? "Add Question" : "Edit Question"}
         maxWidthClassName="max-w-2xl"
       >
-        <div className="space-y-5">
-          {syncError && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              {syncError}
-            </div>
-          )}
-
-          {/* Pull section */}
-          <div className="border border-zinc-200 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-900">Pull Configuration</h3>
-              <button
-                type="button"
-                onClick={() => updateSyncPull({ enabled: !syncConfig.pull?.enabled })}
-                className={`inline-flex items-center w-11 h-6 rounded-full transition-colors ${syncConfig.pull?.enabled ? "bg-emerald-500" : "bg-zinc-300"}`}
-                aria-pressed={!!syncConfig.pull?.enabled}
-              >
-                <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${syncConfig.pull?.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-600 mb-1">Strategy</label>
-              <select
-                value={syncConfig.pull?.strategy ?? ""}
-                onChange={(e) => {
-                  updateSyncPull({ strategy: e.target.value, enabled: false });
-                  setSyncPullParamsJson("");
-                }}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-              >
-                <option value="">Select strategy</option>
-                {PULL_STRATEGIES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            {syncConfig.pull?.strategy && STRATEGY_HAS_JSON_PARAMS.has(syncConfig.pull.strategy) && (
-              <div>
-                <label className="block text-xs text-zinc-600 mb-1">
-                  Additional params (JSON)
-                </label>
-                <textarea
-                  value={syncPullParamsJson}
-                  onChange={(e) => {
-                    setSyncPullParamsJson(e.target.value);
-                    updateSyncPull({ enabled: false });
-                  }}
-                  rows={4}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  placeholder={`e.g. {"unit_codes": ["kg"], "buckets": [...]}`}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Push section */}
-          <div className="border border-zinc-200 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-900">Push Configuration</h3>
-              <button
-                type="button"
-                onClick={() => updateSyncPush({ enabled: !syncConfig.push?.enabled })}
-                className={`inline-flex items-center w-11 h-6 rounded-full transition-colors ${syncConfig.push?.enabled ? "bg-emerald-500" : "bg-zinc-300"}`}
-                aria-pressed={!!syncConfig.push?.enabled}
-              >
-                <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${syncConfig.push?.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-600 mb-1">Strategy</label>
-              <select
-                value={syncConfig.push?.strategy ?? ""}
-                onChange={(e) => {
-                  updateSyncPush({ strategy: e.target.value, enabled: false });
-                  setSyncPushParamsJson("");
-                }}
-                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
-              >
-                <option value="">Select strategy</option>
-                {PUSH_STRATEGIES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            {syncConfig.push?.strategy && STRATEGY_HAS_JSON_PARAMS.has(syncConfig.push.strategy) && (
-              <div>
-                <label className="block text-xs text-zinc-600 mb-1">
-                  Additional params (JSON)
-                </label>
-                <textarea
-                  value={syncPushParamsJson}
-                  onChange={(e) => {
-                    setSyncPushParamsJson(e.target.value);
-                    updateSyncPush({ enabled: false });
-                  }}
-                  rows={4}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  placeholder={`e.g. {"choice_map": {...}, "bucket_map": {...}}`}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
-            <button
-              onClick={() => void handleSaveSyncConfig()}
-              disabled={syncSaving}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-            >
-              {syncSaving ? "Saving..." : "Save Sync Config"}
-            </button>
-            <button
-              onClick={() => setSyncModalOpen(false)}
-              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <QuestionForm
+          value={qForm}
+          onChange={setQForm}
+          availableQuestionKeys={qData
+            .map((question) => question.question_key ?? "")
+            .filter((item) => item.length > 0)}
+          mode={qModalMode}
+          error={qFormError}
+          submitting={qSubmitting}
+          currentStatus={selectedQ?.status}
+          togglingStatus={qTogglingStatus}
+          onToggleStatus={handleToggleQuestionStatus}
+          onSubmit={handleQuestionSubmit}
+          onCancel={closeQuestionModal}
+        />
       </Modal>
+
+      <MetsightsSyncConfigModal
+        open={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        question={selectedQ}
+        onSaved={handleSyncSaved}
+      />
+
     </div>
   );
 }
