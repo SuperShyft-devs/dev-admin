@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Loader2, Save } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
+  assessmentPackagesApi,
   assessmentsApi,
   participantJourneyApi,
   usersApi,
@@ -111,18 +112,69 @@ export function ParticipantJourneyPage() {
     }
   };
 
-  const handleImportAnswers = async (instanceId: number) => {
+  const handleImportAnswers = async (row: ParticipantJourneyInstanceSummary) => {
+    const instanceId = row.assessment_instance_id;
     setImportingInstanceId(instanceId);
     setImportFeedback(null);
     try {
-      const res = await assessmentsApi.importMetsightsAnswers(instanceId);
-      const result = res.data.data;
-      const skipped = result.skipped_questions.length;
+      const catsRes = await assessmentPackagesApi.listCategories(row.package_id);
+      const metsightsCategories = (catsRes.data.data ?? []).filter(
+        (cat) => cat.category_of === "metsights" && (cat.category_key ?? "").trim()
+      );
+
+      if (metsightsCategories.length === 0) {
+        setImportFeedback({
+          type: "error",
+          message: "No Metsights categories are assigned to this assessment package.",
+        });
+        return;
+      }
+
+      let totalImported = 0;
+      let categoriesSkipped = 0;
+      const errors: string[] = [];
+
+      for (const cat of metsightsCategories) {
+        try {
+          const res = await assessmentsApi.importMetsightsCategoryAnswers(instanceId, {
+            category: cat.category_key!.trim(),
+            category_of: "metsights",
+            reload: 1,
+          });
+          const result = res.data.data;
+          if (result.status === "skipped") {
+            categoriesSkipped += 1;
+          } else {
+            totalImported += result.responses_imported ?? 0;
+          }
+        } catch (err) {
+          errors.push(`${cat.category_key}: ${getApiError(err)}`);
+        }
+      }
+
+      if (errors.length === metsightsCategories.length) {
+        setImportFeedback({
+          type: "error",
+          message: errors.join(" · "),
+        });
+        return;
+      }
+
+      const parts: string[] = [
+        `Imported ${totalImported} answer${totalImported === 1 ? "" : "s"} from Metsights`,
+      ];
+      if (categoriesSkipped > 0) {
+        parts.push(
+          `${categoriesSkipped} categor${categoriesSkipped === 1 ? "y" : "ies"} already had responses`
+        );
+      }
+      if (errors.length > 0) {
+        parts.push(`partial errors: ${errors.join(" · ")}`);
+      }
+
       setImportFeedback({
-        type: "success",
-        message: `Imported ${result.responses_upserted} answer${result.responses_upserted === 1 ? "" : "s"} from Metsights${
-          skipped > 0 ? ` (${skipped} field${skipped === 1 ? "" : "s"} skipped)` : ""
-        }.`,
+        type: errors.length > 0 ? "error" : "success",
+        message: parts.join(" · "),
       });
       await loadSummary();
       await refreshDetailIfOpen(instanceId);
@@ -214,7 +266,7 @@ export function ParticipantJourneyPage() {
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          void handleImportAnswers(row.assessment_instance_id);
+          void handleImportAnswers(row);
         }}
         disabled={!hasRecord || importingInstanceId !== null}
         className={`p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-400 ${className}`}

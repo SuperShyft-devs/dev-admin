@@ -473,8 +473,37 @@ export interface MetsightsImportAnswersResult {
   skipped_questions: string[];
 }
 
+export interface MetsightsCategoryImportRequest {
+  category: string;
+  category_of?: string;
+  reload?: number;
+}
+
+export interface MetsightsCategoryImportResult {
+  assessment_instance_id: number;
+  category: string;
+  metsights_record_id?: string;
+  responses_imported?: number;
+  skipped?: string[];
+  status?: string;
+  reason?: string;
+}
+
 export const assessmentsApi = {
-  importMetsightsAnswers: (assessmentInstanceId: number) =>
+  importMetsightsCategoryAnswers: (
+    assessmentInstanceId: number,
+    payload: MetsightsCategoryImportRequest
+  ) =>
+    api.post<{ data: MetsightsCategoryImportResult }>(
+      `/assessments/${assessmentInstanceId}/metsights/import-answers`,
+      {
+        category_of: "metsights",
+        reload: 0,
+        ...payload,
+      },
+      { timeout: 120_000 }
+    ),
+  importMetsightsAnswersLegacy: (assessmentInstanceId: number) =>
     api.post<{ data: MetsightsImportAnswersResult }>(
       `/assessments/${assessmentInstanceId}/metsights/import-answers-legacy`,
       undefined,
