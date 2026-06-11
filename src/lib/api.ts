@@ -476,7 +476,7 @@ export interface MetsightsImportAnswersResult {
 export const assessmentsApi = {
   importMetsightsAnswers: (assessmentInstanceId: number) =>
     api.post<{ data: MetsightsImportAnswersResult }>(
-      `/assessments/${assessmentInstanceId}/metsights/import-answers`,
+      `/assessments/${assessmentInstanceId}/metsights/import-answers-legacy`,
       undefined,
       { timeout: 120_000 }
     ),
