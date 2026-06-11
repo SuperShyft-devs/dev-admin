@@ -1369,6 +1369,8 @@ export const questionnaireQuestionsApi = {
     ),
   listMetsightsSyncGaps: () =>
     api.get<{ data: MetsightsSyncGapsResponse }>("/questionnaire/questions/metsights-sync-gaps"),
+  resetMetsightsSync: () =>
+    api.post<{ data: MetsightsSyncResetResponse }>("/questionnaire/metsights-sync/reset"),
 };
 
 export interface MetsightsSyncGapsCategoryRef {
@@ -1397,6 +1399,21 @@ export interface MetsightsSyncGapsResponse {
     push_disabled: number;
   };
   questions: MetsightsSyncGapsItem[];
+}
+
+export interface MetsightsSyncResetResponse {
+  schema_upgraded?: boolean;
+  categories_total: number;
+  categories_created: number;
+  categories_updated: number;
+  categories_unchanged: number;
+  question_links_total: number;
+  links_added: number;
+  questions_sync_updated: number;
+  package_links_total: number;
+  package_links_added: number;
+  missing_question_keys: string[];
+  missing_package_codes: string[];
 }
 
 export interface IntegrationSyncLog {

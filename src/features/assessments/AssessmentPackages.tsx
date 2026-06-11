@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, ScrollText, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, RefreshCw, ScrollText, Search } from "lucide-react";
 import { IntegrationSyncLogsModal } from "./IntegrationSyncLogsModal";
 import { MetsightsSyncConfigModal } from "./questions/MetsightsSyncConfigModal";
 import { QuestionDetailDrawer, type QuestionDrawerTab } from "./questions/QuestionDetailDrawer";
@@ -37,6 +37,7 @@ import {
   type QuestionnaireQuestionCreate,
   type QuestionnaireQuestionUpdate,
   type MetsightsSyncGapsResponse,
+  type MetsightsSyncResetResponse,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -189,6 +190,10 @@ export function AssessmentPackages() {
   const [unsyncWarningExpanded, setUnsyncWarningExpanded] = useState(false);
   const [unsyncWarningLoading, setUnsyncWarningLoading] = useState(false);
   const [syncLogsOpen, setSyncLogsOpen] = useState(false);
+  const [resetSyncOpen, setResetSyncOpen] = useState(false);
+  const [resetSyncLoading, setResetSyncLoading] = useState(false);
+  const [resetSyncError, setResetSyncError] = useState<string | null>(null);
+  const [resetSyncResult, setResetSyncResult] = useState<MetsightsSyncResetResponse | null>(null);
   const unsyncDropdownRef = useRef<HTMLDivElement>(null);
 
   const closeQuestionModal = useCallback(() => {
@@ -798,6 +803,22 @@ export function AssessmentPackages() {
     void fetchUnsyncWarning();
   };
 
+  const handleResetMetsightsSync = async () => {
+    setResetSyncLoading(true);
+    setResetSyncError(null);
+    setResetSyncResult(null);
+    try {
+      const res = await questionnaireQuestionsApi.resetMetsightsSync();
+      setResetSyncResult(res.data.data);
+      await fetchQuestions();
+      await fetchUnsyncWarning();
+    } catch (error) {
+      setResetSyncError(getApiError(error));
+    } finally {
+      setResetSyncLoading(false);
+    }
+  };
+
   // Unsync'd questions warning
   const fetchUnsyncWarning = useCallback(async () => {
     setUnsyncWarningLoading(true);
@@ -1120,6 +1141,21 @@ export function AssessmentPackages() {
               )}
             </div>
           )}
+          {activeTab === "questions" && (
+            <button
+              type="button"
+              onClick={() => {
+                setResetSyncError(null);
+                setResetSyncResult(null);
+                setResetSyncOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
+              title="Reset Metsights sync categories, assignments, and configs from codebase registry"
+            >
+              <RefreshCw className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Reset Metsights Sync</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setSyncLogsOpen(true)}
@@ -1160,6 +1196,110 @@ export function AssessmentPackages() {
       </div>
 
       <IntegrationSyncLogsModal open={syncLogsOpen} onClose={() => setSyncLogsOpen(false)} />
+
+      <Modal
+        open={resetSyncOpen}
+        onClose={() => {
+          if (!resetSyncLoading) setResetSyncOpen(false);
+        }}
+        title="Reset Metsights Sync"
+      >
+        <div className="space-y-4">
+          {!resetSyncResult ? (
+            <>
+              <p className="text-sm text-zinc-600">
+                This will create or update the four Metsights API categories (
+                <span className="font-medium text-zinc-800">physical-measurement</span>,{" "}
+                <span className="font-medium text-zinc-800">vitals</span>,{" "}
+                <span className="font-medium text-zinc-800">diet-lifestyle-parameters</span>,{" "}
+                <span className="font-medium text-zinc-800">fitness-parameters</span>
+                ), assign questions by <code className="text-xs bg-zinc-100 px-1 rounded">question_key</code>, and
+                overwrite <code className="text-xs bg-zinc-100 px-1 rounded">metsights_sync</code> from the codebase
+                registry.
+              </p>
+              <p className="text-sm text-zinc-500">
+                Existing SuperShyft UX categories and question definitions are not changed.
+              </p>
+              {resetSyncError && (
+                <p className="text-sm text-red-600">{resetSyncError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetSyncOpen(false)}
+                  disabled={resetSyncLoading}
+                  className="px-4 py-2 text-sm font-medium text-zinc-700 border border-zinc-300 rounded-lg hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleResetMetsightsSync()}
+                  disabled={resetSyncLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {resetSyncLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Reset
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-700 font-medium">Metsights sync reset complete.</p>
+              <ul className="text-sm text-zinc-600 space-y-1.5">
+                <li>
+                  <span className="font-medium text-zinc-800">{resetSyncResult.categories_total}</span> Metsights categories configured
+                  {(resetSyncResult.categories_created > 0 || resetSyncResult.categories_updated > 0) && (
+                    <span className="text-zinc-500">
+                      {" "}
+                      ({resetSyncResult.categories_created > 0 && `${resetSyncResult.categories_created} created`}
+                      {resetSyncResult.categories_created > 0 && resetSyncResult.categories_updated > 0 && ", "}
+                      {resetSyncResult.categories_updated > 0 && `${resetSyncResult.categories_updated} updated`})
+                    </span>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{resetSyncResult.question_links_total}</span> question-to-category links assigned
+                  {resetSyncResult.links_added > 0 && (
+                    <span className="text-zinc-500"> ({resetSyncResult.links_added} new)</span>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{resetSyncResult.questions_sync_updated}</span> sync configs applied
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{resetSyncResult.package_links_total}</span> package links configured
+                  {resetSyncResult.package_links_added > 0 && (
+                    <span className="text-zinc-500"> ({resetSyncResult.package_links_added} new)</span>
+                  )}
+                </li>
+              </ul>
+              {resetSyncResult.schema_upgraded && (
+                <p className="text-sm text-zinc-500">Database schema upgraded for Metsights category keys.</p>
+              )}
+              {resetSyncResult.missing_question_keys.length > 0 && (
+                <p className="text-sm text-amber-700">
+                  Missing questions: {resetSyncResult.missing_question_keys.join(", ")}
+                </p>
+              )}
+              {resetSyncResult.missing_package_codes.length > 0 && (
+                <p className="text-sm text-amber-700">
+                  Missing packages: {resetSyncResult.missing_package_codes.join(", ")}
+                </p>
+              )}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetSyncOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
         {TAB_KEYS.map((tab) => (
