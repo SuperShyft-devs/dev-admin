@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, Search, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -30,6 +30,7 @@ import {
   type QuestionnaireQuestionCreate,
   type QuestionnaireQuestionUpdate,
   type QuestionnaireVisibilityCondition,
+  type MetsightsSyncConfig,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -45,6 +46,38 @@ const QUESTION_TYPES = [
 ] as const;
 const OPTION_SUPPORTED_TYPES = new Set(["single_choice", "multiple_choice", "scale"]);
 const PREFILL_PREFERENCE_KEYS = ["diet_preference", "allergies"] as const;
+
+const CATEGORY_OF_OPTIONS = ["supershyft", "metsights"] as const;
+
+const PULL_STRATEGIES = [
+  "passthrough",
+  "scale_ingest",
+  "choice_ingest",
+  "scale_to_bucket",
+  "string_boolean",
+  "list_to_single",
+] as const;
+
+const PUSH_STRATEGIES = [
+  "passthrough",
+  "scale_emit",
+  "choice_remap",
+  "bucket_to_scale",
+  "boolean_string",
+  "single_to_list",
+  "list_to_single",
+  "skip_if_only",
+] as const;
+
+const STRATEGY_HAS_JSON_PARAMS = new Set([
+  "scale_to_bucket",
+  "choice_remap",
+  "bucket_to_scale",
+  "choice_ingest",
+  "scale_ingest",
+  "scale_emit",
+  "skip_if_only",
+]);
 
 type TabKey = "packages" | "categories" | "questions";
 const TAB_KEYS: TabKey[] = ["packages", "categories", "questions"];
@@ -65,6 +98,7 @@ const BLANK_QUESTION: QuestionnaireQuestionCreate = {
 const BLANK_CATEGORY: QuestionnaireCategoryCreate = {
   category_key: "",
   display_name: "",
+  category_of: "supershyft",
 };
 
 function cap(value: string) {
@@ -878,6 +912,7 @@ export function AssessmentPackages() {
   const [catLimit] = useState(12);
   const [catSearch, setCatSearch] = useState("");
   const [catStatusFilter, setCatStatusFilter] = useState("");
+  const [catCategoryOfFilter, setCatCategoryOfFilter] = useState("");
   const [catSortKey, setCatSortKey] = useState<"display_name" | "category_key" | "category_id">("category_id");
   const [catSortDir, setCatSortDir] = useState<"asc" | "desc">("desc");
   const [catLoading, setCatLoading] = useState(false);
@@ -950,6 +985,19 @@ export function AssessmentPackages() {
     scale_unit: "",
     status: "active",
   });
+
+  // Metsights Sync modal state
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncConfig, setSyncConfig] = useState<MetsightsSyncConfig>({});
+  const [syncSaving, setSyncSaving] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncPullParamsJson, setSyncPullParamsJson] = useState("");
+  const [syncPushParamsJson, setSyncPushParamsJson] = useState("");
+
+  // Unsync'd questions warning state
+  const [unsyncWarning, setUnsyncWarning] = useState<{ count: number; questions: { question_id: number; question_key?: string | null; question_text?: string | null }[] }>({ count: 0, questions: [] });
+  const [unsyncWarningExpanded, setUnsyncWarningExpanded] = useState(false);
+  const [unsyncWarningLoading, setUnsyncWarningLoading] = useState(false);
 
   const fetchHabitRulesForQuestion = useCallback(async (questionId: number) => {
     setHabitRulesLoading(true);
@@ -1070,7 +1118,11 @@ export function AssessmentPackages() {
     setCatError(null);
     try {
       let rows = await fetchAllPages<QuestionnaireCategory>((page, limit) =>
-        questionnaireCategoriesApi.list({ page, limit })
+        questionnaireCategoriesApi.list({
+          page,
+          limit,
+          category_of: catCategoryOfFilter || undefined,
+        })
       );
       if (catSearch.trim()) {
         const search = catSearch.trim().toLowerCase();
@@ -1095,7 +1147,7 @@ export function AssessmentPackages() {
     } finally {
       setCatLoading(false);
     }
-  }, [catLimit, catPage, catSearch, catSortDir, catSortKey, catStatusFilter]);
+  }, [catCategoryOfFilter, catLimit, catPage, catSearch, catSortDir, catSortKey, catStatusFilter]);
 
   useEffect(() => {
     if (activeTab === "categories") {
@@ -1105,7 +1157,7 @@ export function AssessmentPackages() {
 
   useEffect(() => {
     setCatPage(1);
-  }, [catSearch, catStatusFilter]);
+  }, [catSearch, catStatusFilter, catCategoryOfFilter]);
 
   const fetchQuestions = useCallback(async () => {
     setQLoading(true);
@@ -1291,6 +1343,7 @@ export function AssessmentPackages() {
     setCatForm({
       category_key: category.category_key,
       display_name: category.display_name,
+      category_of: category.category_of ?? "supershyft",
     });
     setCatFormError(null);
     setCatModalOpen(true);
@@ -1308,11 +1361,13 @@ export function AssessmentPackages() {
         await questionnaireCategoriesApi.create({
           category_key: catForm.category_key,
           display_name: catForm.display_name,
+          category_of: catForm.category_of || "supershyft",
         });
       } else if (catModalMode === "edit" && selectedCat) {
         await questionnaireCategoriesApi.update(selectedCat.category_id, {
           category_key: catForm.category_key,
           display_name: catForm.display_name,
+          category_of: catForm.category_of || "supershyft",
         });
       }
       setCatModalOpen(false);
@@ -1673,6 +1728,126 @@ export function AssessmentPackages() {
     }
   };
 
+  // Metsights Sync modal helpers
+  const openSyncModal = (question: QuestionnaireQuestion) => {
+    const config = question.metsights_sync ?? {};
+    setSyncConfig(config);
+    setSyncError(null);
+    const { pull, push } = config;
+    const pullExtra = pull ? { ...pull } : {};
+    delete pullExtra.enabled;
+    delete pullExtra.strategy;
+    setSyncPullParamsJson(
+      Object.keys(pullExtra).length > 0 ? JSON.stringify(pullExtra, null, 2) : ""
+    );
+    const pushExtra = push ? { ...push } : {};
+    delete pushExtra.enabled;
+    delete pushExtra.strategy;
+    setSyncPushParamsJson(
+      Object.keys(pushExtra).length > 0 ? JSON.stringify(pushExtra, null, 2) : ""
+    );
+    setSyncModalOpen(true);
+  };
+
+  const updateSyncPull = (patch: Record<string, unknown>) => {
+    setSyncConfig((prev) => ({
+      ...prev,
+      pull: { ...prev.pull, ...patch },
+    }));
+  };
+
+  const updateSyncPush = (patch: Record<string, unknown>) => {
+    setSyncConfig((prev) => ({
+      ...prev,
+      push: { ...prev.push, ...patch },
+    }));
+  };
+
+  const handleSaveSyncConfig = async () => {
+    if (!selectedQ) return;
+    setSyncSaving(true);
+    setSyncError(null);
+    try {
+      let pullParams: Record<string, unknown> = {};
+      if (syncPullParamsJson.trim()) {
+        try { pullParams = JSON.parse(syncPullParamsJson); } catch { throw new Error("Pull params: invalid JSON"); }
+      }
+      let pushParams: Record<string, unknown> = {};
+      if (syncPushParamsJson.trim()) {
+        try { pushParams = JSON.parse(syncPushParamsJson); } catch { throw new Error("Push params: invalid JSON"); }
+      }
+      const finalConfig: MetsightsSyncConfig = {
+        pull: {
+          enabled: syncConfig.pull?.enabled ?? false,
+          strategy: syncConfig.pull?.strategy ?? "",
+          ...pullParams,
+        },
+        push: {
+          enabled: syncConfig.push?.enabled ?? false,
+          strategy: syncConfig.push?.strategy ?? "",
+          ...pushParams,
+        },
+      };
+      const res = await questionnaireQuestionsApi.updateMetsightsSync(selectedQ.question_id, finalConfig);
+      setSelectedQ(res.data.data);
+      setSyncModalOpen(false);
+      fetchQuestions();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : getApiError(error));
+    } finally {
+      setSyncSaving(false);
+    }
+  };
+
+  // Unsync'd questions warning
+  const fetchUnsyncWarning = useCallback(async () => {
+    setUnsyncWarningLoading(true);
+    try {
+      const metsightsCats = await fetchAllPages<QuestionnaireCategory>((page, limit) =>
+        questionnaireCategoriesApi.list({ page, limit, category_of: "metsights" })
+      );
+      if (metsightsCats.length === 0) {
+        setUnsyncWarning({ count: 0, questions: [] });
+        return;
+      }
+      const questionMap = new Map<number, QuestionnaireQuestion>();
+      await Promise.all(
+        metsightsCats.map(async (cat) => {
+          try {
+            const res = await questionnaireCategoriesApi.listQuestions(cat.category_id);
+            for (const q of res.data.data) {
+              questionMap.set(q.question_id, q);
+            }
+          } catch { /* skip */ }
+        })
+      );
+      const unsynced = Array.from(questionMap.values()).filter((q) => {
+        const ms = q.metsights_sync;
+        if (!ms) return true;
+        if (!ms.pull?.enabled || !ms.push?.enabled) return true;
+        return false;
+      });
+      setUnsyncWarning({
+        count: unsynced.length,
+        questions: unsynced.map((q) => ({
+          question_id: q.question_id,
+          question_key: q.question_key,
+          question_text: q.question_text,
+        })),
+      });
+    } catch {
+      setUnsyncWarning({ count: 0, questions: [] });
+    } finally {
+      setUnsyncWarningLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "questions") {
+      fetchUnsyncWarning();
+    }
+  }, [activeTab, fetchUnsyncWarning]);
+
   const availableCategoriesForPackage = useMemo(() => {
     const mappedIds = new Set(pkgCategories.map((category) => category.category_id));
     const filtered = allCategoriesForPackage.filter((category) => !mappedIds.has(category.category_id));
@@ -1993,6 +2168,15 @@ export function AssessmentPackages() {
             </div>
             <div className="flex flex-row gap-2 flex-wrap sm:flex-nowrap">
               <select
+                value={catCategoryOfFilter}
+                onChange={(e) => setCatCategoryOfFilter(e.target.value)}
+                className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">All sources</option>
+                <option value="supershyft">SuperShyft</option>
+                <option value="metsights">Metsights</option>
+              </select>
+              <select
                 value={catStatusFilter}
                 onChange={(e) => setCatStatusFilter(e.target.value)}
                 className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
@@ -2044,7 +2228,12 @@ export function AssessmentPackages() {
                       <p className="text-base font-semibold text-zinc-900 truncate">{category.display_name}</p>
                       <p className="text-xs text-zinc-500 font-mono mt-0.5">{category.category_key}</p>
                     </div>
-                    <StatusBadge status={category.status} />
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <StatusBadge status={category.status} />
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${category.category_of === "metsights" ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700"}`}>
+                        {category.category_of === "metsights" ? "Metsights" : "SuperShyft"}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-4 flex items-center gap-2">
                     <button
@@ -2119,6 +2308,37 @@ export function AssessmentPackages() {
               <button onClick={() => setQError(null)} className="shrink-0 text-red-400 hover:text-red-600">
                 ✕
               </button>
+            </div>
+          )}
+          {!unsyncWarningLoading && unsyncWarning.count > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50">
+              <button
+                type="button"
+                onClick={() => setUnsyncWarningExpanded((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+              >
+                <div className="flex items-center gap-2 text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>
+                    <span className="font-semibold">{unsyncWarning.count}</span> question{unsyncWarning.count !== 1 ? "s" : ""} in Metsights categories {unsyncWarning.count !== 1 ? "have" : "has"} incomplete sync config
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-amber-600 transition-transform ${unsyncWarningExpanded ? "rotate-180" : ""}`} />
+              </button>
+              {unsyncWarningExpanded && (
+                <div className="px-4 pb-3 max-h-48 overflow-y-auto">
+                  <ul className="divide-y divide-amber-200">
+                    {unsyncWarning.questions.map((q) => (
+                      <li key={q.question_id} className="py-2 flex items-start gap-2 text-sm">
+                        <span className="font-mono text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                          {q.question_key ?? `#${q.question_id}`}
+                        </span>
+                        <span className="text-zinc-700 line-clamp-1">{q.question_text ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           <div className="mb-4 flex flex-col sm:flex-row gap-3">
@@ -2372,7 +2592,14 @@ export function AssessmentPackages() {
                       <div className="flex items-start sm:items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-zinc-900 leading-snug">{category.display_name ?? "—"}</p>
-                          <p className="text-xs text-zinc-400 mt-0.5 font-mono">{category.category_key ?? "—"}</p>
+                          <p className="text-xs text-zinc-400 mt-0.5">
+                            <span className="font-mono">{category.category_key ?? "—"}</span>
+                            {category.category_of && (
+                              <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${category.category_of === "metsights" ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700"}`}>
+                                {category.category_of === "metsights" ? "Metsights" : "SuperShyft"}
+                              </span>
+                            )}
+                          </p>
                         </div>
                         <button
                           onClick={() => handleRemoveCategoryFromPackage(category.category_id)}
@@ -2501,6 +2728,14 @@ export function AssessmentPackages() {
                   <StatusBadge status={selectedCat.status} />
                 </dd>
               </div>
+              <div>
+                <dt className="text-zinc-500 mb-1">Category Of</dt>
+                <dd>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${selectedCat.category_of === "metsights" ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700"}`}>
+                    {selectedCat.category_of === "metsights" ? "Metsights" : "SuperShyft"}
+                  </span>
+                </dd>
+              </div>
             </dl>
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
@@ -2556,6 +2791,18 @@ export function AssessmentPackages() {
                 required
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Category Of</label>
+              <select
+                value={catForm.category_of ?? "supershyft"}
+                onChange={(e) => setCatForm({ ...catForm, category_of: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                {CATEGORY_OF_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{cap(opt)}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
               <button
                 type="submit"
@@ -2590,7 +2837,12 @@ export function AssessmentPackages() {
                   <p className="text-sm text-zinc-500">Category Key</p>
                   <p className="text-sm font-mono text-zinc-800">{catDetailsCategory.category_key}</p>
                 </div>
-                <StatusBadge status={catDetailsCategory.status} />
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${catDetailsCategory.category_of === "metsights" ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700"}`}>
+                    {catDetailsCategory.category_of === "metsights" ? "Metsights" : "SuperShyft"}
+                  </span>
+                  <StatusBadge status={catDetailsCategory.status} />
+                </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -3107,12 +3359,28 @@ export function AssessmentPackages() {
                 </div>
               </div>
             )}
+            {/* Metsights Sync summary */}
+            {selectedQ.metsights_sync && (
+              <div className="border border-blue-200 bg-blue-50/40 rounded-lg p-3 text-sm">
+                <p className="font-medium text-zinc-800 mb-1">Metsights Sync</p>
+                <div className="flex flex-wrap gap-3 text-xs text-zinc-600">
+                  <span>Pull: {selectedQ.metsights_sync.pull?.enabled ? "Enabled" : "Disabled"}{selectedQ.metsights_sync.pull?.strategy ? ` (${selectedQ.metsights_sync.pull.strategy})` : ""}</span>
+                  <span>Push: {selectedQ.metsights_sync.push?.enabled ? "Enabled" : "Disabled"}{selectedQ.metsights_sync.push?.strategy ? ` (${selectedQ.metsights_sync.push.strategy})` : ""}</span>
+                </div>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => openEditQuestion(selectedQ)}
                 className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors"
               >
                 Edit Question
+              </button>
+              <button
+                onClick={() => openSyncModal(selectedQ)}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                Configure Metsights Sync
               </button>
               <button
                 onClick={async () => {
@@ -3152,6 +3420,134 @@ export function AssessmentPackages() {
             onCancel={closeQuestionModal}
           />
         )}
+      </Modal>
+
+      {/* Metsights Sync Config Modal */}
+      <Modal
+        open={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        title="Configure Metsights Sync"
+        maxWidthClassName="max-w-2xl"
+      >
+        <div className="space-y-5">
+          {syncError && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {syncError}
+            </div>
+          )}
+
+          {/* Pull section */}
+          <div className="border border-zinc-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-900">Pull Configuration</h3>
+              <button
+                type="button"
+                onClick={() => updateSyncPull({ enabled: !syncConfig.pull?.enabled })}
+                className={`inline-flex items-center w-11 h-6 rounded-full transition-colors ${syncConfig.pull?.enabled ? "bg-emerald-500" : "bg-zinc-300"}`}
+                aria-pressed={!!syncConfig.pull?.enabled}
+              >
+                <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${syncConfig.pull?.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-600 mb-1">Strategy</label>
+              <select
+                value={syncConfig.pull?.strategy ?? ""}
+                onChange={(e) => {
+                  updateSyncPull({ strategy: e.target.value, enabled: false });
+                  setSyncPullParamsJson("");
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">Select strategy</option>
+                {PULL_STRATEGIES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            {syncConfig.pull?.strategy && STRATEGY_HAS_JSON_PARAMS.has(syncConfig.pull.strategy) && (
+              <div>
+                <label className="block text-xs text-zinc-600 mb-1">
+                  Additional params (JSON)
+                </label>
+                <textarea
+                  value={syncPullParamsJson}
+                  onChange={(e) => {
+                    setSyncPullParamsJson(e.target.value);
+                    updateSyncPull({ enabled: false });
+                  }}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder={`e.g. {"unit_codes": ["kg"], "buckets": [...]}`}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Push section */}
+          <div className="border border-zinc-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-900">Push Configuration</h3>
+              <button
+                type="button"
+                onClick={() => updateSyncPush({ enabled: !syncConfig.push?.enabled })}
+                className={`inline-flex items-center w-11 h-6 rounded-full transition-colors ${syncConfig.push?.enabled ? "bg-emerald-500" : "bg-zinc-300"}`}
+                aria-pressed={!!syncConfig.push?.enabled}
+              >
+                <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${syncConfig.push?.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-600 mb-1">Strategy</label>
+              <select
+                value={syncConfig.push?.strategy ?? ""}
+                onChange={(e) => {
+                  updateSyncPush({ strategy: e.target.value, enabled: false });
+                  setSyncPushParamsJson("");
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
+              >
+                <option value="">Select strategy</option>
+                {PUSH_STRATEGIES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            {syncConfig.push?.strategy && STRATEGY_HAS_JSON_PARAMS.has(syncConfig.push.strategy) && (
+              <div>
+                <label className="block text-xs text-zinc-600 mb-1">
+                  Additional params (JSON)
+                </label>
+                <textarea
+                  value={syncPushParamsJson}
+                  onChange={(e) => {
+                    setSyncPushParamsJson(e.target.value);
+                    updateSyncPush({ enabled: false });
+                  }}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder={`e.g. {"choice_map": {...}, "bucket_map": {...}}`}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            <button
+              onClick={() => void handleSaveSyncConfig()}
+              disabled={syncSaving}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+            >
+              {syncSaving ? "Saving..." : "Save Sync Config"}
+            </button>
+            <button
+              onClick={() => setSyncModalOpen(false)}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

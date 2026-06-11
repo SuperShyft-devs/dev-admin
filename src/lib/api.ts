@@ -938,6 +938,7 @@ export interface AssessmentPackageCategory {
   category_id: number;
   category_key?: string | null;
   display_name?: string | null;
+  category_of?: string | null;
   display_order?: number | null;
   status?: string | null;
 }
@@ -1070,6 +1071,11 @@ export type QuestionnaireQuestionType =
   | "scale"
   | string;
 
+export interface MetsightsSyncConfig {
+  pull?: { enabled?: boolean; strategy?: string; [key: string]: unknown };
+  push?: { enabled?: boolean; strategy?: string; [key: string]: unknown };
+}
+
 export interface QuestionnaireQuestion {
   question_id: number;
   question_key?: string | null;
@@ -1081,6 +1087,7 @@ export interface QuestionnaireQuestion {
   options?: QuestionnaireOption[] | null;
   visibility_rules?: QuestionnaireVisibilityRules | null;
   prefill_from?: QuestionnairePrefillFrom | null;
+  metsights_sync?: MetsightsSyncConfig | null;
   status?: string | null;
   created_at?: string | null;
   category_id?: number | null;
@@ -1145,17 +1152,20 @@ export interface QuestionnaireCategory {
   category_id: number;
   category_key: string;
   display_name: string;
+  category_of?: string | null;
   status?: string | null;
 }
 
 export interface QuestionnaireCategoryCreate {
   category_key: string;
   display_name: string;
+  category_of?: string;
 }
 
 export interface QuestionnaireCategoryUpdate {
   category_key: string;
   display_name: string;
+  category_of?: string;
 }
 
 // Participants
@@ -1323,6 +1333,11 @@ export const questionnaireQuestionsApi = {
       `/questionnaire/questions/${id}/status`,
       { status }
     ),
+  updateMetsightsSync: (id: number, metsights_sync: MetsightsSyncConfig) =>
+    api.put<{ data: QuestionnaireQuestion }>(
+      `/questionnaire/questions/${id}/metsights-sync`,
+      { metsights_sync }
+    ),
 };
 
 export const questionnaireHealthyHabitRulesApi = {
@@ -1347,7 +1362,7 @@ export const questionnaireHealthyHabitRulesApi = {
 };
 
 export const questionnaireCategoriesApi = {
-  list: (params?: { page?: number; limit?: number }) =>
+  list: (params?: { page?: number; limit?: number; category_of?: string; status?: string }) =>
     api.get<{ data: QuestionnaireCategory[]; meta: { page: number; limit: number; total: number } }>(
       "/questionnaire/categories",
       { params: { ...params, limit: params?.limit ?? 100 } }
