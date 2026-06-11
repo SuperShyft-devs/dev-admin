@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, ListTree, Info, AlertTriangle } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { Engagements } from "../engagements/Engagements";
 import {
   usersApi,
   employeesApi,
@@ -59,6 +60,9 @@ export function Users() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [userEngagements, setUserEngagements] = useState<{ id: number; name: string }[]>([]);
+  const [engagementDetailId, setEngagementDetailId] = useState<number | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("view");
@@ -139,14 +143,31 @@ export function Users() {
   }, []);
 
   const openView = (row: UserListItem) => {
+    setUserEngagements([]);
     usersApi
       .get(row.user_id)
       .then((res) => {
         setSelected(res.data.data);
         setModalMode("view");
         setModalOpen(true);
+        participantJourneyApi.summary(row.user_id, { page: 1, limit: 1 })
+          .then(jRes => {
+            const instances = jRes.data.data.instances ?? [];
+            if (instances.length > 0) {
+              const i = instances[0];
+              setUserEngagements([{
+                id: i.engagement_id,
+                name: i.engagement_name || i.engagement_code || `Engagement #${i.engagement_id}`
+              }]);
+            }
+          })
+          .catch(() => {});
       })
       .catch((err) => setError(getApiError(err)));
+  };
+
+  const handleOpenEngagement = (id: number) => {
+    setEngagementDetailId(id);
   };
 
   const openAdd = () => {
@@ -660,6 +681,20 @@ export function Users() {
                 {field("Referred By", selected.referred_by)}
                 {field("Created", formatDate(selected.created_at))}
                 {field("Updated", formatDate(selected.updated_at))}
+                {userEngagements.length > 0 ? (
+                  <div>
+                    <span className="text-zinc-500 text-xs uppercase tracking-wide">Engagement</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEngagement(userEngagements[0].id)}
+                      className="text-zinc-900 mt-0.5 hover:underline font-medium text-left block"
+                    >
+                      {userEngagements[0].name}
+                    </button>
+                  </div>
+                ) : (
+                  field("Engagement", "—")
+                )}
               </div>
             </div>
             {/* Actions in view */}
@@ -1160,6 +1195,14 @@ export function Users() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Engagement Detail Modal */}
+      {engagementDetailId && (
+        <Engagements
+          asModalForEngagementId={engagementDetailId}
+          onCloseModal={() => setEngagementDetailId(null)}
+        />
       )}
     </div>
   );
