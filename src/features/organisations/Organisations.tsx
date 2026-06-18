@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, Users } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
 import {
   organizationsApi,
   employeesApi,
   uploadsApi,
+  usersApi,
   type EmployeeListItem,
   type UserListItem,
   type OrganizationListItem,
@@ -49,9 +51,7 @@ export function Organisations() {
     city: "",
     state: "",
     country: "",
-    contact_name: "",
-    contact_email: "",
-    contact_phone: "",
+    contact_person: undefined,
     contact_designation: "",
     bd_employee_id: undefined,
   });
@@ -71,6 +71,7 @@ export function Organisations() {
     orgName?: string;
   } | null>(null);
 
+  const [contactPersonLabel, setContactPersonLabel] = useState<string | null>(null);
   const [createEngagementPromptOpen, setCreateEngagementPromptOpen] = useState(false);
   const [createdOrgForEngagement, setCreatedOrgForEngagement] = useState<{
     organization_id: number;
@@ -147,11 +148,28 @@ export function Organisations() {
     setPage(1);
   }, [search, statusFilter, cityFilter, countryFilter]);
 
+  const loadContactPersonLabel = useCallback(async (userId?: number | null) => {
+    if (!userId) {
+      setContactPersonLabel(null);
+      return;
+    }
+    try {
+      const res = await usersApi.get(userId);
+      const user = res.data.data;
+      const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+      setContactPersonLabel(name || user.email || user.phone || `User #${userId}`);
+    } catch {
+      setContactPersonLabel(`User #${userId}`);
+    }
+  }, []);
+
   const openView = (row: OrganizationListItem) => {
     organizationsApi.get(row.organization_id).then((res) => {
-      setSelected(res.data.data);
+      const org = res.data.data;
+      setSelected(org);
       setModalMode("view");
       setModalOpen(true);
+      void loadContactPersonLabel(org.contact_person);
     }).catch((err) => setError(getApiError(err)));
   };
 
@@ -167,9 +185,7 @@ export function Organisations() {
       city: "",
       state: "",
       country: "",
-      contact_name: "",
-      contact_email: "",
-      contact_phone: "",
+      contact_person: undefined,
       contact_designation: "",
       bd_employee_id: undefined,
     });
@@ -192,9 +208,7 @@ export function Organisations() {
         city: o.city ?? "",
         state: o.state ?? "",
         country: o.country ?? "",
-        contact_name: o.contact_name ?? "",
-        contact_email: o.contact_email ?? "",
-        contact_phone: o.contact_phone ?? "",
+        contact_person: o.contact_person ?? undefined,
         contact_designation: o.contact_designation ?? "",
         bd_employee_id: o.bd_employee_id ?? undefined,
       });
@@ -209,11 +223,15 @@ export function Organisations() {
     setSubmitting(true);
     try {
       let createdOrganizationId: number | null = null;
+      const payload: OrganizationCreate = {
+        ...formData,
+        contact_person: formData.contact_person && formData.contact_person > 0 ? formData.contact_person : null,
+      };
       if (modalMode === "add") {
-        const created = await organizationsApi.create(formData);
+        const created = await organizationsApi.create(payload);
         createdOrganizationId = created.data.data.organization_id;
       } else if (selected) {
-        await organizationsApi.update(selected.organization_id, formData);
+        await organizationsApi.update(selected.organization_id, payload);
       }
       if (modalMode === "add") {
         setModalOpen(false);
@@ -433,10 +451,8 @@ export function Organisations() {
               <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
               <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
               <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
-              <div><span className="text-zinc-500">Contact:</span> {selected.contact_name ?? "—"}</div>
+              <div><span className="text-zinc-500">Contact Person:</span> {contactPersonLabel ?? "—"}</div>
               <div><span className="text-zinc-500">Designation:</span> {selected.contact_designation ?? "—"}</div>
-              <div><span className="text-zinc-500">Email:</span> {selected.contact_email ?? "—"}</div>
-              <div><span className="text-zinc-500">Phone:</span> {selected.contact_phone ?? "—"}</div>
               <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
               <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
             </div>
@@ -577,12 +593,16 @@ export function Organisations() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Name</label>
-                <input
-                  type="text"
-                  value={formData.contact_name ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                <UserSearchPicker
+                  label="Contact Person"
+                  value={formData.contact_person ?? 0}
+                  onChange={(userId) =>
+                    setFormData({
+                      ...formData,
+                      contact_person: userId > 0 ? userId : undefined,
+                    })
+                  }
+                  placeholder="Search users by name, phone, or email…"
                 />
               </div>
               <div>
@@ -591,24 +611,6 @@ export function Organisations() {
                   type="text"
                   value={formData.contact_designation ?? ""}
                   onChange={(e) => setFormData({ ...formData, contact_designation: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Email</label>
-                <input
-                  type="email"
-                  value={formData.contact_email ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Phone</label>
-                <input
-                  type="text"
-                  value={formData.contact_phone ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>

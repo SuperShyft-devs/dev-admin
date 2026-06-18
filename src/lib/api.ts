@@ -594,9 +594,7 @@ export interface Organization {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
+  contact_person?: number | null;
   contact_designation?: string | null;
   bd_employee_id?: number | null;
   status?: string | null;
@@ -628,9 +626,7 @@ export interface OrganizationCreate {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
+  contact_person?: number | null;
   contact_designation?: string | null;
   bd_employee_id?: number | null;
 }
@@ -665,6 +661,17 @@ export const organizationsApi = {
       `/organizations/${id}/status`,
       { status }
     ),
+  listCamps: (organizationId: number) =>
+    api.get<{ data: { camp_no: number[] } }>(`/organizations/${organizationId}/camps`),
+};
+
+export const campReportsApi = {
+  calculate: (campNo: number) =>
+    api.post<{ data: Record<string, unknown> }>(`/reports/camp/${campNo}/calculate`),
+  getChart: (campNo: number, params: { chart: string; department?: string }) =>
+    api.get<{ message: string; data: Record<string, unknown> }>(`/reports/camp/${campNo}`, {
+      params,
+    }),
 };
 
 // Experts (doctors & nutritionists)
@@ -797,6 +804,7 @@ export interface Engagement {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  camp_no?: number | null;
 }
 
 export interface EngagementListItem {
@@ -823,6 +831,7 @@ export interface EngagementListItem {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  camp_no?: number | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -848,6 +857,7 @@ export interface EngagementCreate {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  camp_no?: number | null;
 }
 
 export const engagementsApi = {

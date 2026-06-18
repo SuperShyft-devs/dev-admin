@@ -716,6 +716,7 @@ export function Engagements({
     questionnaire_reminder_2: null,
     blood_report_notification: null,
     bioai_report_notification: null,
+    camp_no: undefined,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -1227,6 +1228,7 @@ export function Engagements({
         questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
         blood_report_notification: e.blood_report_notification ?? null,
         bioai_report_notification: e.bioai_report_notification ?? null,
+        camp_no: e.camp_no ?? undefined,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1273,6 +1275,7 @@ export function Engagements({
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
           bioai_report_notification: formData.bioai_report_notification || null,
+          camp_no: formData.camp_no && formData.camp_no > 0 ? formData.camp_no : null,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1312,6 +1315,7 @@ export function Engagements({
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
           bioai_report_notification: formData.bioai_report_notification || null,
+          camp_no: formData.camp_no && formData.camp_no > 0 ? formData.camp_no : null,
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1726,6 +1730,7 @@ export function Engagements({
             <div><span className="text-zinc-500">Metsights Engagement ID:</span> {selected.metsights_engagement_id ?? "—"}</div>
             <div><span className="text-zinc-500">Code:</span> {selected.engagement_code ?? "—"}</div>
             <div><span className="text-zinc-500">Organisation:</span> {getOrgName(selected.organization_id ?? 0)}</div>
+            <div><span className="text-zinc-500">Camp No:</span> {selected.camp_no ?? "—"}</div>
             <div><span className="text-zinc-500">Type:</span> {selected.engagement_type ?? "—"}</div>
             <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
             <div><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
@@ -2066,6 +2071,26 @@ export function Engagements({
                   onChange={(e) => setFormData({ ...formData, engagement_code: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Camp No</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.camp_no ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    setFormData({
+                      ...formData,
+                      camp_no: raw ? Number(raw) : undefined,
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder="Assign camp number for HR dashboard"
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Multiple engagements in the same organisation can share a camp number. Camp numbers cannot be reused across organisations.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
