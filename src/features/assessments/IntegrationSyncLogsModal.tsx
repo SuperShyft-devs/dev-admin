@@ -5,6 +5,7 @@ import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "..
 
 type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
+type SyncLogsVariant = "metsights" | "n8n";
 
 const STATUS_OPTIONS = ["pending", "success", "failed"] as const;
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
@@ -47,6 +48,27 @@ function inferOperation(log: IntegrationSyncLog): "push" | "pull" | "unknown" {
 function parseCategoryFromUrl(url: string): string {
   const match = url.match(/\/records\/[^/]+\/([^/]+)\/?$/);
   return match?.[1] ?? "—";
+}
+
+function parseWebhookFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname.replace(/^\/+|\/+$/g, "");
+    const segments = pathname.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "—";
+  } catch {
+    const trimmed = url.replace(/\/+$/g, "");
+    const segments = trimmed.split("/").filter(Boolean);
+    return segments[segments.length - 1] ?? "—";
+  }
+}
+
+function parseNotificationId(log: IntegrationSyncLog): string {
+  const payload = log.request_payload;
+  if (payload && typeof payload === "object" && !Array.isArray(payload) && "notification_id" in payload) {
+    const id = payload.notification_id;
+    return id == null ? "—" : String(id);
+  }
+  return "—";
 }
 
 function getTimeRange(preset: TimePreset): { from?: string; to?: string } {
@@ -131,10 +153,17 @@ function PayloadPanel({
 export function IntegrationSyncLogsModal({
   open,
   onClose,
+  variant = "metsights",
 }: {
   open: boolean;
   onClose: () => void;
+  variant?: SyncLogsVariant;
 }) {
+  const isN8n = variant === "n8n";
+  const defaultProvider = isN8n ? "n8n" : "metsights";
+  const modalTitle = isN8n ? "Notification Sync Logs" : "Integration Sync Logs";
+  const columnCount = isN8n ? 5 : 7;
+
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,11 +173,23 @@ export function IntegrationSyncLogsModal({
 
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [timePreset, setTimePreset] = useState<TimePreset>("1h");
-  const [provider, setProvider] = useState("metsights");
+  const [provider, setProvider] = useState(defaultProvider);
   const [userIdFilter, setUserIdFilter] = useState("");
   const [engagementIdFilter, setEngagementIdFilter] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payloadTab, setPayloadTab] = useState<PayloadTab>("request");
+
+  useEffect(() => {
+    if (open) {
+      setProvider(defaultProvider);
+      setPage(1);
+      setStatusFilters([]);
+      setTimePreset("1h");
+      setUserIdFilter("");
+      setEngagementIdFilter("");
+      setExpandedId(null);
+    }
+  }, [open, defaultProvider]);
 
   const listParams = useMemo(() => {
     const range = getTimeRange(timePreset);
@@ -157,13 +198,13 @@ export function IntegrationSyncLogsModal({
     return {
       page,
       limit,
-      provider: provider || undefined,
+      provider: isN8n ? "n8n" : provider || undefined,
       status: statusFilters.length ? statusFilters.join(",") : undefined,
-      user_id: Number.isFinite(userId) && userId! > 0 ? userId : undefined,
-      engagement_id: Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
+      user_id: !isN8n && Number.isFinite(userId) && userId! > 0 ? userId : undefined,
+      engagement_id: !isN8n && Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
       ...range,
     };
-  }, [page, limit, provider, statusFilters, timePreset, userIdFilter, engagementIdFilter]);
+  }, [page, limit, provider, statusFilters, timePreset, userIdFilter, engagementIdFilter, isN8n]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -197,7 +238,7 @@ export function IntegrationSyncLogsModal({
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <Modal open={open} onClose={onClose} title="Integration Sync Logs" maxWidthClassName="max-w-5xl">
+    <Modal open={open} onClose={onClose} title={modalTitle} maxWidthClassName="max-w-5xl">
       <div className="space-y-4 max-h-[75vh] flex flex-col">
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs text-zinc-500 mr-1">Status</span>
@@ -241,28 +282,32 @@ export function IntegrationSyncLogsModal({
               {preset.label}
             </button>
           ))}
-          <select
-            value={provider}
-            onChange={(e) => { setProvider(e.target.value); setPage(1); }}
-            className="px-2 py-1 rounded-lg border border-zinc-300 text-xs bg-white"
-          >
-            <option value="metsights">metsights</option>
-            <option value="">All providers</option>
-          </select>
-          <input
-            type="number"
-            placeholder="User ID"
-            value={userIdFilter}
-            onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-            className="w-24 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
-          />
-          <input
-            type="number"
-            placeholder="Engagement ID"
-            value={engagementIdFilter}
-            onChange={(e) => { setEngagementIdFilter(e.target.value); setPage(1); }}
-            className="w-32 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
-          />
+          {!isN8n && (
+            <>
+              <select
+                value={provider}
+                onChange={(e) => { setProvider(e.target.value); setPage(1); }}
+                className="px-2 py-1 rounded-lg border border-zinc-300 text-xs bg-white"
+              >
+                <option value="metsights">metsights</option>
+                <option value="">All providers</option>
+              </select>
+              <input
+                type="number"
+                placeholder="User ID"
+                value={userIdFilter}
+                onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
+                className="w-24 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
+              />
+              <input
+                type="number"
+                placeholder="Engagement ID"
+                value={engagementIdFilter}
+                onChange={(e) => { setEngagementIdFilter(e.target.value); setPage(1); }}
+                className="w-32 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
+              />
+            </>
+          )}
         </div>
 
         {error && (
@@ -283,10 +328,19 @@ export function IntegrationSyncLogsModal({
                   <th className="px-3 py-2 w-8" />
                   <th className="px-3 py-2">Time</th>
                   <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Op</th>
-                  <th className="px-3 py-2">Category</th>
-                  <th className="px-3 py-2">User</th>
-                  <th className="px-3 py-2">Engagement</th>
+                  {isN8n ? (
+                    <>
+                      <th className="px-3 py-2">Webhook</th>
+                      <th className="px-3 py-2">Notification ID</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-3 py-2">Op</th>
+                      <th className="px-3 py-2">Category</th>
+                      <th className="px-3 py-2">User</th>
+                      <th className="px-3 py-2">Engagement</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -307,18 +361,27 @@ export function IntegrationSyncLogsModal({
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</td>
                         <td className="px-3 py-2"><StatusBadge status={log.status} /></td>
-                        <td className="px-3 py-2">
-                          <span className={`text-xs font-medium ${op === "push" ? "text-blue-700" : op === "pull" ? "text-violet-700" : "text-zinc-500"}`}>
-                            {op}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 font-mono text-xs">{parseCategoryFromUrl(log.api_endpoint_url)}</td>
-                        <td className="px-3 py-2 text-xs">{log.user_id ?? "—"}</td>
-                        <td className="px-3 py-2 text-xs">{log.engagement_id ?? "—"}</td>
+                        {isN8n ? (
+                          <>
+                            <td className="px-3 py-2 font-mono text-xs">{parseWebhookFromUrl(log.api_endpoint_url)}</td>
+                            <td className="px-3 py-2 text-xs">{parseNotificationId(log)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2">
+                              <span className={`text-xs font-medium ${op === "push" ? "text-blue-700" : op === "pull" ? "text-violet-700" : "text-zinc-500"}`}>
+                                {op}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-xs">{parseCategoryFromUrl(log.api_endpoint_url)}</td>
+                            <td className="px-3 py-2 text-xs">{log.user_id ?? "—"}</td>
+                            <td className="px-3 py-2 text-xs">{log.engagement_id ?? "—"}</td>
+                          </>
+                        )}
                       </tr>
                       {expanded && (
                         <tr>
-                          <td colSpan={7} className="px-3 py-3 bg-zinc-50">
+                          <td colSpan={columnCount} className="px-3 py-3 bg-zinc-50">
                             <div className="flex gap-2 mb-2">
                               {(["request", "response", "error"] as PayloadTab[]).map((tab) => (
                                 <button
