@@ -30,17 +30,6 @@ function formatBool(value: boolean | null | undefined): string {
   return "—";
 }
 
-type BoolFilter = "all" | "yes" | "no";
-
-function matchesBoolFilter(
-  value: boolean | null | undefined,
-  filter: BoolFilter
-): boolean {
-  if (filter === "all") return true;
-  if (filter === "yes") return value === true;
-  return value === false;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function EngagementConsolePage() {
