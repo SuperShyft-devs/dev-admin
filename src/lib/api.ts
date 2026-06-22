@@ -120,6 +120,10 @@ export interface UserProfile {
   phone: string;
   email?: string | null;
   profile_photo?: string | null;
+  employee?: {
+    employee_id: number;
+    role: "admin" | "onboarding_assistant";
+  } | null;
 }
 
 export interface UserListItem {
@@ -535,10 +539,12 @@ export const uploadsApi = {
 };
 
 // Employees
+export type EmployeeRoleValue = "admin" | "onboarding_assistant";
+
 export interface EmployeeListItem {
   employee_id: number;
   user_id: number;
-  role?: string | null;
+  role?: EmployeeRoleValue | string | null;
   status?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -546,13 +552,13 @@ export interface EmployeeListItem {
 
 export interface EmployeeCreate {
   user_id: number;
-  role: string;
+  role: EmployeeRoleValue | string;
   status?: string | null;
 }
 
 export interface EmployeeUpdate {
   user_id: number;
-  role: string;
+  role: EmployeeRoleValue | string;
 }
 
 export const employeesApi = {

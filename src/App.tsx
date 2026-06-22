@@ -19,6 +19,7 @@ import { MyTasks } from "./features/checklists/MyTasks";
 import { Settings } from "./features/settings/Settings";
 import { Experts } from "./features/experts/Experts";
 import { Notifications } from "./features/notifications/Notifications";
+import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -108,6 +109,14 @@ function AppRoutes() {
         <Route path="support" element={<SupportTickets />} />
         <Route path="settings" element={<Settings />} />
       </Route>
+      <Route
+        path="/engagements/:engagementId/console"
+        element={
+          <ProtectedRoute>
+            <EngagementConsolePage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

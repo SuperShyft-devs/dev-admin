@@ -12,6 +12,8 @@ interface AuthState {
   isAuthenticated: boolean;
   userId: number | null;
   userProfile: UserProfile | null;
+  employeeId: number | null;
+  employeeRole: "admin" | "onboarding_assistant" | null;
   isLoading: boolean;
 }
 
@@ -30,6 +32,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!sessionStorage.getItem("access_token"),
     userId: null,
     userProfile: null,
+    employeeId: null,
+    employeeRole: null,
     isLoading: true,
   });
   const [error, setError] = useState<string | null>(null);
@@ -49,10 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem("access_token", tokens.access_token);
     sessionStorage.setItem("refresh_token", tokens.refresh_token);
     const profileRes = await usersApi.me();
+    const profile = profileRes.data.data;
     setState({
       isAuthenticated: true,
       userId: user_id,
-      userProfile: profileRes.data.data,
+      userProfile: profile,
+      employeeId: profile.employee?.employee_id ?? null,
+      employeeRole: profile.employee?.role ?? null,
       isLoading: false,
     });
   }, []);
@@ -68,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("refresh_token");
-    setState({ isAuthenticated: false, userId: null, userProfile: null, isLoading: false });
+    setState({ isAuthenticated: false, userId: null, userProfile: null, employeeId: null, employeeRole: null, isLoading: false });
   }, []);
 
   useEffect(() => {
@@ -78,6 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...s,
         isAuthenticated: false,
         userProfile: null,
+        employeeId: null,
+        employeeRole: null,
         isLoading: false,
       }));
       return;
@@ -86,11 +95,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const loadProfile = async () => {
       try {
         const profileRes = await usersApi.me();
+        const profile = profileRes.data.data;
         setState((s) => ({
           ...s,
           isAuthenticated: true,
-          userId: profileRes.data.data.user_id,
-          userProfile: profileRes.data.data,
+          userId: profile.user_id,
+          userProfile: profile,
+          employeeId: profile.employee?.employee_id ?? null,
+          employeeRole: profile.employee?.role ?? null,
           isLoading: false,
         }));
       } catch {
@@ -101,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAuthenticated: false,
           userId: null,
           userProfile: null,
+          employeeId: null,
+          employeeRole: null,
           isLoading: false,
         }));
       }
