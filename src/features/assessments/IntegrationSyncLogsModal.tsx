@@ -7,7 +7,7 @@ type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
 type SyncLogsVariant = "metsights" | "n8n";
 
-const STATUS_OPTIONS = ["pending", "success", "failed"] as const;
+const STATUS_OPTIONS = ["pending", "success", "failed", "skipped"] as const;
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
   { key: "1h", label: "Last 1h" },
   { key: "24h", label: "24h" },
@@ -30,6 +30,7 @@ function StatusBadge({ status }: { status?: string | null }) {
   if (status === "success") return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>success</span>;
   if (status === "failed") return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>failed</span>;
   if (status === "pending") return <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>pending</span>;
+  if (status === "skipped") return <span className={`${base} bg-zinc-100 text-zinc-600 border-zinc-300`}>skipped</span>;
   return <span className={`${base} bg-zinc-50 text-zinc-600 border-zinc-200`}>{status ?? "—"}</span>;
 }
 
