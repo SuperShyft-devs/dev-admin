@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   Search,
   Loader2,
@@ -10,11 +10,10 @@ import {
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
 import {
-  engagementsApi,
-  participantsApi,
-  getApiError,
+  consoleApi,
+  getApiErrorDetails,
   type Participant,
-  type Engagement,
+  type ConsoleEngagementListItem,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 
@@ -36,10 +35,11 @@ export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
   const engId = Number(engagementId);
 
-  const [engagement, setEngagement] = useState<Engagement | null>(null);
+  const [engagement, setEngagement] = useState<ConsoleEngagementListItem | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<"not_running" | "forbidden" | "generic" | null>(null);
 
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -54,19 +54,32 @@ export function EngagementConsolePage() {
     if (!engId || isNaN(engId)) return;
     setLoading(true);
     setError(null);
+    setErrorKind(null);
     try {
       const [engRes, parts] = await Promise.all([
-        engagementsApi.get(engId),
+        consoleApi.getEngagement(engId),
         fetchAllPages<Participant>(
           (page, limit) =>
-            participantsApi.byEngagementId(engId, { page, limit }) as any,
+            consoleApi.listParticipants(engId, { page, limit }) as any,
           100
         ),
       ]);
       setEngagement(engRes.data.data);
       setParticipants(parts);
     } catch (err) {
-      setError(getApiError(err));
+      const details = getApiErrorDetails(err);
+      if (details.code === "ENGAGEMENT_NOT_RUNNING") {
+        setErrorKind("not_running");
+        setError(
+          "This engagement is not running. The console is only available while the engagement status is Running."
+        );
+      } else if (details.status === 403) {
+        setErrorKind("forbidden");
+        setError("You are not assigned as an onboarding assistant for this engagement.");
+      } else {
+        setErrorKind("generic");
+        setError(details.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -152,8 +165,16 @@ export function EngagementConsolePage() {
           <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
         </div>
       ) : error ? (
-        <div className="flex items-center justify-center h-64 text-red-600">
-          {error}
+        <div className="flex flex-col items-center justify-center h-64 text-center gap-3 px-4">
+          <p className="text-red-600 max-w-md">{error}</p>
+          {(errorKind === "not_running" || errorKind === "forbidden") && (
+            <Link
+              to="/engagements/console"
+              className="text-sm font-medium text-zinc-700 hover:text-zinc-900 underline"
+            >
+              Back to your engagements
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-4">

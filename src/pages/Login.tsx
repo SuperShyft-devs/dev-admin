@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getApiError } from "../lib/api";
+import { resolvePostLoginPath } from "../lib/authStorage";
 import { Loader2 } from "lucide-react";
 
 export function Login() {
@@ -10,14 +11,15 @@ export function Login() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login, sendOtp, isAuthenticated } = useAuth();
+  const { login, sendOtp, isAuthenticated, isLoading, employeeRole } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTarget = searchParams.get("redirect");
 
-  if (isAuthenticated) {
-    navigate("/", { replace: true });
+  if (!isLoading && isAuthenticated) {
+    navigate(resolvePostLoginPath(employeeRole, redirectTarget), { replace: true });
     return null;
   }
-
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -46,8 +48,8 @@ export function Login() {
     }
     setLoading(true);
     try {
-      await login(phone.trim(), otp.trim());
-      navigate("/", { replace: true });
+      const role = await login(phone.trim(), otp.trim());
+      navigate(resolvePostLoginPath(role, redirectTarget), { replace: true });
     } catch (err) {
       setError(getApiError(err, "auth"));
     } finally {

@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { authStorage, loginPathWithRedirect } from "./authStorage";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -29,7 +30,7 @@ const processQueue = (error: any, token: string | null = null) => {
 };
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = sessionStorage.getItem("access_token");
+  const token = authStorage.getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -62,7 +63,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = sessionStorage.getItem("refresh_token");
+      const refreshToken = authStorage.getRefreshToken();
       if (refreshToken) {
         try {
           const res = await authHttp.post<{ data: { tokens: { access_token: string; refresh_token: string } } }>(
@@ -71,8 +72,7 @@ api.interceptors.response.use(
           );
 
           const newTokens = res.data.data.tokens;
-          sessionStorage.setItem("access_token", newTokens.access_token);
-          sessionStorage.setItem("refresh_token", newTokens.refresh_token);
+          authStorage.setTokens(newTokens.access_token, newTokens.refresh_token);
 
           api.defaults.headers.common["Authorization"] = `Bearer ${newTokens.access_token}`;
           originalRequest.headers.Authorization = `Bearer ${newTokens.access_token}`;
@@ -81,25 +81,31 @@ api.interceptors.response.use(
           return api(originalRequest);
         } catch (refreshError) {
           processQueue(refreshError, null);
-          sessionStorage.removeItem("access_token");
-          sessionStorage.removeItem("refresh_token");
-          window.location.href = "/login";
+          authStorage.clearTokens();
+          window.location.href = loginPathWithRedirect(
+            window.location.pathname,
+            window.location.search
+          );
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
         }
       } else {
-        sessionStorage.removeItem("access_token");
-        sessionStorage.removeItem("refresh_token");
-        window.location.href = "/login";
+        authStorage.clearTokens();
+        window.location.href = loginPathWithRedirect(
+          window.location.pathname,
+          window.location.search
+        );
         return Promise.reject(err);
       }
     }
 
     if (err.response?.status === 401) {
-      sessionStorage.removeItem("access_token");
-      sessionStorage.removeItem("refresh_token");
-      window.location.href = "/login";
+      authStorage.clearTokens();
+      window.location.href = loginPathWithRedirect(
+        window.location.pathname,
+        window.location.search
+      );
     }
 
     return Promise.reject(err);
@@ -140,34 +146,62 @@ export interface UserListItem {
 }
 
 export function getApiError(err: unknown, context?: "auth" | "import"): string {
+  return getApiErrorDetails(err, context).message;
+}
+
+export function getApiErrorDetails(
+  err: unknown,
+  context?: "auth" | "import"
+): { code?: string; message: string; status?: number } {
   if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
     if (err.code === "ECONNABORTED") {
       if (context === "auth") {
-        return "Request timed out — check that the API is running and reachable, then try again.";
+        return {
+          status,
+          message:
+            "Request timed out — check that the API is running and reachable, then try again.",
+        };
       }
-      return "Request timed out — the server may still be processing. Wait, refresh stats, then retry this page.";
+      return {
+        status,
+        message:
+          "Request timed out — the server may still be processing. Wait, refresh stats, then retry this page.",
+      };
     }
-    if (err.response?.status === 429) {
-      return "Too many requests — wait a minute, then retry.";
+    if (status === 429) {
+      return { status, message: "Too many requests — wait a minute, then retry." };
     }
     if (err.response?.data) {
-      const d = err.response.data as { message?: string };
-      return d.message || "Request failed";
+      const d = err.response.data as { message?: string; error_code?: string };
+      return { status, code: d.error_code, message: d.message || "Request failed" };
     }
     if (err.message === "Network Error" || err.code === "ERR_NETWORK") {
       if (context === "auth") {
-        return (
-          "Cannot reach the API. Check that it is up, CORS allows this admin origin " +
-          `(API: ${API_BASE}), and try ${API_BASE.replace(/\/$/, "")}/health in your browser.`
-        );
+        return {
+          status,
+          message:
+            "Cannot reach the API. Check that it is up, CORS allows this admin origin " +
+            `(API: ${API_BASE}), and try ${API_BASE.replace(/\/$/, "")}/health in your browser.`,
+        };
       }
       if (context === "import") {
-        return "Network error — connection dropped or timed out. Large imports can take up to 2 minutes; wait and retry.";
+        return {
+          status,
+          message:
+            "Network error — connection dropped or timed out. Large imports can take up to 2 minutes; wait and retry.",
+        };
       }
-      return "Network error — could not reach the API. Check your connection and API status, then retry.";
+      return {
+        status,
+        message:
+          "Network error — could not reach the API. Check your connection and API status, then retry.",
+      };
     }
   }
-  return err instanceof Error ? err.message : "Unknown error";
+  return {
+    message: err instanceof Error ? err.message : "Unknown error",
+  };
 }
 
 // Support tickets
@@ -1335,6 +1369,28 @@ export const occupiedSlotsApi = {
   // B2C: occupied slots for all active public engagements (public, no auth)
   public: () =>
     api.get<{ data: OccupiedSlots }>("/engagements/public/occupied-slots"),
+};
+
+export interface ConsoleEngagementListItem {
+  engagement_id: number;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: string | null;
+  participant_count?: number | null;
+}
+
+export const consoleApi = {
+  listEngagements: () =>
+    api.get<{ data: ConsoleEngagementListItem[] }>("/engagements/console/engagements"),
+  getEngagement: (id: number) =>
+    api.get<{ data: ConsoleEngagementListItem }>(`/engagements/${id}/console`),
+  listParticipants: (id: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: Participant[]; meta: { page: number; limit: number; total: number } }>(
+      `/engagements/${id}/console/participants`,
+      { params }
+    ),
 };
 
 export const onboardingAssistantsApi = {

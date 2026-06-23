@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { authApi, usersApi, type UserProfile } from "../lib/api";
+import { authStorage } from "../lib/authStorage";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -18,7 +19,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (phone: string, otp: string) => Promise<void>;
+  login: (phone: string, otp: string) => Promise<"admin" | "onboarding_assistant" | null>;
   logout: () => Promise<void>;
   sendOtp: (phone: string) => Promise<{ session_id: number }>;
   error: string | null;
@@ -29,7 +30,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    isAuthenticated: !!sessionStorage.getItem("access_token"),
+    isAuthenticated: authStorage.hasAccessToken(),
     userId: null,
     userProfile: null,
     employeeId: null,
@@ -50,22 +51,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const res = await authApi.verifyOtp(phone, otp);
     const { user_id, tokens } = res.data.data;
-    sessionStorage.setItem("access_token", tokens.access_token);
-    sessionStorage.setItem("refresh_token", tokens.refresh_token);
+    authStorage.setTokens(tokens.access_token, tokens.refresh_token);
     const profileRes = await usersApi.me();
     const profile = profileRes.data.data;
+    const employeeRole = profile.employee?.role ?? null;
     setState({
       isAuthenticated: true,
       userId: user_id,
       userProfile: profile,
       employeeId: profile.employee?.employee_id ?? null,
-      employeeRole: profile.employee?.role ?? null,
+      employeeRole,
       isLoading: false,
     });
+    return employeeRole;
   }, []);
 
   const logout = useCallback(async () => {
-    const refresh = sessionStorage.getItem("refresh_token");
+    const refresh = authStorage.getRefreshToken();
     if (refresh) {
       try {
         await authApi.logout(refresh);
@@ -73,13 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore
       }
     }
-    sessionStorage.removeItem("access_token");
-    sessionStorage.removeItem("refresh_token");
+    authStorage.clearTokens();
     setState({ isAuthenticated: false, userId: null, userProfile: null, employeeId: null, employeeRole: null, isLoading: false });
   }, []);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("access_token");
+    const token = authStorage.getAccessToken();
     if (!token) {
       setState((s) => ({
         ...s,
@@ -106,8 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
         }));
       } catch {
-        sessionStorage.removeItem("access_token");
-        sessionStorage.removeItem("refresh_token");
+        authStorage.clearTokens();
         setState((s) => ({
           ...s,
           isAuthenticated: false,

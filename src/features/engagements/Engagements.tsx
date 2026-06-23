@@ -73,6 +73,49 @@ function formatEngagementStatusLabel(status?: string | null): string {
   return status ?? "—";
 }
 
+function consoleUrlForEngagement(engagementId: number): string {
+  return `${window.location.origin}/engagements/${engagementId}/console`;
+}
+
+function ConsoleUrlActions({ engagementId }: { engagementId: number }) {
+  const [copied, setCopied] = useState(false);
+  const url = consoleUrlForEngagement(engagementId);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 mt-1">
+      <code className="text-xs bg-zinc-100 px-2 py-1.5 rounded break-all text-zinc-700">{url}</code>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
+        >
+          {copied ? "Copied" : "Copy URL"}
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+        >
+          <Link2 className="w-3.5 h-3.5" />
+          Open Console
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   const d = new Date(value);
@@ -1733,6 +1776,16 @@ export function Engagements({
             <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
             <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
             <div><span className="text-zinc-500">Status:</span> {formatEngagementStatusLabel(selected.status)}</div>
+            <div>
+              <span className="text-zinc-500">Console:</span>
+              {(selected.status ?? "").toLowerCase() === "running" ? (
+                <ConsoleUrlActions engagementId={selected.engagement_id} />
+              ) : (
+                <p className="mt-1 text-zinc-600">
+                  Console is only available when engagement status is Running.
+                </p>
+              )}
+            </div>
             <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
             <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>
             <div>
@@ -2461,6 +2514,16 @@ export function Engagements({
               {assistantsError}
             </div>
           )}
+
+          {assistantsEngagement &&
+            (assistantsEngagement.status ?? "").toLowerCase() === "running" && (
+              <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200">
+                <p className="text-xs font-medium text-zinc-600 mb-2">
+                  Console URL for assigned assistants
+                </p>
+                <ConsoleUrlActions engagementId={assistantsEngagement.engagement_id} />
+              </div>
+            )}
 
           {/* Assigned assistants list */}
           {!addAssistantsOpen && (

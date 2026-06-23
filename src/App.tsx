@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { Login } from "./pages/Login";
@@ -20,9 +20,13 @@ import { Settings } from "./features/settings/Settings";
 import { Experts } from "./features/experts/Experts";
 import { Notifications } from "./features/notifications/Notifications";
 import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
+import { ConsoleEngagementsPage } from "./features/console/ConsoleEngagementsPage";
+
+import { loginPathWithRedirect } from "./lib/authStorage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -31,7 +35,27 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to={loginPathWithRedirect(location.pathname, location.search)}
+        replace
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
+function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { employeeRole, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
+  if (employeeRole === "onboarding_assistant") {
+    return <Navigate to="/engagements/console" replace />;
   }
   return <>{children}</>;
 }
@@ -44,7 +68,9 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <AdminLayout />
+            <AdminOnlyRoute>
+              <AdminLayout />
+            </AdminOnlyRoute>
           </ProtectedRoute>
         }
       >
@@ -109,6 +135,14 @@ function AppRoutes() {
         <Route path="support" element={<SupportTickets />} />
         <Route path="settings" element={<Settings />} />
       </Route>
+      <Route
+        path="/engagements/console"
+        element={
+          <ProtectedRoute>
+            <ConsoleEngagementsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/engagements/:engagementId/console"
         element={
