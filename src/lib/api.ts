@@ -623,6 +623,15 @@ export const employeesApi = {
 };
 
 // Organizations
+export interface OrganizationDepartment {
+  department: string;
+  slug: string;
+}
+
+export interface OrganizationDepartmentInput {
+  department: string;
+}
+
 export interface Organization {
   organization_id: number;
   name?: string | null;
@@ -644,6 +653,7 @@ export interface Organization {
   created_employee_id?: number | null;
   updated_at?: string | null;
   updated_employee_id?: number | null;
+  departments?: OrganizationDepartment[] | null;
 }
 
 export interface OrganizationListItem {
@@ -673,6 +683,7 @@ export interface OrganizationCreate {
   contact_phone?: string | null;
   contact_designation?: string | null;
   bd_employee_id?: number | null;
+  departments?: OrganizationDepartmentInput[] | null;
 }
 
 export const organizationsApi = {
@@ -1308,6 +1319,14 @@ export const participantsApi = {
         deleted_category_progress_rows: number;
       };
     }>(`/engagements/${engagementId}/participants`),
+  updateDepartment: (
+    engagementId: number,
+    userId: number,
+    participant_department: string | null
+  ) =>
+    api.patch<{
+      data: { engagement_id: number; user_id: number; participant_department: string | null };
+    }>(`/engagements/${engagementId}/participants/${userId}`, { participant_department }),
 };
 
 // Engagement Questionnaire Status

@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil } from "lucide-react";
 import { Modal } from "./Modal";
-import { participantsApi, type Participant, type Engagement, getApiError } from "../../lib/api";
+import {
+  participantsApi,
+  engagementsApi,
+  organizationsApi,
+  type Participant,
+  type Engagement,
+  type OrganizationDepartment,
+  getApiError,
+} from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +67,16 @@ function formatBool(value: boolean | null | undefined): string {
   if (value === true) return "Yes";
   if (value === false) return "No";
   return "—";
+}
+
+function resolveDepartmentDisplay(
+  slug: string | null | undefined,
+  departments: OrganizationDepartment[]
+): string {
+  const value = (slug ?? "").trim();
+  if (!value) return "—";
+  const match = departments.find((d) => d.slug === value);
+  return match?.department ?? value;
 }
 
 function matchesBoolFilter(value: boolean | null | undefined, filter: BoolFilter): boolean {
@@ -211,6 +229,16 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const [orgDepartments, setOrgDepartments] = useState<OrganizationDepartment[]>([]);
+  const [organizationId, setOrganizationId] = useState<number | null>(null);
+  const [departmentEditMode, setDepartmentEditMode] = useState(false);
+  const [departmentConfirm, setDepartmentConfirm] = useState<{
+    participant: Participant;
+    slug: string;
+    label: string;
+  } | null>(null);
+  const [departmentUpdateLoading, setDepartmentUpdateLoading] = useState(false);
+  const [departmentUpdateError, setDepartmentUpdateError] = useState<string | null>(null);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -248,6 +276,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   }, [source]);
 
+  const fetchOrganizationDepartments = useCallback(async () => {
+    if (source.kind !== "engagement-id") {
+      setOrgDepartments([]);
+      setOrganizationId(null);
+      return;
+    }
+    try {
+      const engagementRes = await engagementsApi.get(source.engagementId);
+      const orgId = engagementRes.data.data.organization_id ?? null;
+      setOrganizationId(orgId);
+      if (orgId) {
+        const orgRes = await organizationsApi.get(orgId);
+        setOrgDepartments(orgRes.data.data.departments ?? []);
+      } else {
+        setOrgDepartments([]);
+      }
+    } catch {
+      setOrgDepartments([]);
+      setOrganizationId(null);
+    }
+  }, [source]);
+
   useEffect(() => {
     if (open) {
       setSearch("");
@@ -256,9 +306,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setDeleteSelectedOpen(false);
       setDeleteError(null);
       setDeleteProgress(null);
+      setDepartmentEditMode(false);
+      setDepartmentConfirm(null);
+      setDepartmentUpdateError(null);
       fetchParticipants();
+      void fetchOrganizationDepartments();
     }
-  }, [open, fetchParticipants]);
+  }, [open, fetchParticipants, fetchOrganizationDepartments]);
 
   useEffect(() => {
     setSelectedUserIds(new Set());
@@ -284,12 +338,20 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [participants]);
 
   const departmentOptions = useMemo(() => {
+    if (orgDepartments.length > 0) {
+      return orgDepartments.map((d) => ({ slug: d.slug, label: d.department }));
+    }
     const deps = new Set<string>();
     for (const p of participants) {
       if (p.participant_department?.trim()) deps.add(p.participant_department.trim());
     }
-    return Array.from(deps).sort((a, b) => a.localeCompare(b));
-  }, [participants]);
+    return Array.from(deps)
+      .sort((a, b) => a.localeCompare(b))
+      .map((slug) => ({ slug, label: slug }));
+  }, [participants, orgDepartments]);
+
+  const canEditDepartment =
+    source.kind === "engagement-id" && organizationId != null && orgDepartments.length > 0;
 
   const afterColumnFilters = useMemo(
     () => applyColumnFilters(participants, columnFilters),
@@ -326,6 +388,31 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
   const canNotify = source.kind === "engagement-id";
+
+  const engagementIdForDepartment =
+    source.kind === "engagement-id" ? source.engagementId : undefined;
+
+  const handleConfirmDepartmentUpdate = async () => {
+    if (!departmentConfirm || !engagementIdForDepartment) return;
+    const { participant, slug } = departmentConfirm;
+    if (!participant.user_id) return;
+
+    try {
+      setDepartmentUpdateLoading(true);
+      setDepartmentUpdateError(null);
+      await participantsApi.updateDepartment(engagementIdForDepartment, participant.user_id, slug);
+      setParticipants((prev) =>
+        prev.map((row) =>
+          row.user_id === participant.user_id ? { ...row, participant_department: slug } : row
+        )
+      );
+      setDepartmentConfirm(null);
+    } catch (err) {
+      setDepartmentUpdateError(getApiError(err));
+    } finally {
+      setDepartmentUpdateLoading(false);
+    }
+  };
 
   const engagementIdForDelete =
     source.kind === "engagement-id"
@@ -553,8 +640,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               >
                 <option value="">All departments</option>
                 {departmentOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
+                  <option key={d.slug} value={d.slug}>
+                    {d.label}
                   </option>
                 ))}
               </select>
@@ -717,7 +804,25 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       Slot Start Time
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Department
+                      <span className="inline-flex items-center gap-1.5">
+                        Department
+                        {canEditDepartment && (
+                          <button
+                            type="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setDepartmentEditMode((v) => !v);
+                            }}
+                            className={`inline-flex items-center justify-center p-0.5 rounded hover:bg-zinc-200 ${
+                              departmentEditMode ? "text-zinc-900" : "text-zinc-500"
+                            }`}
+                            title={departmentEditMode ? "Done editing departments" : "Edit departments"}
+                            aria-label={departmentEditMode ? "Done editing departments" : "Edit departments"}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </span>
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Blood Group
@@ -790,8 +895,45 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.slot_start_time || "—"}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {p.participant_department || "—"}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (departmentEditMode && canEditDepartment) ev.stopPropagation();
+                          }}
+                        >
+                          {departmentEditMode && canEditDepartment ? (
+                            <select
+                              key={`${p.user_id}-${p.participant_department ?? ""}`}
+                              value={p.participant_department ?? ""}
+                              onChange={(e) => {
+                                const slug = e.target.value;
+                                if (!slug || slug === (p.participant_department ?? "")) return;
+                                const dept = orgDepartments.find((d) => d.slug === slug);
+                                if (dept) {
+                                  setDepartmentUpdateError(null);
+                                  setDepartmentConfirm({
+                                    participant: p,
+                                    slug: dept.slug,
+                                    label: dept.department,
+                                  });
+                                }
+                              }}
+                              className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                            >
+                              <option value="">
+                                {resolveDepartmentDisplay(p.participant_department, orgDepartments) === "—"
+                                  ? "—"
+                                  : resolveDepartmentDisplay(p.participant_department, orgDepartments)}
+                              </option>
+                              {orgDepartments.map((d) => (
+                                <option key={d.slug} value={d.slug}>
+                                  {d.department}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            resolveDepartmentDisplay(p.participant_department, orgDepartments)
+                          )}
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.participant_blood_group || "—"}
@@ -891,6 +1033,44 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               >
                 {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Yes, Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {departmentConfirm && (
+        <Modal
+          open={!!departmentConfirm}
+          onClose={() => (departmentUpdateLoading ? undefined : setDepartmentConfirm(null))}
+          title="Update Department"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-700">
+              Assign <span className="font-semibold">{fullName(departmentConfirm.participant)}</span> to{" "}
+              <span className="font-semibold">{departmentConfirm.label}</span>?
+            </p>
+            {departmentUpdateError && (
+              <p className="text-sm text-red-600">{departmentUpdateError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDepartmentConfirm(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+                disabled={departmentUpdateLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmDepartmentUpdate()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                disabled={departmentUpdateLoading}
+              >
+                {departmentUpdateLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm
               </button>
             </div>
           </div>

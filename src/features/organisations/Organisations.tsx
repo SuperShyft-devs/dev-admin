@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Plus, Loader2, Users } from "lucide-react";
+import { Search, Plus, Loader2, Users, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -77,6 +77,8 @@ export function Organisations() {
     orgName?: string;
     city?: string;
   } | null>(null);
+  const [departmentNames, setDepartmentNames] = useState<string[]>([]);
+  const [departmentInput, setDepartmentInput] = useState("");
 
   useEffect(() => {
     organizationsApi
@@ -147,6 +149,38 @@ export function Organisations() {
     setPage(1);
   }, [search, statusFilter, cityFilter, countryFilter]);
 
+  const addDepartmentName = (raw: string) => {
+    const name = raw.trim();
+    if (!name) return;
+    setDepartmentNames((prev) => {
+      const exists = prev.some((d) => d.toLowerCase() === name.toLowerCase());
+      if (exists) return prev;
+      return [...prev, name];
+    });
+    setDepartmentInput("");
+  };
+
+  const removeDepartmentName = (name: string) => {
+    setDepartmentNames((prev) => prev.filter((d) => d !== name));
+  };
+
+  const handleDepartmentInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addDepartmentName(departmentInput);
+    } else if (e.key === "Backspace" && !departmentInput && departmentNames.length > 0) {
+      setDepartmentNames((prev) => prev.slice(0, -1));
+    }
+  };
+
+  const buildOrganizationPayload = (): OrganizationCreate => ({
+    ...formData,
+    departments:
+      departmentNames.length > 0
+        ? departmentNames.map((department) => ({ department }))
+        : null,
+  });
+
   const openView = (row: OrganizationListItem) => {
     organizationsApi.get(row.organization_id).then((res) => {
       setSelected(res.data.data);
@@ -173,6 +207,8 @@ export function Organisations() {
       contact_designation: "",
       bd_employee_id: undefined,
     });
+    setDepartmentNames([]);
+    setDepartmentInput("");
     setModalMode("add");
     setModalOpen(true);
     fetchEmployees();
@@ -198,6 +234,8 @@ export function Organisations() {
         contact_designation: o.contact_designation ?? "",
         bd_employee_id: o.bd_employee_id ?? undefined,
       });
+      setDepartmentNames((o.departments ?? []).map((d) => d.department));
+      setDepartmentInput("");
       setModalMode("edit");
       setModalOpen(true);
       fetchEmployees();
@@ -208,12 +246,13 @@ export function Organisations() {
     if (!formData.name.trim()) return;
     setSubmitting(true);
     try {
+      const payload = buildOrganizationPayload();
       let createdOrganizationId: number | null = null;
       if (modalMode === "add") {
-        const created = await organizationsApi.create(formData);
+        const created = await organizationsApi.create(payload);
         createdOrganizationId = created.data.data.organization_id;
       } else if (selected) {
-        await organizationsApi.update(selected.organization_id, formData);
+        await organizationsApi.update(selected.organization_id, payload);
       }
       if (modalMode === "add") {
         setModalOpen(false);
@@ -428,6 +467,23 @@ export function Organisations() {
               <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
               <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
               <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
+              <div className="md:col-span-2">
+                <span className="text-zinc-500">Departments:</span>{" "}
+                {(selected.departments ?? []).length > 0 ? (
+                  <span className="inline-flex flex-wrap gap-1.5 mt-1">
+                    {(selected.departments ?? []).map((d) => (
+                      <span
+                        key={d.slug}
+                        className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs"
+                      >
+                        {d.department}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </div>
               <div className="md:col-span-2"><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
               <div><span className="text-zinc-500">Pin Code:</span> {selected.pin_code ?? "—"}</div>
               <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
@@ -530,6 +586,38 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   placeholder="https://"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Departments</label>
+                <div className="flex flex-wrap items-center gap-1.5 px-2 py-2 rounded-lg border border-zinc-300 text-sm focus-within:ring-2 focus-within:ring-zinc-900 min-h-[42px]">
+                  {departmentNames.map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => removeDepartmentName(name)}
+                        className="text-zinc-500 hover:text-zinc-800"
+                        aria-label={`Remove ${name}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    value={departmentInput}
+                    onChange={(e) => setDepartmentInput(e.target.value)}
+                    onKeyDown={handleDepartmentInputKeyDown}
+                    onBlur={() => {
+                      if (departmentInput.trim()) addDepartmentName(departmentInput);
+                    }}
+                    placeholder={departmentNames.length === 0 ? "Type a department and press Enter" : "Add another…"}
+                    className="flex-1 min-w-[120px] border-0 p-0 focus:outline-none focus:ring-0 bg-transparent"
+                  />
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
