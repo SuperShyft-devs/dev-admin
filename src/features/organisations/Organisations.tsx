@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import axios from "axios";
 import { Search, Plus, Loader2, Users, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -7,10 +8,13 @@ import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
 import { ManageReportSectionsModal } from "../../shared/ui/ManageReportSectionsModal";
 import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
+import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
+import { CampReportInitMenu } from "../../shared/ui/CampReportInitMenu";
 import {
   organizationsApi,
   employeesApi,
   uploadsApi,
+  campReportsApi,
   type EmployeeListItem,
   type UserListItem,
   type OrganizationListItem,
@@ -106,6 +110,11 @@ export function Organisations() {
     campName?: string;
     orgName?: string;
   } | null>(null);
+  const [campDepartments, setCampDepartments] = useState<CampListItem | null>(null);
+  const [campReportDeleteConfirm, setCampReportDeleteConfirm] = useState<CampListItem | null>(null);
+  const [campActionMessage, setCampActionMessage] = useState<string | null>(null);
+  const [campActionError, setCampActionError] = useState<string | null>(null);
+  const [campReportDeleting, setCampReportDeleting] = useState(false);
 
   useEffect(() => {
     if (tabParam !== activeTab) {
@@ -433,6 +442,51 @@ export function Organisations() {
     });
   };
 
+  const openCampDepartments = (row: CampListItem) => {
+    setCampDepartments(row);
+  };
+
+  const handleCampReportFeedback = (message: string, isError = false) => {
+    if (isError) {
+      setCampActionError(message);
+      setCampActionMessage(null);
+    } else {
+      setCampActionMessage(message);
+      setCampActionError(null);
+    }
+  };
+
+  const handleDeleteCampReports = async (row: CampListItem) => {
+    setCampReportDeleting(true);
+    setCampActionError(null);
+    try {
+      const orgRes = await organizationsApi.get(row.organization_id);
+      const slugs = (orgRes.data.data.departments ?? []).map((d) => d.slug);
+      const results = await Promise.allSettled([
+        campReportsApi.deleteCamp(row.camp_no),
+        ...slugs.map((slug) => campReportsApi.deleteDepartment(row.camp_no, slug)),
+      ]);
+      const hardFailures = results.filter((r) => {
+        if (r.status === "fulfilled") return false;
+        if (axios.isAxiosError(r.reason) && r.reason.response?.status === 404) return false;
+        return true;
+      });
+      if (hardFailures.length > 0) {
+        const first = hardFailures[0];
+        setCampActionError(
+          first.status === "rejected" ? getApiError(first.reason) : "Failed to delete camp reports"
+        );
+      } else {
+        setCampActionMessage("Camp reports deleted successfully");
+        setCampReportDeleteConfirm(null);
+      }
+    } catch (err) {
+      setCampActionError(getApiError(err));
+    } finally {
+      setCampReportDeleting(false);
+    }
+  };
+
   const campColumns: Column<CampListItem>[] = [
     { key: "camp_no", label: "Camp No", sortable: true },
     { key: "camp_name", label: "Camp name", sortable: true },
@@ -450,6 +504,23 @@ export function Organisations() {
           className="text-zinc-900 hover:underline font-medium"
         >
           {row.engagement_count}
+        </button>
+      ),
+    },
+    {
+      key: "department_count",
+      label: "No of departments",
+      sortable: true,
+      render: (row) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openCampDepartments(row);
+          }}
+          className="text-zinc-900 hover:underline font-medium"
+        >
+          {row.department_count}
         </button>
       ),
     },
@@ -592,6 +663,16 @@ export function Organisations() {
               {campsError}
             </div>
           )}
+          {campActionMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm">
+              {campActionMessage}
+            </div>
+          )}
+          {campActionError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+              {campActionError}
+            </div>
+          )}
 
           <div className="mb-4 flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1 min-w-0">
@@ -621,6 +702,16 @@ export function Organisations() {
                 onSort={handleCampsSort}
                 onView={openCampView}
                 onViewEngagements={openCampEngagements}
+                onDelete={(r) => setCampReportDeleteConfirm(r)}
+                renderExtraMenuItems={(row, closeMenu) => (
+                  <CampReportInitMenu
+                    campNo={row.camp_no}
+                    organizationId={row.organization_id}
+                    variant="menu"
+                    onClose={closeMenu}
+                    onFeedback={handleCampReportFeedback}
+                  />
+                )}
                 pagination={{
                   page: campsPage,
                   limit: campsLimit,
@@ -651,7 +742,20 @@ export function Organisations() {
               <span className="text-zinc-500">Camp name:</span> {selectedCamp.camp_name}
             </div>
             <div>
+              <span className="text-zinc-500">Organisation:</span> {selectedCamp.organization_name}
+            </div>
+            <div>
               <span className="text-zinc-500">No of engagements:</span> {selectedCamp.engagement_count}
+            </div>
+            <div>
+              <span className="text-zinc-500">No of departments:</span> {selectedCamp.department_count}
+            </div>
+            <div className="pt-2">
+              <CampReportInitMenu
+                campNo={selectedCamp.camp_no}
+                organizationId={selectedCamp.organization_id}
+                onFeedback={handleCampReportFeedback}
+              />
             </div>
           </div>
         )}
@@ -1037,6 +1141,39 @@ export function Organisations() {
           campName={campEngagements.campName}
           orgName={campEngagements.orgName}
         />
+      )}
+
+      <CampDepartmentsModal
+        camp={campDepartments}
+        onClose={() => setCampDepartments(null)}
+      />
+
+      {campReportDeleteConfirm && (
+        <Modal
+          open={!!campReportDeleteConfirm}
+          onClose={() => setCampReportDeleteConfirm(null)}
+          title="Delete Camp Reports"
+        >
+          <p className="text-zinc-600 text-sm mb-4">
+            This will delete the overall camp report and all department reports for camp &quot;
+            {campReportDeleteConfirm.camp_name}&quot;.
+          </p>
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
+            <button
+              onClick={() => campReportDeleteConfirm && handleDeleteCampReports(campReportDeleteConfirm)}
+              disabled={campReportDeleting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {campReportDeleting ? "Deleting..." : "Delete"}
+            </button>
+            <button
+              onClick={() => setCampReportDeleteConfirm(null)}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
       )}
 
       {deleteConfirm && (

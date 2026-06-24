@@ -67,6 +67,7 @@ interface DataTableProps<T> {
   onManageChecklistsLabel?: string;
   onViewEngagements?: (row: T) => void;
   onSendMessage?: (row: T) => void;
+  renderExtraMenuItems?: (row: T, closeMenu: () => void) => React.ReactNode;
   firstColumnClickableView?: boolean;
   onReorder?: (newOrderKeys: (string | number)[]) => void;
   pagination?: {
@@ -96,6 +97,7 @@ interface SortableRowProps<T> {
   onManageChecklistsLabel: string;
   onViewEngagements?: (row: T) => void;
   onSendMessage?: (row: T) => void;
+  renderExtraMenuItems?: (row: T, closeMenu: () => void) => React.ReactNode;
   firstColumnClickableView: boolean;
   openActionsRow: string | number | null;
   setOpenActionsRow: (val: string | number | null | ((curr: string | number | null) => string | number | null)) => void;
@@ -205,6 +207,7 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
                     <CalendarDays className="w-4 h-4" /> View Engagements
                   </button>
                 )}
+                {props.renderExtraMenuItems?.(row, () => setOpenActionsRow(null))}
                 {props.onQuestions && (
                   <button onClick={() => { props.onQuestions!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
                     <ListChecks className="w-4 h-4" /> {props.onQuestionsLabel}
@@ -251,6 +254,7 @@ export function DataTable<T extends object>(
     onManageChecklistsLabel = "Manage Checklists",
     onViewEngagements,
     onSendMessage,
+    renderExtraMenuItems,
     firstColumnClickableView = true,
     onReorder,
     pagination,
@@ -293,7 +297,8 @@ export function DataTable<T extends object>(
     onOccupiedSlots ||
     onManageChecklists ||
     onViewEngagements ||
-    onSendMessage;
+    onSendMessage ||
+    renderExtraMenuItems;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -398,6 +403,7 @@ export function DataTable<T extends object>(
                   onManageChecklistsLabel={onManageChecklistsLabel}
                   onViewEngagements={onViewEngagements}
                   onSendMessage={onSendMessage}
+                  renderExtraMenuItems={renderExtraMenuItems}
                   firstColumnClickableView={firstColumnClickableView}
                   openActionsRow={openActionsRow}
                   setOpenActionsRow={setOpenActionsRow}

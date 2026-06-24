@@ -736,6 +736,7 @@ export interface CampListItem {
   organization_name: string;
   start_date: string;
   engagement_count: number;
+  department_count: number;
 }
 
 export interface CampReportSection {
@@ -769,6 +770,17 @@ export const campReportSectionsApi = {
     api.put<{ data: CampReportSection }>(`/reports/camp-sections/${id}`, payload),
   delete: (id: number) =>
     api.delete<{ data: { deleted: boolean } }>(`/reports/camp-sections/${id}`),
+};
+
+export const campReportsApi = {
+  initCamp: (campNo: number) =>
+    api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
+  initDepartment: (campNo: number, slug: string) =>
+    api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/department/${slug}/init`),
+  deleteCamp: (campNo: number) =>
+    api.delete<{ data: { deleted: boolean } }>(`/reports/camps/${campNo}`),
+  deleteDepartment: (campNo: number, slug: string) =>
+    api.delete<{ data: { deleted: boolean } }>(`/reports/camps/${campNo}/department/${slug}`),
 };
 
 // Experts (doctors & nutritionists)
@@ -999,7 +1011,7 @@ export const engagementsApi = {
         deleted_questionnaire_responses: number;
         deleted_reports: number;
         deleted_category_progress_rows: number;
-        deleted_organization_health_reports: number;
+        deleted_camp_reports: number;
         deleted_onboarding_assistant_assignments: number;
         deleted_engagement_checklists: number;
       };
