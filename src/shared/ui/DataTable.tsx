@@ -13,6 +13,7 @@ import {
   UserCog,
   CalendarClock,
   CalendarDays,
+  Building2,
   Send,
 } from "lucide-react";
 import {
@@ -68,6 +69,7 @@ interface DataTableProps<T> {
   onManageChecklists?: (row: T) => void;
   onManageChecklistsLabel?: string;
   onViewEngagements?: (row: T) => void;
+  onViewDepartments?: (row: T) => void;
   onSendMessage?: (row: T) => void;
   renderExtraMenuItems?: (row: T, closeMenu: () => void) => React.ReactNode;
   firstColumnClickableView?: boolean;
@@ -100,6 +102,7 @@ interface SortableRowProps<T> {
   onManageChecklists?: (row: T) => void;
   onManageChecklistsLabel: string;
   onViewEngagements?: (row: T) => void;
+  onViewDepartments?: (row: T) => void;
   onSendMessage?: (row: T) => void;
   renderExtraMenuItems?: (row: T, closeMenu: () => void) => React.ReactNode;
   firstColumnClickableView: boolean;
@@ -211,6 +214,11 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
                     <CalendarDays className="w-4 h-4" /> View Engagements
                   </button>
                 )}
+                {props.onViewDepartments && (
+                  <button onClick={() => { props.onViewDepartments!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                    <Building2 className="w-4 h-4" /> View Departments
+                  </button>
+                )}
                 {props.renderExtraMenuItems?.(row, () => setOpenActionsRow(null))}
                 {props.onQuestions && (
                   <button onClick={() => { props.onQuestions!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
@@ -259,6 +267,7 @@ export function DataTable<T extends object>(
     onManageChecklists,
     onManageChecklistsLabel = "Manage Checklists",
     onViewEngagements,
+    onViewDepartments,
     onSendMessage,
     renderExtraMenuItems,
     firstColumnClickableView = true,
@@ -303,6 +312,7 @@ export function DataTable<T extends object>(
     onOccupiedSlots ||
     onManageChecklists ||
     onViewEngagements ||
+    onViewDepartments ||
     onSendMessage ||
     renderExtraMenuItems;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
@@ -410,6 +420,7 @@ export function DataTable<T extends object>(
                   onManageChecklists={onManageChecklists}
                   onManageChecklistsLabel={onManageChecklistsLabel}
                   onViewEngagements={onViewEngagements}
+                  onViewDepartments={onViewDepartments}
                   onSendMessage={onSendMessage}
                   renderExtraMenuItems={renderExtraMenuItems}
                   firstColumnClickableView={firstColumnClickableView}

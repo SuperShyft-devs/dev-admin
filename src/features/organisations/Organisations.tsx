@@ -169,8 +169,13 @@ export function Organisations() {
         sort_by: campsSortKey,
         sort_dir: campsSortDir,
       });
-      setCampsData(res.data.data);
+      const rows = res.data.data;
+      setCampsData(rows);
       setCampsTotal(res.data.meta.total);
+      setSelectedCamp((curr) => {
+        if (!curr) return curr;
+        return rows.find((c) => c.camp_no === curr.camp_no) ?? curr;
+      });
     } catch (err) {
       setCampsError(getApiError(err));
     } finally {
@@ -704,19 +709,22 @@ export function Organisations() {
                 onSort={handleCampsSort}
                 onView={openCampView}
                 onViewEngagements={openCampEngagements}
+                onViewDepartments={openCampDepartments}
                 onDelete={(r) => setCampReportDeleteConfirm(r)}
                 onDeleteLabel="Delete Camp Report"
                 canDelete={(r) => r.report_count > 0}
-                renderExtraMenuItems={(row, closeMenu) => (
-                  <CampReportInitMenu
-                    campNo={row.camp_no}
-                    organizationId={row.organization_id}
-                    variant="menu"
-                    onClose={closeMenu}
-                    onFeedback={handleCampReportFeedback}
-                    onInitialized={fetchCamps}
-                  />
-                )}
+                renderExtraMenuItems={(row, closeMenu) =>
+                  row.report_count === 0 ? (
+                    <CampReportInitMenu
+                      campNo={row.camp_no}
+                      organizationId={row.organization_id}
+                      variant="menu"
+                      onClose={closeMenu}
+                      onFeedback={handleCampReportFeedback}
+                      onInitialized={fetchCamps}
+                    />
+                  ) : null
+                }
                 pagination={{
                   page: campsPage,
                   limit: campsLimit,
@@ -755,14 +763,16 @@ export function Organisations() {
             <div>
               <span className="text-zinc-500">No of departments:</span> {selectedCamp.department_count}
             </div>
-            <div className="pt-2">
-              <CampReportInitMenu
-                campNo={selectedCamp.camp_no}
-                organizationId={selectedCamp.organization_id}
-                onFeedback={handleCampReportFeedback}
-                onInitialized={fetchCamps}
-              />
-            </div>
+            {selectedCamp.report_count === 0 && (
+              <div className="pt-2">
+                <CampReportInitMenu
+                  campNo={selectedCamp.camp_no}
+                  organizationId={selectedCamp.organization_id}
+                  onFeedback={handleCampReportFeedback}
+                  onInitialized={fetchCamps}
+                />
+              </div>
+            )}
           </div>
         )}
       </Modal>
