@@ -57,6 +57,8 @@ interface DataTableProps<T> {
   onView?: (row: T) => void;
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
+  onDeleteLabel?: string;
+  canDelete?: (row: T) => boolean;
   onQuestions?: (row: T) => void;
   onQuestionsLabel?: string;
   onParticipants?: (row: T) => void;
@@ -88,6 +90,8 @@ interface SortableRowProps<T> {
   onView?: (row: T) => void;
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
+  onDeleteLabel?: string;
+  canDelete?: (row: T) => boolean;
   onQuestions?: (row: T) => void;
   onQuestionsLabel: string;
   onParticipants?: (row: T) => void;
@@ -218,9 +222,9 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
                     <Send className="w-4 h-4" /> Send Message
                   </button>
                 )}
-                {props.onDelete && (
+                {props.onDelete && (!props.canDelete || props.canDelete(row)) && (
                   <button onClick={() => { props.onDelete!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                    <Trash2 className="w-4 h-4" /> Delete
+                    <Trash2 className="w-4 h-4" /> {props.onDeleteLabel ?? "Delete"}
                   </button>
                 )}
               </div>
@@ -245,6 +249,8 @@ export function DataTable<T extends object>(
     onView,
     onEdit,
     onDelete,
+    onDeleteLabel = "Delete",
+    canDelete,
     onQuestions,
     onQuestionsLabel = "Manage Questions",
     onParticipants,
@@ -394,6 +400,8 @@ export function DataTable<T extends object>(
                   onView={onView}
                   onEdit={onEdit}
                   onDelete={onDelete}
+                  onDeleteLabel={onDeleteLabel}
+                  canDelete={canDelete}
                   onQuestions={onQuestions}
                   onQuestionsLabel={onQuestionsLabel}
                   onParticipants={onParticipants}

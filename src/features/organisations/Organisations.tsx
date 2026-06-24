@@ -453,6 +453,7 @@ export function Organisations() {
     } else {
       setCampActionMessage(message);
       setCampActionError(null);
+      fetchCamps();
     }
   };
 
@@ -479,6 +480,7 @@ export function Organisations() {
       } else {
         setCampActionMessage("Camp reports deleted successfully");
         setCampReportDeleteConfirm(null);
+        fetchCamps();
       }
     } catch (err) {
       setCampActionError(getApiError(err));
@@ -703,6 +705,8 @@ export function Organisations() {
                 onView={openCampView}
                 onViewEngagements={openCampEngagements}
                 onDelete={(r) => setCampReportDeleteConfirm(r)}
+                onDeleteLabel="Delete Camp Report"
+                canDelete={(r) => r.report_count > 0}
                 renderExtraMenuItems={(row, closeMenu) => (
                   <CampReportInitMenu
                     campNo={row.camp_no}
@@ -710,6 +714,7 @@ export function Organisations() {
                     variant="menu"
                     onClose={closeMenu}
                     onFeedback={handleCampReportFeedback}
+                    onInitialized={fetchCamps}
                   />
                 )}
                 pagination={{
@@ -755,6 +760,7 @@ export function Organisations() {
                 campNo={selectedCamp.camp_no}
                 organizationId={selectedCamp.organization_id}
                 onFeedback={handleCampReportFeedback}
+                onInitialized={fetchCamps}
               />
             </div>
           </div>

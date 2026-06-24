@@ -13,6 +13,7 @@ interface CampReportInitMenuProps {
   variant?: "standalone" | "menu";
   onClose?: () => void;
   onFeedback?: (message: string, isError?: boolean) => void;
+  onInitialized?: () => void;
 }
 
 function isAlreadyExistsError(err: unknown): boolean {
@@ -57,6 +58,7 @@ export function CampReportInitMenu({
   variant = "standalone",
   onClose,
   onFeedback,
+  onInitialized,
 }: CampReportInitMenuProps) {
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,6 +72,7 @@ export function CampReportInitMenu({
     try {
       await action();
       notify("Camp report initialized successfully");
+      onInitialized?.();
       onClose?.();
     } catch (err) {
       if (isAlreadyExistsError(err)) {

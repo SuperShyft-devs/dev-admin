@@ -737,6 +737,7 @@ export interface CampListItem {
   start_date: string;
   engagement_count: number;
   department_count: number;
+  report_count: number;
 }
 
 export interface CampReportSection {
