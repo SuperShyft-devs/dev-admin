@@ -817,11 +817,20 @@ export interface CampReportRow {
 export interface CampReportSectionPayload {
   name?: string;
   description?: string | null;
+  /** @deprecated use data.total_enrolled */
   total_enrolled?: number;
   data?: {
+    total_enrolled?: number;
     age_group?: string[];
     enrolled?: number[];
     percent?: number[];
+    employees_enrolled?: number;
+    male_enrolled?: number;
+    female_enrolled?: number;
+    total_blood_test?: number;
+    blood_test_percent?: number;
+    doctor_consultation?: number;
+    high_risk_group?: number;
   };
 }
 

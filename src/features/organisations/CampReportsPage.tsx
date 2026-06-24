@@ -40,6 +40,21 @@ function reportAccordionKey(report: CampReportRow): string {
   return `${report.report_id}-${report.department ?? "overall"}`;
 }
 
+function sectionTotalEnrolled(sectionData: CampReportSectionPayload | null): number | undefined {
+  if (!sectionData) return undefined;
+  return sectionData.data?.total_enrolled ?? sectionData.total_enrolled;
+}
+
+const KPI_LABELS: { key: keyof NonNullable<CampReportSectionPayload["data"]>; label: string }[] = [
+  { key: "employees_enrolled", label: "Employees enrolled" },
+  { key: "male_enrolled", label: "Male enrolled" },
+  { key: "female_enrolled", label: "Female enrolled" },
+  { key: "total_blood_test", label: "Total blood test" },
+  { key: "blood_test_percent", label: "Blood test %" },
+  { key: "doctor_consultation", label: "Doctor consultation" },
+  { key: "high_risk_group", label: "High risk group" },
+];
+
 export function CampReportsPage() {
   const { campNo: campNoParam } = useParams<{ campNo: string }>();
   const campNo = campNoParam ? Number(campNoParam) : NaN;
@@ -271,10 +286,27 @@ export function CampReportsPage() {
                                 </button>
                               </div>
 
-                              {sectionData?.total_enrolled != null && (
+                              {sectionTotalEnrolled(sectionData) != null && (
                                 <p className="text-xs text-zinc-600">
-                                  Total enrolled: {sectionData.total_enrolled}
+                                  Total enrolled: {sectionTotalEnrolled(sectionData)}
                                 </p>
+                              )}
+
+                              {section.section_key === "kpis" && sectionData?.data && (
+                                <dl className="grid grid-cols-1 gap-1 text-xs text-zinc-600">
+                                  {KPI_LABELS.map(({ key, label }) => {
+                                    const value = sectionData.data?.[key];
+                                    if (value == null) return null;
+                                    return (
+                                      <div key={key} className="flex justify-between gap-2">
+                                        <dt>{label}</dt>
+                                        <dd className="font-medium text-zinc-800 tabular-nums">
+                                          {value}
+                                        </dd>
+                                      </div>
+                                    );
+                                  })}
+                                </dl>
                               )}
 
                               {sectionError && (
