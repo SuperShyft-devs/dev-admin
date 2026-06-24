@@ -774,6 +774,10 @@ export const campReportsApi = {
     api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/meta`),
   getDepartmentMeta: (campNo: number, slug: string) =>
     api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/department/${slug}/meta`),
+  listSections: (campNo: number) =>
+    api.get<{ data: string[] }>(`/reports/camps/${campNo}/sections`),
+  listDepartmentSections: (campNo: number, slug: string) =>
+    api.get<{ data: string[] }>(`/reports/camps/${campNo}/department/${slug}/sections`),
   getDashboard: (campNo: number, section: string) =>
     api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/dashboard`, {
       params: { section },
