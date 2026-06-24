@@ -10,11 +10,13 @@ import { ManageReportSectionsModal } from "../../shared/ui/ManageReportSectionsM
 import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
 import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
 import { CampReportInitMenu } from "../../shared/ui/CampReportInitMenu";
+import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
   organizationsApi,
   employeesApi,
   uploadsApi,
   campReportsApi,
+  usersApi,
   type EmployeeListItem,
   type UserListItem,
   type OrganizationListItem,
@@ -62,10 +64,7 @@ export function Organisations() {
     city: "",
     state: "",
     country: "",
-    contact_name: "",
-    contact_email: "",
-    contact_phone: "",
-    contact_designation: "",
+    contact_person_user_id: 0,
     bd_employee_id: undefined,
   });
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
@@ -254,15 +253,52 @@ export function Organisations() {
 
   const buildOrganizationPayload = (): OrganizationCreate => ({
     ...formData,
+    contact_person_user_id:
+      formData.contact_person_user_id && formData.contact_person_user_id > 0
+        ? formData.contact_person_user_id
+        : null,
     departments:
       departmentNames.length > 0
         ? departmentNames.map((department) => ({ department }))
         : null,
   });
 
+  const formatUserLabel = (userId: number | null | undefined): string => {
+    if (!userId) return "—";
+    const user = usersById[userId];
+    if (!user) return `User #${userId}`;
+    const first = (user.first_name ?? "").trim();
+    const last = (user.last_name ?? "").trim();
+    const name = [first, last].filter(Boolean).join(" ").trim();
+    return name ? `${name} (#${userId})` : `User #${userId}`;
+  };
+
+  const loadContactPersonUser = async (userId: number | null | undefined) => {
+    if (!userId || usersById[userId]) return;
+    try {
+      const res = await usersApi.get(userId);
+      const u = res.data.data;
+      setUsersById((prev) => ({
+        ...prev,
+        [userId]: {
+          user_id: u.user_id,
+          first_name: u.first_name,
+          last_name: u.last_name,
+          phone: u.phone,
+          email: u.email,
+          status: u.status,
+        },
+      }));
+    } catch {
+      // ignore lookup errors in view mode
+    }
+  };
+
   const openView = (row: OrganizationListItem) => {
-    organizationsApi.get(row.organization_id).then((res) => {
-      setSelected(res.data.data);
+    organizationsApi.get(row.organization_id).then(async (res) => {
+      const org = res.data.data;
+      setSelected(org);
+      await loadContactPersonUser(org.contact_person_user_id);
       setModalMode("view");
       setModalOpen(true);
     }).catch((err) => setError(getApiError(err)));
@@ -280,10 +316,7 @@ export function Organisations() {
       city: "",
       state: "",
       country: "",
-      contact_name: "",
-      contact_email: "",
-      contact_phone: "",
-      contact_designation: "",
+      contact_person_user_id: 0,
       bd_employee_id: undefined,
     });
     setDepartmentNames([]);
@@ -307,10 +340,7 @@ export function Organisations() {
         city: o.city ?? "",
         state: o.state ?? "",
         country: o.country ?? "",
-        contact_name: o.contact_name ?? "",
-        contact_email: o.contact_email ?? "",
-        contact_phone: o.contact_phone ?? "",
-        contact_designation: o.contact_designation ?? "",
+        contact_person_user_id: o.contact_person_user_id ?? 0,
         bd_employee_id: o.bd_employee_id ?? undefined,
       });
       setDepartmentNames((o.departments ?? []).map((d) => d.department));
@@ -831,10 +861,7 @@ export function Organisations() {
               <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
               <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
               <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
-              <div><span className="text-zinc-500">Contact:</span> {selected.contact_name ?? "—"}</div>
-              <div><span className="text-zinc-500">Designation:</span> {selected.contact_designation ?? "—"}</div>
-              <div><span className="text-zinc-500">Email:</span> {selected.contact_email ?? "—"}</div>
-              <div><span className="text-zinc-500">Phone:</span> {selected.contact_phone ?? "—"}</div>
+              <div><span className="text-zinc-500">Contact Person:</span> {formatUserLabel(selected.contact_person_user_id)}</div>
               <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
               <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
             </div>
@@ -1006,40 +1033,13 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Name</label>
-                <input
-                  type="text"
-                  value={formData.contact_name ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Designation</label>
-                <input
-                  type="text"
-                  value={formData.contact_designation ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_designation: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Email</label>
-                <input
-                  type="email"
-                  value={formData.contact_email ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Contact Phone</label>
-                <input
-                  type="text"
-                  value={formData.contact_phone ?? ""}
-                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              <div className="md:col-span-2">
+                <UserSearchPicker
+                  label="Contact Person"
+                  value={formData.contact_person_user_id ?? 0}
+                  onChange={(userId) =>
+                    setFormData({ ...formData, contact_person_user_id: userId })
+                  }
                 />
               </div>
               <div className="md:col-span-2">

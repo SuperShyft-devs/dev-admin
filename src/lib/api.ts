@@ -643,10 +643,7 @@ export interface Organization {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
-  contact_designation?: string | null;
+  contact_person_user_id?: number | null;
   bd_employee_id?: number | null;
   status?: string | null;
   created_at?: string | null;
@@ -678,10 +675,7 @@ export interface OrganizationCreate {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
-  contact_designation?: string | null;
+  contact_person_user_id?: number | null;
   bd_employee_id?: number | null;
   departments?: OrganizationDepartmentInput[] | null;
 }
@@ -776,6 +770,19 @@ export const campReportSectionsApi = {
 export const campReportsApi = {
   listByCamp: (campNo: number) =>
     api.get<{ data: CampReportRow[] }>(`/reports/camps/${campNo}`),
+  getMeta: (campNo: number) =>
+    api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/meta`),
+  getDepartmentMeta: (campNo: number, slug: string) =>
+    api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/department/${slug}/meta`),
+  getDashboard: (campNo: number, section: string) =>
+    api.get<{ data: Record<string, unknown> }>(`/reports/camps/${campNo}/dashboard`, {
+      params: { section },
+    }),
+  getDepartmentDashboard: (campNo: number, slug: string, section: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/department/${slug}/dashboard`,
+      { params: { section } }
+    ),
   refreshCamp: (campNo: number, section: string) =>
     api.put<{ data: CampReportRefreshResult }>(`/reports/camps/${campNo}/refresh`, { section }),
   refreshDepartment: (campNo: number, slug: string, section: string) =>
