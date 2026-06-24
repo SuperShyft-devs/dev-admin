@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Search, Plus, Loader2, Users, X } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -14,13 +14,20 @@ import {
   type OrganizationListItem,
   type Organization,
   type OrganizationCreate,
+  type CampListItem,
   getApiError,
 } from "../../lib/api";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 
+type TabKey = "organizations" | "camps";
+const TAB_KEYS: TabKey[] = ["organizations", "camps"];
+
 export function Organisations() {
   const navigate = useNavigate();
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const activeTab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : "organizations";
+
   const [data, setData] = useState<OrganizationListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -80,6 +87,24 @@ export function Organisations() {
   const [departmentNames, setDepartmentNames] = useState<string[]>([]);
   const [departmentInput, setDepartmentInput] = useState("");
 
+  const [campsData, setCampsData] = useState<CampListItem[]>([]);
+  const [campsTotal, setCampsTotal] = useState(0);
+  const [campsPage, setCampsPage] = useState(1);
+  const [campsLimit] = useState(10);
+  const [campsSearch, setCampsSearch] = useState("");
+  const [campsSortKey, setCampsSortKey] = useState<string>("camp_no");
+  const [campsSortDir, setCampsSortDir] = useState<"asc" | "desc">("desc");
+  const [campsLoading, setCampsLoading] = useState(false);
+  const [campsError, setCampsError] = useState<string | null>(null);
+  const [selectedCamp, setSelectedCamp] = useState<CampListItem | null>(null);
+  const [campViewOpen, setCampViewOpen] = useState(false);
+
+  useEffect(() => {
+    if (tabParam !== activeTab) {
+      navigate(`/organisations/${activeTab}`, { replace: true });
+    }
+  }, [activeTab, navigate, tabParam]);
+
   useEffect(() => {
     organizationsApi
       .filterOptions()
@@ -116,6 +141,26 @@ export function Organisations() {
     }
   }, [page, limit, statusFilter, search, cityFilter, countryFilter, sortKey, sortDir]);
 
+  const fetchCamps = useCallback(async () => {
+    setCampsLoading(true);
+    setCampsError(null);
+    try {
+      const res = await organizationsApi.listCamps({
+        page: campsPage,
+        limit: campsLimit,
+        search: campsSearch.trim() || undefined,
+        sort_by: campsSortKey,
+        sort_dir: campsSortDir,
+      });
+      setCampsData(res.data.data);
+      setCampsTotal(res.data.meta.total);
+    } catch (err) {
+      setCampsError(getApiError(err));
+    } finally {
+      setCampsLoading(false);
+    }
+  }, [campsPage, campsLimit, campsSearch, campsSortKey, campsSortDir]);
+
   const fetchEmployees = useCallback(async () => {
     setEmployeeLoading(true);
     setError(null);
@@ -142,12 +187,24 @@ export function Organisations() {
   }, []);
 
   useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+    if (activeTab === "organizations") {
+      fetchList();
+    }
+  }, [activeTab, fetchList]);
+
+  useEffect(() => {
+    if (activeTab === "camps") {
+      fetchCamps();
+    }
+  }, [activeTab, fetchCamps]);
 
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, cityFilter, countryFilter]);
+
+  useEffect(() => {
+    setCampsPage(1);
+  }, [campsSearch]);
 
   const addDepartmentName = (raw: string) => {
     const name = raw.trim();
@@ -349,19 +406,61 @@ export function Organisations() {
     setPage(1);
   };
 
+  const handleCampsSort = (key: string) => {
+    setCampsSortDir((d) => (campsSortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
+    setCampsSortKey(key);
+    setCampsPage(1);
+  };
+
+  const openCampView = (row: CampListItem) => {
+    setSelectedCamp(row);
+    setCampViewOpen(true);
+  };
+
+  const campColumns: Column<CampListItem>[] = [
+    { key: "camp_no", label: "Camp No", sortable: true },
+    { key: "camp_name", label: "Camp name", sortable: true },
+    {
+      key: "engagement_count",
+      label: "No of engagements",
+      sortable: true,
+      render: (row) => String(row.engagement_count),
+    },
+  ];
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Organisations</h1>
-        <button
-          onClick={openAdd}
-          className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
-        >
-          <Plus className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Add Organisation</span>
-        </button>
+        {activeTab === "organizations" && (
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+          >
+            <Plus className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Add Organisation</span>
+          </button>
+        )}
       </div>
 
+      <div className="flex gap-1 mb-5 border-b border-zinc-200">
+        {TAB_KEYS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => navigate(`/organisations/${tab}`)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
+              activeTab === tab
+                ? "border-zinc-900 text-zinc-900"
+                : "border-transparent text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            {tab === "organizations" ? "Organizations" : "Camps"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "organizations" && (
+        <>
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
           {error}
@@ -447,6 +546,79 @@ export function Organisations() {
           />
         )}
       </div>
+        </>
+      )}
+
+      {activeTab === "camps" && (
+        <div>
+          {campsError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+              {campsError}
+            </div>
+          )}
+
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <input
+                type="search"
+                placeholder="Search by camp no or organisation name..."
+                value={campsSearch}
+                onChange={(e) => setCampsSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+            {campsLoading ? (
+              <div className="py-12 flex justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+              </div>
+            ) : (
+              <DataTable
+                columns={campColumns}
+                data={campsData}
+                keyExtractor={(r) => r.camp_no}
+                sortKey={campsSortKey}
+                sortDir={campsSortDir}
+                onSort={handleCampsSort}
+                onView={openCampView}
+                pagination={{
+                  page: campsPage,
+                  limit: campsLimit,
+                  total: campsTotal,
+                  onPageChange: setCampsPage,
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      <Modal
+        open={campViewOpen}
+        onClose={() => {
+          setCampViewOpen(false);
+          setSelectedCamp(null);
+        }}
+        title="View Camp"
+        maxWidthClassName="max-w-md"
+      >
+        {selectedCamp && (
+          <div className="space-y-3 text-sm">
+            <div>
+              <span className="text-zinc-500">Camp No:</span> {selectedCamp.camp_no}
+            </div>
+            <div>
+              <span className="text-zinc-500">Camp name:</span> {selectedCamp.camp_name}
+            </div>
+            <div>
+              <span className="text-zinc-500">No of engagements:</span> {selectedCamp.engagement_count}
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={modalOpen}

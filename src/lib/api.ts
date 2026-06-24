@@ -716,7 +716,27 @@ export const organizationsApi = {
       `/organizations/${id}/status`,
       { status }
     ),
+  listCamps: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
+  }) =>
+    api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/organizations/camps",
+      { params }
+    ),
 };
+
+export interface CampListItem {
+  camp_no: number;
+  camp_name: string;
+  organization_id: number;
+  organization_name: string;
+  start_date: string;
+  engagement_count: number;
+}
 
 // Experts (doctors & nutritionists)
 export type ExpertType = "doctor" | "nutritionist";
@@ -828,6 +848,7 @@ export interface Engagement {
   engagement_name?: string | null;
   metsights_engagement_id?: string | null;
   organization_id?: number | null;
+  camp_no?: number | null;
   engagement_code?: string | null;
   engagement_type?: EngagementKind | string | null;
   assessment_package_id?: number | null;
@@ -854,6 +875,7 @@ export interface EngagementListItem {
   engagement_id: number;
   engagement_name?: string | null;
   organization_id?: number | null;
+  camp_no?: number | null;
   engagement_code?: string | null;
   engagement_type?: EngagementKind | string | null;
   assessment_package_id?: number | null;
@@ -881,6 +903,7 @@ export interface EngagementCreate {
   engagement_name?: string | null;
   metsights_engagement_id?: string | null;
   organization_id?: number | null;
+  camp_no?: number | null;
   engagement_type: EngagementKind;
   engagement_code?: string | null;
   assessment_package_id?: number | null;

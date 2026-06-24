@@ -75,7 +75,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="organisations" element={<Organisations />} />
+        <Route path="organisations" element={<Navigate to="/organisations/organizations" replace />} />
+        <Route path="organisations/:tab" element={<Organisations />} />
         <Route path="engagements" element={<Engagements />} />
         <Route path="employees" element={<Employees />} />
         <Route

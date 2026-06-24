@@ -23,6 +23,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { EngagementNotificationModal } from "./EngagementNotificationModal";
+import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -1316,6 +1317,7 @@ export function Engagements({
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
           bioai_report_notification: formData.bioai_report_notification || null,
+          camp_no: computeCampNo(resolveOrganizationId(), formData.start_date),
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1355,6 +1357,7 @@ export function Engagements({
           questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
           blood_report_notification: formData.blood_report_notification || null,
           bioai_report_notification: formData.bioai_report_notification || null,
+          camp_no: computeCampNo(resolveOrganizationId(), formData.start_date),
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -2270,6 +2273,9 @@ export function Engagements({
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   required
                 />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Same start date as other engagements from this organisation groups them into one camp.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">End date *</label>
