@@ -738,6 +738,39 @@ export interface CampListItem {
   engagement_count: number;
 }
 
+export interface CampReportSection {
+  report_sections: number;
+  section: string;
+  section_key: string;
+  description?: string | null;
+}
+
+export interface CampReportSectionCreate {
+  section: string;
+  section_key: string;
+  description?: string | null;
+}
+
+export interface CampReportSectionUpdate {
+  section?: string;
+  section_key?: string;
+  description?: string | null;
+}
+
+export const campReportSectionsApi = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<{ data: CampReportSection[]; meta: { page: number; limit: number; total: number } }>(
+      "/reports/camp-sections",
+      { params }
+    ),
+  create: (payload: CampReportSectionCreate) =>
+    api.post<{ data: { report_sections: number } }>("/reports/camp-sections", payload),
+  update: (id: number, payload: CampReportSectionUpdate) =>
+    api.put<{ data: CampReportSection }>(`/reports/camp-sections/${id}`, payload),
+  delete: (id: number) =>
+    api.delete<{ data: { deleted: boolean } }>(`/reports/camp-sections/${id}`),
+};
+
 // Experts (doctors & nutritionists)
 export type ExpertType = "doctor" | "nutritionist";
 export type ConsultationMode = "video" | "voice" | "chat";
@@ -929,6 +962,7 @@ export const engagementsApi = {
     page?: number;
     limit?: number;
     org_id?: number;
+    camp_no?: number;
     status?: string;
     city?: string;
     engagement_type?: string;

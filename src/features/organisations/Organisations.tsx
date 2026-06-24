@@ -5,6 +5,8 @@ import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
+import { ManageReportSectionsModal } from "../../shared/ui/ManageReportSectionsModal";
+import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
 import {
   organizationsApi,
   employeesApi,
@@ -98,6 +100,12 @@ export function Organisations() {
   const [campsError, setCampsError] = useState<string | null>(null);
   const [selectedCamp, setSelectedCamp] = useState<CampListItem | null>(null);
   const [campViewOpen, setCampViewOpen] = useState(false);
+  const [reportSectionsOpen, setReportSectionsOpen] = useState(false);
+  const [campEngagements, setCampEngagements] = useState<{
+    campNo: number;
+    campName?: string;
+    orgName?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (tabParam !== activeTab) {
@@ -417,6 +425,14 @@ export function Organisations() {
     setCampViewOpen(true);
   };
 
+  const openCampEngagements = (row: CampListItem) => {
+    setCampEngagements({
+      campNo: row.camp_no,
+      campName: row.camp_name,
+      orgName: row.organization_name,
+    });
+  };
+
   const campColumns: Column<CampListItem>[] = [
     { key: "camp_no", label: "Camp No", sortable: true },
     { key: "camp_name", label: "Camp name", sortable: true },
@@ -424,7 +440,18 @@ export function Organisations() {
       key: "engagement_count",
       label: "No of engagements",
       sortable: true,
-      render: (row) => String(row.engagement_count),
+      render: (row) => (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openCampEngagements(row);
+          }}
+          className="text-zinc-900 hover:underline font-medium"
+        >
+          {row.engagement_count}
+        </button>
+      ),
     },
   ];
 
@@ -439,6 +466,15 @@ export function Organisations() {
           >
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Add Organisation</span>
+          </button>
+        )}
+        {activeTab === "camps" && (
+          <button
+            onClick={() => setReportSectionsOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+          >
+            <span className="hidden sm:inline">Manage Report Sections</span>
+            <span className="sm:hidden">Sections</span>
           </button>
         )}
       </div>
@@ -584,6 +620,7 @@ export function Organisations() {
                 sortDir={campsSortDir}
                 onSort={handleCampsSort}
                 onView={openCampView}
+                onViewEngagements={openCampEngagements}
                 pagination={{
                   page: campsPage,
                   limit: campsLimit,
@@ -984,6 +1021,21 @@ export function Organisations() {
           onClose={() => setEngagementsOrg(null)}
           orgId={engagementsOrg.orgId}
           orgName={engagementsOrg.orgName}
+        />
+      )}
+
+      <ManageReportSectionsModal
+        open={reportSectionsOpen}
+        onClose={() => setReportSectionsOpen(false)}
+      />
+
+      {campEngagements && (
+        <CampEngagementsModal
+          open={!!campEngagements}
+          onClose={() => setCampEngagements(null)}
+          campNo={campEngagements.campNo}
+          campName={campEngagements.campName}
+          orgName={campEngagements.orgName}
         />
       )}
 

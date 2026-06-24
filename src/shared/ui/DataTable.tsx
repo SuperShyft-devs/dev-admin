@@ -12,6 +12,7 @@ import {
   Users,
   UserCog,
   CalendarClock,
+  CalendarDays,
   Send,
 } from "lucide-react";
 import {
@@ -64,6 +65,7 @@ interface DataTableProps<T> {
   /** Engagement checklist manager (shown with ClipboardCheck icon). */
   onManageChecklists?: (row: T) => void;
   onManageChecklistsLabel?: string;
+  onViewEngagements?: (row: T) => void;
   onSendMessage?: (row: T) => void;
   firstColumnClickableView?: boolean;
   onReorder?: (newOrderKeys: (string | number)[]) => void;
@@ -92,6 +94,7 @@ interface SortableRowProps<T> {
   onOccupiedSlots?: (row: T) => void;
   onManageChecklists?: (row: T) => void;
   onManageChecklistsLabel: string;
+  onViewEngagements?: (row: T) => void;
   onSendMessage?: (row: T) => void;
   firstColumnClickableView: boolean;
   openActionsRow: string | number | null;
@@ -197,6 +200,11 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
                     <ClipboardCheck className="w-4 h-4" /> {props.onManageChecklistsLabel}
                   </button>
                 )}
+                {props.onViewEngagements && (
+                  <button onClick={() => { props.onViewEngagements!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" /> View Engagements
+                  </button>
+                )}
                 {props.onQuestions && (
                   <button onClick={() => { props.onQuestions!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
                     <ListChecks className="w-4 h-4" /> {props.onQuestionsLabel}
@@ -241,6 +249,7 @@ export function DataTable<T extends object>(
     onOccupiedSlots,
     onManageChecklists,
     onManageChecklistsLabel = "Manage Checklists",
+    onViewEngagements,
     onSendMessage,
     firstColumnClickableView = true,
     onReorder,
@@ -283,6 +292,7 @@ export function DataTable<T extends object>(
     onAssistants ||
     onOccupiedSlots ||
     onManageChecklists ||
+    onViewEngagements ||
     onSendMessage;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -386,6 +396,7 @@ export function DataTable<T extends object>(
                   onOccupiedSlots={onOccupiedSlots}
                   onManageChecklists={onManageChecklists}
                   onManageChecklistsLabel={onManageChecklistsLabel}
+                  onViewEngagements={onViewEngagements}
                   onSendMessage={onSendMessage}
                   firstColumnClickableView={firstColumnClickableView}
                   openActionsRow={openActionsRow}
