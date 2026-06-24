@@ -4,6 +4,7 @@ import { AdminLayout } from "./layouts/AdminLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { Organisations } from "./features/organisations/Organisations";
+import { CampReportsPage } from "./features/organisations/CampReportsPage";
 import { Engagements } from "./features/engagements/Engagements";
 import { Employees } from "./features/employees/Employees";
 import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
@@ -76,6 +77,7 @@ function AppRoutes() {
       >
         <Route index element={<Dashboard />} />
         <Route path="organisations" element={<Navigate to="/organisations/organizations" replace />} />
+        <Route path="organisations/camps/:campNo/reports" element={<CampReportsPage />} />
         <Route path="organisations/:tab" element={<Organisations />} />
         <Route path="engagements" element={<Engagements />} />
         <Route path="employees" element={<Employees />} />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
-import { Search, Plus, Loader2, Users, X } from "lucide-react";
+import { Search, Plus, Loader2, Users, X, FileBarChart } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -713,18 +713,31 @@ export function Organisations() {
                 onDelete={(r) => setCampReportDeleteConfirm(r)}
                 onDeleteLabel="Delete Camp Report"
                 canDelete={(r) => r.report_count > 0}
-                renderExtraMenuItems={(row, closeMenu) =>
-                  row.report_count === 0 ? (
-                    <CampReportInitMenu
-                      campNo={row.camp_no}
-                      organizationId={row.organization_id}
-                      variant="menu"
-                      onClose={closeMenu}
-                      onFeedback={handleCampReportFeedback}
-                      onInitialized={fetchCamps}
-                    />
-                  ) : null
-                }
+                renderExtraMenuItems={(row, closeMenu) => (
+                  <>
+                    {row.report_count > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/organisations/camps/${row.camp_no}/reports`);
+                          closeMenu();
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                      >
+                        <FileBarChart className="w-4 h-4" /> Manage Reports
+                      </button>
+                    ) : (
+                      <CampReportInitMenu
+                        campNo={row.camp_no}
+                        organizationId={row.organization_id}
+                        variant="menu"
+                        onClose={closeMenu}
+                        onFeedback={handleCampReportFeedback}
+                        onInitialized={fetchCamps}
+                      />
+                    )}
+                  </>
+                )}
                 pagination={{
                   page: campsPage,
                   limit: campsLimit,

@@ -774,6 +774,15 @@ export const campReportSectionsApi = {
 };
 
 export const campReportsApi = {
+  listByCamp: (campNo: number) =>
+    api.get<{ data: CampReportRow[] }>(`/reports/camps/${campNo}`),
+  refreshCamp: (campNo: number, section: string) =>
+    api.put<{ data: CampReportRefreshResult }>(`/reports/camps/${campNo}/refresh`, { section }),
+  refreshDepartment: (campNo: number, slug: string, section: string) =>
+    api.put<{ data: CampReportRefreshResult }>(
+      `/reports/camps/${campNo}/department/${slug}/refresh`,
+      { section }
+    ),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>
@@ -783,6 +792,32 @@ export const campReportsApi = {
   deleteDepartment: (campNo: number, slug: string) =>
     api.delete<{ data: { deleted: boolean } }>(`/reports/camps/${campNo}/department/${slug}`),
 };
+
+export interface CampReportRow {
+  report_id: number;
+  camp_no: number;
+  department: string | null;
+  organization_id: number;
+  report: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CampReportSectionPayload {
+  name?: string;
+  description?: string | null;
+  total_enrolled?: number;
+  data?: {
+    age_group?: string[];
+    enrolled?: number[];
+    percent?: number[];
+  };
+}
+
+export interface CampReportRefreshResult {
+  report_id: number;
+  section: CampReportSectionPayload;
+}
 
 // Experts (doctors & nutritionists)
 export type ExpertType = "doctor" | "nutritionist";
