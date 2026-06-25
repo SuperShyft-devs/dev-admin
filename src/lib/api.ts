@@ -1381,6 +1381,7 @@ export interface Participant {
   first_name?: string | null;
   last_name?: string | null;
   phone?: string | null;
+  gender?: string | null;
   email?: string | null;
   status?: string | null;
   slot_start_time?: string | null;
@@ -1426,6 +1427,11 @@ export const participantsApi = {
   byOrganization: (orgId: number, params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
       `/organizations/${orgId}/participants`,
+      { params }
+    ),
+  byCamp: (campNo: number, params?: { page?: number; limit?: number }) =>
+    api.get<{ data: Participant[]; meta: { page: number; limit: number; total: number } }>(
+      `/reports/camps/${campNo}/participants`,
       { params }
     ),
   removeFromEngagement: (engagementId: number, userId: number) =>

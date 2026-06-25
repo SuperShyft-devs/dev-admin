@@ -18,7 +18,8 @@ type Source =
   | { kind: "engagement-id"; engagementId: number; name?: string }
   | { kind: "engagement-code"; code: string; name?: string }
   | { kind: "public" }
-  | { kind: "organization"; orgId: number; orgName?: string };
+  | { kind: "organization"; orgId: number; orgName?: string }
+  | { kind: "camp"; campNo: number; campName?: string; organizationId: number };
 
 interface ParticipantsModalProps {
   open: boolean;
@@ -60,6 +61,8 @@ function modalTitle(source: Source): string {
       return "Participants — Public (B2C)";
     case "organization":
       return `Participants — ${source.orgName || `Org #${source.orgId}`}`;
+    case "camp":
+      return `Participants — ${source.campName || `Camp #${source.campNo}`}`;
   }
 }
 
@@ -158,6 +161,7 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "first_name",
     "last_name",
     "phone",
+    "gender",
     "email",
     "address",
     "pin_code",
@@ -247,6 +251,22 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       if (source.kind === "organization") {
         const res = await participantsApi.byOrganization(source.orgId);
         setParticipants(res.data.data ?? []);
+      } else if (source.kind === "camp") {
+        const limit = 100;
+        let page = 1;
+        let total = 0;
+        const all: Participant[] = [];
+
+        do {
+          const res = await participantsApi.byCamp(source.campNo, { page, limit });
+          const chunk = res.data.data ?? [];
+          total = Number(res.data.meta?.total ?? chunk.length);
+          all.push(...chunk);
+          page += 1;
+          if (chunk.length === 0) break;
+        } while (all.length < total);
+
+        setParticipants(all);
       } else {
         const limit = 100;
         let page = 1;
@@ -277,6 +297,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [source]);
 
   const fetchOrganizationDepartments = useCallback(async () => {
+    if (source.kind === "camp") {
+      try {
+        const orgRes = await organizationsApi.get(source.organizationId);
+        setOrganizationId(source.organizationId);
+        setOrgDepartments(orgRes.data.data.departments ?? []);
+      } catch {
+        setOrgDepartments([]);
+        setOrganizationId(source.organizationId);
+      }
+      return;
+    }
+
     if (source.kind !== "engagement-id") {
       setOrgDepartments([]);
       setOrganizationId(null);
@@ -470,6 +502,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         ? `engagement-${source.engagementId}-selected`
         : source.kind === "engagement-code"
         ? `${source.code}-selected`
+        : source.kind === "camp"
+        ? `camp-${source.campNo}-selected`
         : `${source.kind}-selected`;
     exportParticipantsToCsv(selectedParticipants, `participants-${codePart}`);
   };
@@ -792,6 +826,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       Phone
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                      Gender
+                    </th>
+                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Email
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
@@ -882,6 +919,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.phone || "—"}
+                        </td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                          {p.gender || "—"}
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.email || "—"}

@@ -78,6 +78,11 @@ export function Organisations() {
     orgId: number;
     orgName?: string;
   } | null>(null);
+  const [participantsCamp, setParticipantsCamp] = useState<{
+    campNo: number;
+    campName?: string;
+    organizationId: number;
+  } | null>(null);
   const [engagementsOrg, setEngagementsOrg] = useState<{
     orgId: number;
     orgName?: string;
@@ -740,6 +745,13 @@ export function Organisations() {
                 onView={openCampView}
                 onViewEngagements={openCampEngagements}
                 onViewDepartments={openCampDepartments}
+                onParticipants={(r) =>
+                  setParticipantsCamp({
+                    campNo: r.camp_no,
+                    campName: r.camp_name,
+                    organizationId: r.organization_id,
+                  })
+                }
                 onDelete={(r) => setCampReportDeleteConfirm(r)}
                 onDeleteLabel="Delete Camp Report"
                 canDelete={(r) => r.report_count > 0}
@@ -1144,6 +1156,19 @@ export function Organisations() {
             kind: "organization",
             orgId: participantsOrg.orgId,
             orgName: participantsOrg.orgName,
+          }}
+        />
+      )}
+
+      {participantsCamp && (
+        <ParticipantsModal
+          open={!!participantsCamp}
+          onClose={() => setParticipantsCamp(null)}
+          source={{
+            kind: "camp",
+            campNo: participantsCamp.campNo,
+            campName: participantsCamp.campName,
+            organizationId: participantsCamp.organizationId,
           }}
         />
       )}
