@@ -16,6 +16,7 @@ import {
   type CampReportSection,
   type CampReportSectionPayload,
 } from "../../lib/api";
+import { Modal } from "../../shared/ui/Modal";
 
 function getReportMeta(report: CampReportRow): Record<string, unknown> | null {
   const payload = report.report;
@@ -40,21 +41,6 @@ function reportAccordionKey(report: CampReportRow): string {
   return `${report.report_id}-${report.department ?? "overall"}`;
 }
 
-function sectionTotalEnrolled(sectionData: CampReportSectionPayload | null): number | undefined {
-  if (!sectionData) return undefined;
-  return sectionData.data?.total_enrolled ?? sectionData.total_enrolled;
-}
-
-const KPI_LABELS: { key: keyof NonNullable<CampReportSectionPayload["data"]>; label: string }[] = [
-  { key: "employees_enrolled", label: "Employees enrolled" },
-  { key: "male_enrolled", label: "Male enrolled" },
-  { key: "female_enrolled", label: "Female enrolled" },
-  { key: "total_blood_test", label: "Total blood test" },
-  { key: "blood_test_percent", label: "Blood test %" },
-  { key: "doctor_consultation", label: "Doctor consultation" },
-  { key: "high_risk_group", label: "High risk group" },
-];
-
 export function CampReportsPage() {
   const { campNo: campNoParam } = useParams<{ campNo: string }>();
   const campNo = campNoParam ? Number(campNoParam) : NaN;
@@ -64,8 +50,12 @@ export function CampReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
-  const [refreshingKey, setRefreshingKey] = useState<string | null>(null);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [sectionErrors, setSectionErrors] = useState<Record<string, string | null>>({});
+  const [dashboardModal, setDashboardModal] = useState<{
+    title: string;
+    data: Record<string, unknown>;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -119,42 +109,35 @@ export function CampReportsPage() {
     setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleRefresh = async (
+  const handleLoadSection = async (
     report: CampReportRow,
-    sectionKey: string
+    section: CampReportSection
   ) => {
-    const refreshStateKey = `${report.report_id}:${sectionKey}`;
-    setRefreshingKey(refreshStateKey);
-    setSectionErrors((prev) => ({ ...prev, [refreshStateKey]: null }));
+    const loadStateKey = `${report.report_id}:${section.section_key}`;
+    setLoadingKey(loadStateKey);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
 
     try {
       const response =
         report.department === null
-          ? await campReportsApi.refreshCamp(campNo, sectionKey)
-          : await campReportsApi.refreshDepartment(campNo, report.department, sectionKey);
+          ? await campReportsApi.getDashboard(campNo, section.section_key)
+          : await campReportsApi.getDepartmentDashboard(
+              campNo,
+              report.department,
+              section.section_key
+            );
 
-      const updatedSection = response.data.data.section;
-      setReports((prev) =>
-        prev.map((row) => {
-          if (row.report_id !== report.report_id) return row;
-          const nextReport = { ...(row.report ?? {}) };
-          nextReport[sectionKey] = updatedSection;
-          if (nextReport.meta && typeof nextReport.meta === "object") {
-            nextReport.meta = {
-              ...(nextReport.meta as Record<string, unknown>),
-              summary_available: true,
-            };
-          }
-          return { ...row, report: nextReport };
-        })
-      );
+      setDashboardModal({
+        title: section.section,
+        data: response.data.data,
+      });
     } catch (err) {
       setSectionErrors((prev) => ({
         ...prev,
-        [refreshStateKey]: getApiError(err),
+        [loadStateKey]: getApiError(err),
       }));
     } finally {
-      setRefreshingKey(null);
+      setLoadingKey(null);
     }
   };
 
@@ -251,14 +234,14 @@ export function CampReportsPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                         {sections.map((section) => {
                           const sectionData = getSectionData(report, section.section_key);
-                          const refreshStateKey = `${report.report_id}:${section.section_key}`;
-                          const isRefreshing = refreshingKey === refreshStateKey;
-                          const sectionError = sectionErrors[refreshStateKey];
+                          const loadStateKey = `${report.report_id}:${section.section_key}`;
+                          const isLoading = loadingKey === loadStateKey;
+                          const sectionError = sectionErrors[loadStateKey];
 
                           return (
                             <div
                               key={`${report.report_id}-${section.section_key}`}
-                              className="rounded-xl border border-zinc-200 bg-white p-4 flex flex-col gap-2"
+                              className="rounded-xl border border-zinc-200 bg-white p-4 flex flex-col gap-2 min-h-[88px]"
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0">
@@ -273,41 +256,18 @@ export function CampReportsPage() {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => void handleRefresh(report, section.section_key)}
-                                  disabled={isRefreshing}
+                                  onClick={() => void handleLoadSection(report, section)}
+                                  disabled={isLoading}
                                   className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 shrink-0"
-                                  title="Refresh section"
+                                  title="Load section data"
                                 >
-                                  {isRefreshing ? (
+                                  {isLoading ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                   ) : (
                                     <RefreshCw className="w-4 h-4" />
                                   )}
                                 </button>
                               </div>
-
-                              {sectionTotalEnrolled(sectionData) != null && (
-                                <p className="text-xs text-zinc-600">
-                                  Total enrolled: {sectionTotalEnrolled(sectionData)}
-                                </p>
-                              )}
-
-                              {section.section_key === "kpis" && sectionData?.data && (
-                                <dl className="grid grid-cols-1 gap-1 text-xs text-zinc-600">
-                                  {KPI_LABELS.map(({ key, label }) => {
-                                    const value = sectionData.data?.[key];
-                                    if (value == null) return null;
-                                    return (
-                                      <div key={key} className="flex justify-between gap-2">
-                                        <dt>{label}</dt>
-                                        <dd className="font-medium text-zinc-800 tabular-nums">
-                                          {value}
-                                        </dd>
-                                      </div>
-                                    );
-                                  })}
-                                </dl>
-                              )}
 
                               {sectionError && (
                                 <p className="text-xs text-red-600">{sectionError}</p>
@@ -324,6 +284,19 @@ export function CampReportsPage() {
           })}
         </div>
       )}
+
+      <Modal
+        open={dashboardModal !== null}
+        onClose={() => setDashboardModal(null)}
+        title={dashboardModal?.title ?? "Section data"}
+        maxWidthClassName="max-w-3xl"
+      >
+        <pre className="text-xs text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words">
+          {dashboardModal
+            ? JSON.stringify(dashboardModal.data, null, 2)
+            : ""}
+        </pre>
+      </Modal>
     </div>
   );
 }
