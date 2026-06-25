@@ -118,6 +118,16 @@ export function CampReportsPage() {
     setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
 
     try {
+      if (report.department === null) {
+        await campReportsApi.refreshCamp(campNo, section.section_key);
+      } else {
+        await campReportsApi.refreshDepartment(
+          campNo,
+          report.department,
+          section.section_key
+        );
+      }
+
       const response =
         report.department === null
           ? await campReportsApi.getDashboard(campNo, section.section_key)
