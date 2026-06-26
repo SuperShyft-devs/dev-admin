@@ -6,6 +6,7 @@ import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
+import { OrganizationCampsModal } from "../../shared/ui/OrganizationCampsModal";
 import { ManageReportSectionsModal } from "../../shared/ui/ManageReportSectionsModal";
 import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
 import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
@@ -84,6 +85,10 @@ export function Organisations() {
     organizationId: number;
   } | null>(null);
   const [engagementsOrg, setEngagementsOrg] = useState<{
+    orgId: number;
+    orgName?: string;
+  } | null>(null);
+  const [campsOrg, setCampsOrg] = useState<{
     orgId: number;
     orgName?: string;
   } | null>(null);
@@ -905,6 +910,20 @@ export function Organisations() {
               >
                 View Engagements
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  setCampsOrg({
+                    orgId: selected.organization_id,
+                    orgName: selected.name ?? undefined,
+                  });
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-sm font-medium"
+              >
+                <FileBarChart className="w-4 h-4" />
+                View Camps
+              </button>
             </div>
           </div>
         ) : (
@@ -1179,6 +1198,15 @@ export function Organisations() {
           onClose={() => setEngagementsOrg(null)}
           orgId={engagementsOrg.orgId}
           orgName={engagementsOrg.orgName}
+        />
+      )}
+
+      {campsOrg && (
+        <OrganizationCampsModal
+          open={!!campsOrg}
+          onClose={() => setCampsOrg(null)}
+          orgId={campsOrg.orgId}
+          orgName={campsOrg.orgName}
         />
       )}
 

@@ -721,6 +721,20 @@ export const organizationsApi = {
       "/organizations/camps",
       { params }
     ),
+  listCampsByOrganization: (
+    organizationId: number,
+    params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      sort_by?: string;
+      sort_dir?: "asc" | "desc";
+    }
+  ) =>
+    api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
+      `/organizations/${organizationId}/camps`,
+      { params }
+    ),
 };
 
 export interface CampListItem {
