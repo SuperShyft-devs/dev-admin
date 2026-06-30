@@ -2089,6 +2089,7 @@ export interface DiagnosticTestStandalone {
 export interface DiagnosticTestGroupStandalone {
   group_id: number;
   group_name: string;
+  group_key: string;
   display_order?: number | null;
   test_count: number;
   price?: number | null;
@@ -2218,6 +2219,7 @@ export const diagnosticTestGroupsApi = {
     api.get<{ data: DiagnosticTestGroupStandalone }>(`/diagnostic-test-groups/${groupId}`),
   create: (payload: {
     group_name: string;
+    group_key: string;
     display_order?: number;
     price?: number | null;
     original_price?: number | null;
@@ -2229,6 +2231,7 @@ export const diagnosticTestGroupsApi = {
     groupId: number,
     payload: {
       group_name?: string;
+      group_key?: string;
       display_order?: number;
       price?: number | null;
       original_price?: number | null;

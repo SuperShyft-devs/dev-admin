@@ -298,7 +298,12 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
 
   const filteredAllGroups = useMemo(() => {
     const q = assignGroupsSearch.trim().toLowerCase();
-    return allGroups.filter((group) => !q || group.group_name.toLowerCase().includes(q));
+    return allGroups.filter(
+      (group) =>
+        !q ||
+        group.group_name.toLowerCase().includes(q) ||
+        group.group_key.toLowerCase().includes(q)
+    );
   }, [allGroups, assignGroupsSearch]);
 
   const selectedAssignGroups = useMemo(() => {
@@ -732,7 +737,10 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                                   ) : (
                                     <ChevronRight className="w-4 h-4 text-zinc-500" />
                                   )}
-                                  <span className="text-sm font-medium text-zinc-900">{group.group_name}</span>
+                                  <span className="text-sm font-medium text-zinc-900">
+                                    {group.group_name}
+                                    <span className="font-normal text-zinc-500"> ({group.group_key})</span>
+                                  </span>
                                   <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
                                     {group.test_count}
                                   </span>
@@ -1060,7 +1068,9 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                           checked={selectedGroupIds.includes(group.group_id)}
                           onChange={() => toggleGroupSelection(group.group_id)}
                         />
-                        <span className="text-sm text-zinc-900 truncate">{group.group_name}</span>
+                        <span className="text-sm text-zinc-900 truncate">
+                          {group.group_name} ({group.group_key})
+                        </span>
                       </div>
                       <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
                         {group.test_count}
@@ -1089,7 +1099,9 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                               <div className="flex items-center justify-between gap-2">
                                 <div className="min-w-0">
                                   <p className="text-xs text-zinc-500">#{index + 1}</p>
-                                  <p className="text-sm text-zinc-900 truncate">{group.group_name}</p>
+                                  <p className="text-sm text-zinc-900 truncate">
+                                    {group.group_name} ({group.group_key})
+                                  </p>
                                 </div>
                                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600">
                                   {group.test_count}

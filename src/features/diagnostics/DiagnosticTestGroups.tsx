@@ -27,8 +27,14 @@ interface DiagnosticTestGroupsProps {
 }
 
 type ModalMode = "add" | "edit";
-type SortKey = "group_id" | "group_name" | "test_count" | "display_order";
+type SortKey = "group_id" | "group_name" | "group_key" | "test_count" | "display_order";
 type SortDir = "asc" | "desc";
+
+function slugifyGroupKey(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const slug = normalized.replace(/[^a-z0-9]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+  return slug;
+}
 
 function toNumberOrNull(value: string): number | null {
   if (!value.trim()) return null;
@@ -38,6 +44,7 @@ function toNumberOrNull(value: string): number | null {
 
 const EMPTY_FORM = {
   group_name: "",
+  group_key: "",
   display_order: "",
   price: "",
   original_price: "",
@@ -59,6 +66,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
   const [modalMode, setModalMode] = useState<ModalMode>("add");
   const [editing, setEditing] = useState<DiagnosticTestGroupStandalone | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [groupKeyManuallyEdited, setGroupKeyManuallyEdited] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -148,6 +156,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
     setModalMode("add");
     setEditing(null);
     setForm(EMPTY_FORM);
+    setGroupKeyManuallyEdited(false);
     setFormError(null);
     setModalOpen(true);
   }, []);
@@ -159,8 +168,10 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
   const openEdit = (row: DiagnosticTestGroupStandalone) => {
     setModalMode("edit");
     setEditing(row);
+    setGroupKeyManuallyEdited(true);
     setForm({
       group_name: row.group_name,
+      group_key: row.group_key ?? "",
       display_order: row.display_order != null ? String(row.display_order) : "",
       price: row.price != null ? String(row.price) : "",
       original_price: row.original_price != null ? String(row.original_price) : "",
@@ -204,7 +215,12 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const next = rows.filter((row) => !q || row.group_name.toLowerCase().includes(q));
+    const next = rows.filter(
+      (row) =>
+        !q ||
+        row.group_name.toLowerCase().includes(q) ||
+        row.group_key.toLowerCase().includes(q)
+    );
     next.sort((a, b) => {
       let left: string | number = "";
       let right: string | number = "";
@@ -214,6 +230,9 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
       } else if (sortKey === "group_name") {
         left = a.group_name.toLowerCase();
         right = b.group_name.toLowerCase();
+      } else if (sortKey === "group_key") {
+        left = a.group_key.toLowerCase();
+        right = b.group_key.toLowerCase();
       } else if (sortKey === "test_count") {
         left = a.test_count;
         right = b.test_count;
@@ -233,11 +252,17 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
       setFormError("Group name is required.");
       return;
     }
+    const groupKey = slugifyGroupKey(form.group_key || form.group_name);
+    if (!groupKey) {
+      setFormError("Group key is required.");
+      return;
+    }
     setSubmitting(true);
     setFormError(null);
     try {
       const payload = {
         group_name: form.group_name.trim(),
+        group_key: groupKey,
         display_order: form.display_order.trim() ? Number(form.display_order) : undefined,
         price: toNumberOrNull(form.price),
         original_price: toNumberOrNull(form.original_price),
@@ -428,7 +453,18 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
       key: "group_name",
       label: "Group name",
       sortable: true,
-      render: (row) => <span className="font-medium text-zinc-900">{row.group_name}</span>,
+      render: (row) => (
+        <div>
+          <span className="font-medium text-zinc-900">{row.group_name}</span>
+          <p className="text-xs text-zinc-500">{row.group_key}</p>
+        </div>
+      ),
+    },
+    {
+      key: "group_key",
+      label: "Group key",
+      sortable: true,
+      render: (row) => row.group_key,
     },
     {
       key: "test_count",
@@ -508,7 +544,29 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
             <input
               type="text"
               value={form.group_name}
-              onChange={(e) => setForm((prev) => ({ ...prev, group_name: e.target.value }))}
+              onChange={(e) => {
+                const groupName = e.target.value;
+                setForm((prev) => {
+                  const next = { ...prev, group_name: groupName };
+                  if (!groupKeyManuallyEdited) {
+                    next.group_key = slugifyGroupKey(groupName);
+                  }
+                  return next;
+                });
+              }}
+              className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Group key</label>
+            <input
+              type="text"
+              value={form.group_key}
+              onChange={(e) => {
+                setGroupKeyManuallyEdited(true);
+                setForm((prev) => ({ ...prev, group_key: e.target.value }));
+              }}
               className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
               required
             />
@@ -598,6 +656,7 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
             <div className="px-4 sm:px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900">{panelGroup.group_name}</h2>
+                <p className="text-sm text-zinc-500">{panelGroup.group_key}</p>
                 <p className="text-sm text-zinc-500">{groupTests.length} tests assigned</p>
               </div>
               <button
