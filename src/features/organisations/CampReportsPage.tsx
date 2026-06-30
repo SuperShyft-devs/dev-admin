@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  Eye,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -109,12 +110,51 @@ export function CampReportsPage() {
     setExpandedKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const fetchDashboard = async (
+    report: CampReportRow,
+    section: CampReportSection
+  ): Promise<Record<string, unknown>> => {
+    const response =
+      report.department === null
+        ? await campReportsApi.getDashboard(campNo, section.section_key)
+        : await campReportsApi.getDepartmentDashboard(
+            campNo,
+            report.department,
+            section.section_key
+          );
+    return response.data.data;
+  };
+
   const handleLoadSection = async (
     report: CampReportRow,
     section: CampReportSection
   ) => {
     const loadStateKey = `${report.report_id}:${section.section_key}`;
-    setLoadingKey(loadStateKey);
+    setLoadingKey(`${loadStateKey}:load`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+
+    try {
+      const data = await fetchDashboard(report, section);
+      setDashboardModal({
+        title: section.section,
+        data,
+      });
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const handleRefreshSection = async (
+    report: CampReportRow,
+    section: CampReportSection
+  ) => {
+    const loadStateKey = `${report.report_id}:${section.section_key}`;
+    setLoadingKey(`${loadStateKey}:refresh`);
     setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
 
     try {
@@ -128,18 +168,10 @@ export function CampReportsPage() {
         );
       }
 
-      const response =
-        report.department === null
-          ? await campReportsApi.getDashboard(campNo, section.section_key)
-          : await campReportsApi.getDepartmentDashboard(
-              campNo,
-              report.department,
-              section.section_key
-            );
-
+      const data = await fetchDashboard(report, section);
       setDashboardModal({
         title: section.section,
-        data: response.data.data,
+        data,
       });
     } catch (err) {
       setSectionErrors((prev) => ({
@@ -245,7 +277,9 @@ export function CampReportsPage() {
                         {sections.map((section) => {
                           const sectionData = getSectionData(report, section.section_key);
                           const loadStateKey = `${report.report_id}:${section.section_key}`;
-                          const isLoading = loadingKey === loadStateKey;
+                          const isLoadLoading = loadingKey === `${loadStateKey}:load`;
+                          const isRefreshLoading = loadingKey === `${loadStateKey}:refresh`;
+                          const isSectionBusy = isLoadLoading || isRefreshLoading;
                           const sectionError = sectionErrors[loadStateKey];
 
                           return (
@@ -264,19 +298,34 @@ export function CampReportsPage() {
                                     </p>
                                   )}
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleLoadSection(report, section)}
-                                  disabled={isLoading}
-                                  className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 shrink-0"
-                                  title="Load section data"
-                                >
-                                  {isLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <RefreshCw className="w-4 h-4" />
-                                  )}
-                                </button>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleLoadSection(report, section)}
+                                    disabled={isSectionBusy}
+                                    className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                    title="Load section data"
+                                  >
+                                    {isLoadLoading ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Eye className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRefreshSection(report, section)}
+                                    disabled={isSectionBusy}
+                                    className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                    title="Refresh and load section data"
+                                  >
+                                    {isRefreshLoading ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                </div>
                               </div>
 
                               {sectionError && (
