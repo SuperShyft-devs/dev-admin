@@ -816,6 +816,14 @@ export const campReportsApi = {
     api.get<{ data: Record<string, unknown> }>(
       `/reports/camps/${campNo}/department/${slug}/validate/company-average-scores`
     ),
+  validatePositiveWins: (campNo: number) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/validate/positive-wins`
+    ),
+  validateDepartmentPositiveWins: (campNo: number, slug: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/department/${slug}/validate/positive-wins`
+    ),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>

@@ -63,6 +63,11 @@ export function CampReportsPage() {
     data: Record<string, unknown>;
   } | null>(null);
   const [validateExpanded, setValidateExpanded] = useState<Record<string, boolean>>({});
+  const [validatePWModal, setValidatePWModal] = useState<{
+    title: string;
+    data: Record<string, unknown>;
+  } | null>(null);
+  const [validatePWExpanded, setValidatePWExpanded] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -217,6 +222,34 @@ export function CampReportsPage() {
     }
   };
 
+  const handleValidatePositiveWins = async (report: CampReportRow) => {
+    const loadStateKey = `${report.report_id}:positive_wins`;
+    setLoadingKey(`${loadStateKey}:validate`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+
+    try {
+      const response =
+        report.department === null
+          ? await campReportsApi.validatePositiveWins(campNo)
+          : await campReportsApi.validateDepartmentPositiveWins(
+              campNo,
+              report.department
+            );
+      setValidatePWModal({
+        title: "Validate: Positive Wins",
+        data: response.data.data,
+      });
+      setValidatePWExpanded({});
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   if (!Number.isFinite(campNo)) {
     return (
       <div className="p-6">
@@ -341,6 +374,21 @@ export function CampReportsPage() {
                                       disabled={isSectionBusy}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate scores"
+                                    >
+                                      {isValidateLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <ShieldCheck className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  )}
+                                  {section.section_key === "positive_wins" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleValidatePositiveWins(report)}
+                                      disabled={isSectionBusy}
+                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                      title="Validate positive wins"
                                     >
                                       {isValidateLoading ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -537,6 +585,129 @@ export function CampReportsPage() {
                 </div>
               );
             })()}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={validatePWModal !== null}
+        onClose={() => setValidatePWModal(null)}
+        title={validatePWModal?.title ?? "Validate"}
+        maxWidthClassName="max-w-2xl"
+      >
+        {validatePWModal && (
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="px-4 py-2 bg-zinc-50 rounded-lg text-xs text-zinc-600">
+              Total participants: <span className="font-medium">{(validatePWModal.data.total_participants as number) ?? "—"}</span>
+            </div>
+            {(["low_risk", "healthy_habits", "healthy_profiles"] as const).map((key) => {
+              const entry = validatePWModal.data[key] as {
+                aggregated: Array<Record<string, unknown>>;
+                participants: Array<{
+                  user_id: number;
+                  name: string;
+                  items: string[] | null;
+                  reason: string | null;
+                  detail?: string | null;
+                }>;
+              } | undefined;
+              if (!entry) return null;
+              const isExpanded = validatePWExpanded[key] ?? false;
+              const failedParticipants = entry.participants.filter((p) => p.reason !== null);
+              const successCount = entry.participants.length - failedParticipants.length;
+              const label = key === "low_risk" ? "Low Risk" : key === "healthy_habits" ? "Healthy Habits" : "Healthy Profiles";
+
+              return (
+                <div key={key} className="rounded-lg border border-zinc-200 overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 text-left"
+                    onClick={() =>
+                      setValidatePWExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400" />
+                      )}
+                      <h4 className="text-sm font-medium text-zinc-900">{label}</h4>
+                      <span className="text-xs text-zinc-500">
+                        {successCount} of {entry.participants.length} participants contributing
+                      </span>
+                    </div>
+                    <span className="text-xs font-medium text-zinc-600">
+                      {entry.aggregated.length} aggregated
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-zinc-200">
+                      {entry.aggregated.length > 0 && (
+                        <div className="px-4 py-2.5 bg-emerald-50 border-b border-zinc-200">
+                          <p className="text-[11px] font-medium text-emerald-700 mb-1">Aggregated result:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {entry.aggregated.map((item, i) => {
+                              const displayName =
+                                typeof item === "string"
+                                  ? item
+                                  : (item as Record<string, unknown>).name ??
+                                    (item as Record<string, unknown>).habit_label ??
+                                    JSON.stringify(item);
+                              return (
+                                <span
+                                  key={i}
+                                  className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-emerald-800"
+                                >
+                                  {String(displayName)}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {failedParticipants.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-zinc-500">
+                          All participants are contributing to this field.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-zinc-100">
+                          {entry.participants.map((p) => (
+                            <div key={p.user_id} className="px-4 py-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                                <span className="text-xs text-zinc-400">#{p.user_id}</span>
+                              </div>
+                              {p.reason ? (
+                                <>
+                                  <p className="text-xs font-medium text-amber-700 mt-0.5">{p.reason}</p>
+                                  {p.detail && (
+                                    <p className="text-[11px] text-zinc-500 mt-0.5">{p.detail}</p>
+                                  )}
+                                </>
+                              ) : p.items && p.items.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {p.items.map((item) => (
+                                    <span
+                                      key={item}
+                                      className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800"
+                                    >
+                                      {item}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Modal>
