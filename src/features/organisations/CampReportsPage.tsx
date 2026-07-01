@@ -60,8 +60,9 @@ export function CampReportsPage() {
   } | null>(null);
   const [validateModal, setValidateModal] = useState<{
     title: string;
-    data: Record<string, { score: number; valid_count: number; total_participants: number; reason: string | null }>;
+    data: Record<string, unknown>;
   } | null>(null);
+  const [validateExpanded, setValidateExpanded] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -201,14 +202,11 @@ export function CampReportsPage() {
               campNo,
               report.department
             );
-      const raw = response.data.data as Record<
-        string,
-        { score: number; valid_count: number; total_participants: number; reason: string | null }
-      >;
       setValidateModal({
         title: "Validate: Company Average Scores",
-        data: raw,
+        data: response.data.data,
       });
+      setValidateExpanded({});
     } catch (err) {
       setSectionErrors((prev) => ({
         ...prev,
@@ -413,38 +411,128 @@ export function CampReportsPage() {
         open={validateModal !== null}
         onClose={() => setValidateModal(null)}
         title={validateModal?.title ?? "Validate"}
-        maxWidthClassName="max-w-lg"
+        maxWidthClassName="max-w-2xl"
       >
         {validateModal && (
-          <div className="space-y-3">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
             {(["nutrition", "fitness", "lifestyle"] as const).map((key) => {
-              const entry = validateModal.data[key];
+              const entry = validateModal.data[key] as {
+                score: number;
+                valid_count: number;
+                total_participants: number;
+                participants: Array<{
+                  user_id: number;
+                  name: string;
+                  score: number | null;
+                  reason: string | null;
+                  missing_questions?: string[];
+                }>;
+              } | undefined;
               if (!entry) return null;
-              const hasReason = entry.reason !== null;
+              const isExpanded = validateExpanded[key] ?? false;
+              const failedParticipants = entry.participants.filter((p) => p.reason !== null);
+
               return (
-                <div
-                  key={key}
-                  className="rounded-lg border border-zinc-200 bg-zinc-50 p-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-medium text-zinc-900 capitalize">
-                      {key}
-                    </h4>
-                    <span className="text-lg font-semibold text-zinc-900">
-                      {entry.score}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-1">
-                    {entry.valid_count} of {entry.total_participants} participants
-                  </p>
-                  {hasReason && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-2">
-                      {entry.reason}
-                    </p>
+                <div key={key} className="rounded-lg border border-zinc-200 overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 text-left"
+                    onClick={() =>
+                      setValidateExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400" />
+                      )}
+                      <h4 className="text-sm font-medium text-zinc-900 capitalize">{key}</h4>
+                      <span className="text-xs text-zinc-500">
+                        {entry.valid_count} of {entry.total_participants} participants
+                      </span>
+                    </div>
+                    <span className="text-lg font-semibold text-zinc-900">{entry.score}</span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-zinc-200">
+                      {failedParticipants.length === 0 ? (
+                        <p className="px-4 py-3 text-xs text-zinc-500">
+                          All participants have valid scores.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-zinc-100">
+                          {failedParticipants.map((p) => (
+                            <div key={p.user_id} className="px-4 py-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                                <span className="text-xs text-zinc-400">#{p.user_id}</span>
+                              </div>
+                              <p className="text-xs text-amber-700 mt-0.5">{p.reason}</p>
+                              {p.missing_questions && p.missing_questions.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {p.missing_questions.map((q) => (
+                                    <span
+                                      key={q}
+                                      className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800"
+                                    >
+                                      {q}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );
             })}
+
+            {(() => {
+              const noFitprint = validateModal.data.no_fitprint_assigned as
+                | Array<{ user_id: number; name: string }>
+                | undefined;
+              if (!noFitprint || noFitprint.length === 0) return null;
+              const isExpanded = validateExpanded["no_fitprint"] ?? false;
+              return (
+                <div className="rounded-lg border border-red-200 overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-left"
+                    onClick={() =>
+                      setValidateExpanded((prev) => ({
+                        ...prev,
+                        no_fitprint: !prev["no_fitprint"],
+                      }))
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-red-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-red-400" />
+                      )}
+                      <h4 className="text-sm font-medium text-red-800">No FitPrint Assigned</h4>
+                      <span className="text-xs text-red-600">{noFitprint.length} participants</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-red-200 divide-y divide-red-100">
+                      {noFitprint.map((p) => (
+                        <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          <span className="text-xs text-zinc-400">#{p.user_id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </Modal>
