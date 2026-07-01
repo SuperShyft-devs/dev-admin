@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, ScrollText, Users } from "lucide-react";
 import { DuplicatedUsersModal } from "./DuplicatedUsersModal";
+import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
 import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
@@ -93,6 +94,7 @@ export function Settings() {
   const [activityLog, setActivityLog] = useState<PageLogEntry[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [duplicatesModalOpen, setDuplicatesModalOpen] = useState(false);
+  const [nutritionSyncLogsOpen, setNutritionSyncLogsOpen] = useState(false);
 
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -593,7 +595,27 @@ export function Settings() {
         </button>
       </section>
 
+      <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-zinc-900">Nutrition API</h2>
+        <p className="text-xs text-zinc-500 mt-1 max-w-lg">
+          View audit logs for calls to the nutrition scoring service (health span index and camp reports).
+        </p>
+        <button
+          type="button"
+          onClick={() => setNutritionSyncLogsOpen(true)}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50"
+        >
+          <ScrollText className="w-4 h-4" />
+          Nutrition API sync logs
+        </button>
+      </section>
+
       <DuplicatedUsersModal open={duplicatesModalOpen} onClose={() => setDuplicatesModalOpen(false)} />
+      <IntegrationSyncLogsModal
+        open={nutritionSyncLogsOpen}
+        onClose={() => setNutritionSyncLogsOpen(false)}
+        variant="nutrition_api"
+      />
     </div>
   );
 }

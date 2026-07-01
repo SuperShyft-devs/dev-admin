@@ -5,7 +5,7 @@ import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "..
 
 type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
-type SyncLogsVariant = "metsights" | "n8n";
+type SyncLogsVariant = "metsights" | "n8n" | "nutrition_api";
 
 const STATUS_OPTIONS = ["pending", "success", "failed", "skipped"] as const;
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
@@ -68,6 +68,15 @@ function parseNotificationId(log: IntegrationSyncLog): string {
   if (payload && typeof payload === "object" && !Array.isArray(payload) && "notification_id" in payload) {
     const id = payload.notification_id;
     return id == null ? "—" : String(id);
+  }
+  return "—";
+}
+
+function parseNutritionScore(log: IntegrationSyncLog): string {
+  const payload = log.response_payload;
+  if (payload && typeof payload === "object" && !Array.isArray(payload) && "nutrition_score" in payload) {
+    const score = payload.nutrition_score;
+    return score == null ? "—" : String(score);
   }
   return "—";
 }
@@ -161,9 +170,16 @@ export function IntegrationSyncLogsModal({
   variant?: SyncLogsVariant;
 }) {
   const isN8n = variant === "n8n";
-  const defaultProvider = isN8n ? "n8n" : "metsights";
-  const modalTitle = isN8n ? "Notification Sync Logs" : "Integration Sync Logs";
-  const columnCount = isN8n ? 5 : 7;
+  const isNutritionApi = variant === "nutrition_api";
+  const isMetsights = variant === "metsights";
+  const showUserEngagementFilters = isMetsights || isNutritionApi;
+  const defaultProvider = isN8n ? "n8n" : isNutritionApi ? "nutrition_api" : "metsights";
+  const modalTitle = isN8n
+    ? "Notification Sync Logs"
+    : isNutritionApi
+      ? "Nutrition API Sync Logs"
+      : "Integration Sync Logs";
+  const columnCount = isN8n ? 5 : isNutritionApi ? 6 : 7;
 
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -199,13 +215,25 @@ export function IntegrationSyncLogsModal({
     return {
       page,
       limit,
-      provider: isN8n ? "n8n" : provider || undefined,
+      provider: isN8n ? "n8n" : isNutritionApi ? "nutrition_api" : provider || undefined,
       status: statusFilters.length ? statusFilters.join(",") : undefined,
-      user_id: !isN8n && Number.isFinite(userId) && userId! > 0 ? userId : undefined,
-      engagement_id: !isN8n && Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
+      user_id: showUserEngagementFilters && Number.isFinite(userId) && userId! > 0 ? userId : undefined,
+      engagement_id:
+        showUserEngagementFilters && Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
       ...range,
     };
-  }, [page, limit, provider, statusFilters, timePreset, userIdFilter, engagementIdFilter, isN8n]);
+  }, [
+    page,
+    limit,
+    provider,
+    statusFilters,
+    timePreset,
+    userIdFilter,
+    engagementIdFilter,
+    isN8n,
+    isNutritionApi,
+    showUserEngagementFilters,
+  ]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -283,16 +311,18 @@ export function IntegrationSyncLogsModal({
               {preset.label}
             </button>
           ))}
-          {!isN8n && (
+          {isMetsights && (
+            <select
+              value={provider}
+              onChange={(e) => { setProvider(e.target.value); setPage(1); }}
+              className="px-2 py-1 rounded-lg border border-zinc-300 text-xs bg-white"
+            >
+              <option value="metsights">metsights</option>
+              <option value="">All providers</option>
+            </select>
+          )}
+          {showUserEngagementFilters && (
             <>
-              <select
-                value={provider}
-                onChange={(e) => { setProvider(e.target.value); setPage(1); }}
-                className="px-2 py-1 rounded-lg border border-zinc-300 text-xs bg-white"
-              >
-                <option value="metsights">metsights</option>
-                <option value="">All providers</option>
-              </select>
               <input
                 type="number"
                 placeholder="User ID"
@@ -334,6 +364,12 @@ export function IntegrationSyncLogsModal({
                       <th className="px-3 py-2">Webhook</th>
                       <th className="px-3 py-2">Notification ID</th>
                     </>
+                  ) : isNutritionApi ? (
+                    <>
+                      <th className="px-3 py-2">User</th>
+                      <th className="px-3 py-2">Engagement</th>
+                      <th className="px-3 py-2">Score</th>
+                    </>
                   ) : (
                     <>
                       <th className="px-3 py-2">Op</th>
@@ -366,6 +402,12 @@ export function IntegrationSyncLogsModal({
                           <>
                             <td className="px-3 py-2 font-mono text-xs">{parseWebhookFromUrl(log.api_endpoint_url)}</td>
                             <td className="px-3 py-2 text-xs">{parseNotificationId(log)}</td>
+                          </>
+                        ) : isNutritionApi ? (
+                          <>
+                            <td className="px-3 py-2 text-xs">{log.user_id ?? "—"}</td>
+                            <td className="px-3 py-2 text-xs">{log.engagement_id ?? "—"}</td>
+                            <td className="px-3 py-2 text-xs">{parseNutritionScore(log)}</td>
                           </>
                         ) : (
                           <>
