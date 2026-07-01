@@ -425,6 +425,7 @@ export function CampReportsPage() {
                   name: string;
                   score: number | null;
                   reason: string | null;
+                  detail?: string | null;
                   missing_questions?: string[];
                 }>;
               } | undefined;
@@ -469,7 +470,10 @@ export function CampReportsPage() {
                                 <span className="text-xs font-medium text-zinc-800">{p.name}</span>
                                 <span className="text-xs text-zinc-400">#{p.user_id}</span>
                               </div>
-                              <p className="text-xs text-amber-700 mt-0.5">{p.reason}</p>
+                              <p className="text-xs font-medium text-amber-700 mt-0.5">{p.reason}</p>
+                              {p.detail && (
+                                <p className="text-[11px] text-zinc-500 mt-0.5">{p.detail}</p>
+                              )}
                               {p.missing_questions && p.missing_questions.length > 0 && (
                                 <div className="mt-1.5 flex flex-wrap gap-1">
                                   {p.missing_questions.map((q) => (
