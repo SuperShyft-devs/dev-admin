@@ -808,6 +808,14 @@ export const campReportsApi = {
       `/reports/camps/${campNo}/department/${slug}/refresh`,
       { section }
     ),
+  validateCompanyAverageScores: (campNo: number) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/validate/company-average-scores`
+    ),
+  validateDepartmentCompanyAverageScores: (campNo: number, slug: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/department/${slug}/validate/company-average-scores`
+    ),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>

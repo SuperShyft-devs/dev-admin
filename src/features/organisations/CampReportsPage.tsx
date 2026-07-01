@@ -7,6 +7,7 @@ import {
   Eye,
   Loader2,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 import {
@@ -56,6 +57,10 @@ export function CampReportsPage() {
   const [dashboardModal, setDashboardModal] = useState<{
     title: string;
     data: Record<string, unknown>;
+  } | null>(null);
+  const [validateModal, setValidateModal] = useState<{
+    title: string;
+    data: Record<string, { score: number; valid_count: number; total_participants: number; reason: string | null }>;
   } | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -183,6 +188,37 @@ export function CampReportsPage() {
     }
   };
 
+  const handleValidateSection = async (report: CampReportRow) => {
+    const loadStateKey = `${report.report_id}:company_average_scores`;
+    setLoadingKey(`${loadStateKey}:validate`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+
+    try {
+      const response =
+        report.department === null
+          ? await campReportsApi.validateCompanyAverageScores(campNo)
+          : await campReportsApi.validateDepartmentCompanyAverageScores(
+              campNo,
+              report.department
+            );
+      const raw = response.data.data as Record<
+        string,
+        { score: number; valid_count: number; total_participants: number; reason: string | null }
+      >;
+      setValidateModal({
+        title: "Validate: Company Average Scores",
+        data: raw,
+      });
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   if (!Number.isFinite(campNo)) {
     return (
       <div className="p-6">
@@ -279,7 +315,8 @@ export function CampReportsPage() {
                           const loadStateKey = `${report.report_id}:${section.section_key}`;
                           const isLoadLoading = loadingKey === `${loadStateKey}:load`;
                           const isRefreshLoading = loadingKey === `${loadStateKey}:refresh`;
-                          const isSectionBusy = isLoadLoading || isRefreshLoading;
+                          const isValidateLoading = loadingKey === `${loadStateKey}:validate`;
+                          const isSectionBusy = isLoadLoading || isRefreshLoading || isValidateLoading;
                           const sectionError = sectionErrors[loadStateKey];
 
                           return (
@@ -299,6 +336,21 @@ export function CampReportsPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
+                                  {section.section_key === "company_average_scores" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleValidateSection(report)}
+                                      disabled={isSectionBusy}
+                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                      title="Validate scores"
+                                    >
+                                      {isValidateLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <ShieldCheck className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => void handleLoadSection(report, section)}
@@ -355,6 +407,46 @@ export function CampReportsPage() {
             ? JSON.stringify(dashboardModal.data, null, 2)
             : ""}
         </pre>
+      </Modal>
+
+      <Modal
+        open={validateModal !== null}
+        onClose={() => setValidateModal(null)}
+        title={validateModal?.title ?? "Validate"}
+        maxWidthClassName="max-w-lg"
+      >
+        {validateModal && (
+          <div className="space-y-3">
+            {(["nutrition", "fitness", "lifestyle"] as const).map((key) => {
+              const entry = validateModal.data[key];
+              if (!entry) return null;
+              const hasReason = entry.reason !== null;
+              return (
+                <div
+                  key={key}
+                  className="rounded-lg border border-zinc-200 bg-zinc-50 p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-zinc-900 capitalize">
+                      {key}
+                    </h4>
+                    <span className="text-lg font-semibold text-zinc-900">
+                      {entry.score}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {entry.valid_count} of {entry.total_participants} participants
+                  </p>
+                  {hasReason && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-2">
+                      {entry.reason}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Modal>
     </div>
   );
