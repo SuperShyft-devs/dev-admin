@@ -1614,6 +1614,8 @@ export const questionnaireQuestionsApi = {
     api.get<{ data: MetsightsSyncGapsResponse }>("/questionnaire/questions/metsights-sync-gaps"),
   resetMetsightsSync: () =>
     api.post<{ data: MetsightsSyncResetResponse }>("/questionnaire/metsights-sync/reset"),
+  reloadBloodParameters: () =>
+    api.post<{ data: BloodParametersReloadResponse }>("/questionnaire/blood-parameters/reload"),
 };
 
 export interface MetsightsSyncGapsCategoryRef {
@@ -1656,6 +1658,19 @@ export interface MetsightsSyncResetResponse {
   package_links_total: number;
   package_links_added: number;
   missing_question_keys: string[];
+  missing_package_codes: string[];
+}
+
+export interface BloodParametersReloadResponse {
+  questions_deleted: number;
+  responses_deleted: number;
+  questions_created: number;
+  categories_created: number;
+  categories_updated: number;
+  question_links_total: number;
+  links_added: number;
+  package_links_added: number;
+  package_links_total: number;
   missing_package_codes: string[];
 }
 

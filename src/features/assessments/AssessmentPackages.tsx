@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ChevronDown, GripVertical, Loader2, ListChecks, Pencil, Plus, RefreshCw, ScrollText, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, Droplets, GripVertical, Loader2, ListChecks, Pencil, Plus, RefreshCw, ScrollText, Search } from "lucide-react";
 import { IntegrationSyncLogsModal } from "./IntegrationSyncLogsModal";
 import { MetsightsSyncConfigModal } from "./questions/MetsightsSyncConfigModal";
 import { QuestionDetailDrawer, type QuestionDrawerTab } from "./questions/QuestionDetailDrawer";
@@ -38,6 +38,7 @@ import {
   type QuestionnaireQuestionUpdate,
   type MetsightsSyncGapsResponse,
   type MetsightsSyncResetResponse,
+  type BloodParametersReloadResponse,
   getApiError,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
@@ -194,6 +195,10 @@ export function AssessmentPackages() {
   const [resetSyncLoading, setResetSyncLoading] = useState(false);
   const [resetSyncError, setResetSyncError] = useState<string | null>(null);
   const [resetSyncResult, setResetSyncResult] = useState<MetsightsSyncResetResponse | null>(null);
+  const [reloadBloodOpen, setReloadBloodOpen] = useState(false);
+  const [reloadBloodLoading, setReloadBloodLoading] = useState(false);
+  const [reloadBloodError, setReloadBloodError] = useState<string | null>(null);
+  const [reloadBloodResult, setReloadBloodResult] = useState<BloodParametersReloadResponse | null>(null);
   const unsyncDropdownRef = useRef<HTMLDivElement>(null);
 
   const closeQuestionModal = useCallback(() => {
@@ -819,6 +824,22 @@ export function AssessmentPackages() {
     }
   };
 
+  const handleReloadBloodParameters = async () => {
+    setReloadBloodLoading(true);
+    setReloadBloodError(null);
+    setReloadBloodResult(null);
+    try {
+      const res = await questionnaireQuestionsApi.reloadBloodParameters();
+      setReloadBloodResult(res.data.data);
+      await fetchQuestions();
+      await fetchUnsyncWarning();
+    } catch (error) {
+      setReloadBloodError(getApiError(error));
+    } finally {
+      setReloadBloodLoading(false);
+    }
+  };
+
   // Unsync'd questions warning
   const fetchUnsyncWarning = useCallback(async () => {
     setUnsyncWarningLoading(true);
@@ -1145,6 +1166,21 @@ export function AssessmentPackages() {
             <button
               type="button"
               onClick={() => {
+                setReloadBloodError(null);
+                setReloadBloodResult(null);
+                setReloadBloodOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
+              title="Reload blood parameter questions from Metsights OPTIONS schema"
+            >
+              <Droplets className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Reload Blood Parameters</span>
+            </button>
+          )}
+          {activeTab === "questions" && (
+            <button
+              type="button"
+              onClick={() => {
                 setResetSyncError(null);
                 setResetSyncResult(null);
                 setResetSyncOpen(true);
@@ -1291,6 +1327,95 @@ export function AssessmentPackages() {
                 <button
                   type="button"
                   onClick={() => setResetSyncOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800"
+                >
+                  Done
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={reloadBloodOpen}
+        onClose={() => {
+          if (!reloadBloodLoading) setReloadBloodOpen(false);
+        }}
+        title="Reload Blood Parameters"
+      >
+        <div className="space-y-4">
+          {!reloadBloodResult ? (
+            <>
+              <p className="text-sm text-zinc-600">
+                This will <span className="font-medium text-red-700">delete all existing blood-parameter questions</span>{" "}
+                and any saved responses for those keys, then recreate ~49 scale questions from the Metsights OPTIONS
+                schema (e.g. <code className="text-xs bg-zinc-100 px-1 rounded">haemoglobin</code> with unit{" "}
+                <code className="text-xs bg-zinc-100 px-1 rounded">g/dL</code>).
+              </p>
+              <p className="text-sm text-zinc-500">
+                Metsights categories <span className="font-medium text-zinc-800">blood-parameters</span> and{" "}
+                <span className="font-medium text-zinc-800">advanced-blood-parameters</span> will be configured with
+                push/pull sync to the corresponding Metsights API endpoints.
+              </p>
+              {reloadBloodError && (
+                <p className="text-sm text-red-600">{reloadBloodError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReloadBloodOpen(false)}
+                  disabled={reloadBloodLoading}
+                  className="px-4 py-2 text-sm font-medium text-zinc-700 border border-zinc-300 rounded-lg hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReloadBloodParameters()}
+                  disabled={reloadBloodLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {reloadBloodLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Reload
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-700 font-medium">Blood parameters reload complete.</p>
+              <ul className="text-sm text-zinc-600 space-y-1.5">
+                <li>
+                  <span className="font-medium text-zinc-800">{reloadBloodResult.questions_deleted}</span> questions deleted
+                  {reloadBloodResult.responses_deleted > 0 && (
+                    <span className="text-zinc-500"> ({reloadBloodResult.responses_deleted} responses removed)</span>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{reloadBloodResult.questions_created}</span> questions created
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{reloadBloodResult.question_links_total}</span> category links assigned
+                  {reloadBloodResult.links_added > 0 && (
+                    <span className="text-zinc-500"> ({reloadBloodResult.links_added} new)</span>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium text-zinc-800">{reloadBloodResult.package_links_total}</span> package links configured
+                  {reloadBloodResult.package_links_added > 0 && (
+                    <span className="text-zinc-500"> ({reloadBloodResult.package_links_added} new)</span>
+                  )}
+                </li>
+              </ul>
+              {reloadBloodResult.missing_package_codes.length > 0 && (
+                <p className="text-sm text-amber-700">
+                  Missing packages: {reloadBloodResult.missing_package_codes.join(", ")}
+                </p>
+              )}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReloadBloodOpen(false)}
                   className="px-4 py-2 text-sm font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800"
                 >
                   Done
