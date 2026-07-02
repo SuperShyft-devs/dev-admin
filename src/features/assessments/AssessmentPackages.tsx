@@ -122,7 +122,7 @@ export function AssessmentPackages() {
   const [catLimit] = useState(12);
   const [catSearch, setCatSearch] = useState("");
   const [catStatusFilter, setCatStatusFilter] = useState("");
-  const [catCategoryOfFilter, setCatCategoryOfFilter] = useState("");
+  const [catCategoryOfFilter, setCatCategoryOfFilter] = useState("supershyft");
   const [catSortKey, setCatSortKey] = useState<"display_name" | "category_key" | "category_id">("category_id");
   const [catSortDir, setCatSortDir] = useState<"asc" | "desc">("desc");
   const [catLoading, setCatLoading] = useState(false);
@@ -276,7 +276,7 @@ export function AssessmentPackages() {
         questionnaireCategoriesApi.list({
           page,
           limit,
-          category_of: catCategoryOfFilter || undefined,
+          category_of: catCategoryOfFilter === "all" ? "all" : catCategoryOfFilter,
         })
       );
       if (catSearch.trim()) {
@@ -1531,9 +1531,9 @@ export function AssessmentPackages() {
                 onChange={(e) => setCatCategoryOfFilter(e.target.value)}
                 className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white"
               >
-                <option value="">All sources</option>
                 <option value="supershyft">SuperShyft</option>
                 <option value="metsights">Metsights</option>
+                <option value="all">All sources</option>
               </select>
               <select
                 value={catStatusFilter}
