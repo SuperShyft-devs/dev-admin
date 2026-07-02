@@ -1413,6 +1413,7 @@ export interface Participant {
   phone?: string | null;
   gender?: string | null;
   email?: string | null;
+  age?: number | null;
   status?: string | null;
   slot_start_time?: string | null;
   engagement_date?: string | null;

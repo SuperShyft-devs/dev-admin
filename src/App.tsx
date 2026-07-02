@@ -61,6 +61,21 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function EmployeeRequiredRoute({ children }: { children: React.ReactNode }) {
+  const { employeeRole, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
+  if (!employeeRole) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -142,7 +157,9 @@ function AppRoutes() {
         path="/engagements/console"
         element={
           <ProtectedRoute>
-            <ConsoleEngagementsPage />
+            <EmployeeRequiredRoute>
+              <ConsoleEngagementsPage />
+            </EmployeeRequiredRoute>
           </ProtectedRoute>
         }
       />
@@ -150,7 +167,9 @@ function AppRoutes() {
         path="/engagements/:engagementId/console"
         element={
           <ProtectedRoute>
-            <EngagementConsolePage />
+            <EmployeeRequiredRoute>
+              <EngagementConsolePage />
+            </EmployeeRequiredRoute>
           </ProtectedRoute>
         }
       />

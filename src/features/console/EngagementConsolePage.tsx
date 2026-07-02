@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   consoleApi,
   getApiErrorDetails,
@@ -33,7 +34,12 @@ function formatBool(value: boolean | null | undefined): string {
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
+  const { employeeRole } = useAuth();
+  const isAdmin = employeeRole === "admin";
   const engId = Number(engagementId);
+
+  const consoleListPath = isAdmin ? "/engagements" : "/engagements/console";
+  const consoleListLabel = isAdmin ? "Back to Engagements" : "Back to your engagements";
 
   const [engagement, setEngagement] = useState<ConsoleEngagementListItem | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -75,7 +81,7 @@ export function EngagementConsolePage() {
         );
       } else if (details.status === 403) {
         setErrorKind("forbidden");
-        setError("You are not assigned as an onboarding assistant for this engagement.");
+        setError("You must be an onboarding assistant assigned to this engagement.");
       } else {
         setErrorKind("generic");
         setError(details.message);
@@ -150,7 +156,10 @@ export function EngagementConsolePage() {
 
   if (!engId || isNaN(engId)) {
     return (
-      <ConsoleLayout>
+      <ConsoleLayout
+        backHref={isAdmin ? "/engagements" : undefined}
+        backLabel={isAdmin ? "Back to Engagements" : undefined}
+      >
         <div className="flex items-center justify-center h-64 text-zinc-500">
           Invalid engagement.
         </div>
@@ -158,8 +167,15 @@ export function EngagementConsolePage() {
     );
   }
 
+  const isNotRunning =
+    engagement && (engagement.status ?? "").toLowerCase() !== "running";
+
   return (
-    <ConsoleLayout engagementName={engagement?.engagement_name ?? undefined}>
+    <ConsoleLayout
+      engagementName={engagement?.engagement_name ?? undefined}
+      backHref={isAdmin ? "/engagements" : "/engagements/console"}
+      backLabel={isAdmin ? "Back to Engagements" : "Your engagements"}
+    >
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
@@ -169,15 +185,20 @@ export function EngagementConsolePage() {
           <p className="text-red-600 max-w-md">{error}</p>
           {(errorKind === "not_running" || errorKind === "forbidden") && (
             <Link
-              to="/engagements/console"
+              to={consoleListPath}
               className="text-sm font-medium text-zinc-700 hover:text-zinc-900 underline"
             >
-              Back to your engagements
+              {consoleListLabel}
             </Link>
           )}
         </div>
       ) : (
         <div className="space-y-4">
+          {isNotRunning && (
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              This engagement is not running — read-only view.
+            </div>
+          )}
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="flex items-center gap-2 text-sm text-zinc-500">
@@ -292,7 +313,7 @@ export function EngagementConsolePage() {
                         {p.email ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-600 hidden xl:table-cell">
-                        {(p as any).age ?? "—"}
+                        {p.age ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-600 hidden lg:table-cell">
                         {p.engagement_date ?? "—"}
@@ -376,7 +397,7 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
       {field("Name", fullName(p))}
       {field("Phone", p.phone)}
       {field("Email", p.email)}
-      {field("Age", (p as any).age)}
+      {field("Age", p.age)}
       {field("Blood Collection Date", p.engagement_date)}
       {field("Slot Time", p.slot_start_time)}
       {field("Department", p.participant_department)}

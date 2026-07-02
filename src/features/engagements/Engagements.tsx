@@ -1530,7 +1530,10 @@ export function Engagements({
 
   // Employees not yet assigned as assistants for this engagement
   const assignedIds = new Set(assistants.map((a) => a.employee_id));
-  const availableEmployees = allEmployees.filter((e) => !assignedIds.has(e.employee_id));
+  const assignableRoles = new Set(["admin", "onboarding_assistant"]);
+  const availableEmployees = allEmployees.filter(
+    (e) => !assignedIds.has(e.employee_id) && assignableRoles.has((e.role ?? "").toLowerCase())
+  );
   const filteredEmployees = employeeSearch.trim()
     ? availableEmployees.filter((e) => {
       const q = employeeSearch.trim().toLowerCase();
@@ -1781,13 +1784,7 @@ export function Engagements({
             <div><span className="text-zinc-500">Status:</span> {formatEngagementStatusLabel(selected.status)}</div>
             <div>
               <span className="text-zinc-500">Console:</span>
-              {(selected.status ?? "").toLowerCase() === "running" ? (
-                <ConsoleUrlActions engagementId={selected.engagement_id} />
-              ) : (
-                <p className="mt-1 text-zinc-600">
-                  Console is only available when engagement status is Running.
-                </p>
-              )}
+              <ConsoleUrlActions engagementId={selected.engagement_id} />
             </div>
             <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
             <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>

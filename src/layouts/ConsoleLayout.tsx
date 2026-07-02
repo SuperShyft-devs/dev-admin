@@ -1,13 +1,20 @@
-import { useNavigate } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 interface ConsoleLayoutProps {
   engagementName?: string;
+  backHref?: string;
+  backLabel?: string;
   children: React.ReactNode;
 }
 
-export function ConsoleLayout({ engagementName, children }: ConsoleLayoutProps) {
+export function ConsoleLayout({
+  engagementName,
+  backHref,
+  backLabel,
+  children,
+}: ConsoleLayoutProps) {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -20,6 +27,15 @@ export function ConsoleLayout({ engagementName, children }: ConsoleLayoutProps) 
     <div className="min-h-screen flex flex-col bg-zinc-50">
       <header className="h-14 flex items-center justify-between px-4 sm:px-6 bg-white border-b border-zinc-200 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
+          {backHref && backLabel && (
+            <Link
+              to={backHref}
+              className="flex items-center gap-1.5 text-sm text-zinc-600 hover:text-zinc-900 shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">{backLabel}</span>
+            </Link>
+          )}
           <img
             src="/super-shyft.png"
             alt="Super Shyft"
