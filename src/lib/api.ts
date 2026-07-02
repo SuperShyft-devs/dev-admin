@@ -128,7 +128,7 @@ export interface UserProfile {
   profile_photo?: string | null;
   employee?: {
     employee_id: number;
-    role: "admin" | "onboarding_assistant";
+    role: "admin" | "onboarding_assistant" | "organization_manager";
   } | null;
 }
 
@@ -573,7 +573,7 @@ export const uploadsApi = {
 };
 
 // Employees
-export type EmployeeRoleValue = "admin" | "onboarding_assistant";
+export type EmployeeRoleValue = "admin" | "onboarding_assistant" | "organization_manager";
 
 export interface EmployeeListItem {
   employee_id: number;

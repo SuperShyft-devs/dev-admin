@@ -36,10 +36,15 @@ export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
   const { employeeRole } = useAuth();
   const isAdmin = employeeRole === "admin";
+  const isOrgManager = employeeRole === "organization_manager";
   const engId = Number(engagementId);
 
   const consoleListPath = isAdmin ? "/engagements" : "/engagements/console";
-  const consoleListLabel = isAdmin ? "Back to Engagements" : "Back to your engagements";
+  const consoleListLabel = isAdmin
+    ? "Back to Engagements"
+    : isOrgManager
+      ? "Back to your organization engagements"
+      : "Back to your engagements";
 
   const [engagement, setEngagement] = useState<ConsoleEngagementListItem | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -81,7 +86,11 @@ export function EngagementConsolePage() {
         );
       } else if (details.status === 403) {
         setErrorKind("forbidden");
-        setError("You must be an onboarding assistant assigned to this engagement.");
+        setError(
+          isOrgManager
+            ? "You must be assigned to this engagement and be the organization's contact person."
+            : "You must be an onboarding assistant assigned to this engagement."
+        );
       } else {
         setErrorKind("generic");
         setError(details.message);
@@ -89,7 +98,7 @@ export function EngagementConsolePage() {
     } finally {
       setLoading(false);
     }
-  }, [engId]);
+  }, [engId, isOrgManager]);
 
   useEffect(() => {
     fetchData();
@@ -157,8 +166,10 @@ export function EngagementConsolePage() {
   if (!engId || isNaN(engId)) {
     return (
       <ConsoleLayout
-        backHref={isAdmin ? "/engagements" : undefined}
-        backLabel={isAdmin ? "Back to Engagements" : undefined}
+        backHref={isAdmin ? "/engagements" : isOrgManager ? "/organisations" : undefined}
+        backLabel={
+          isAdmin ? "Back to Engagements" : isOrgManager ? "Back to Organisations" : undefined
+        }
       >
         <div className="flex items-center justify-center h-64 text-zinc-500">
           Invalid engagement.
@@ -168,13 +179,21 @@ export function EngagementConsolePage() {
   }
 
   const isNotRunning =
-    engagement && (engagement.status ?? "").toLowerCase() !== "running";
+    isAdmin &&
+    engagement &&
+    (engagement.status ?? "").toLowerCase() !== "running";
 
   return (
     <ConsoleLayout
       engagementName={engagement?.engagement_name ?? undefined}
       backHref={isAdmin ? "/engagements" : "/engagements/console"}
-      backLabel={isAdmin ? "Back to Engagements" : "Your engagements"}
+      backLabel={
+        isAdmin
+          ? "Back to Engagements"
+          : isOrgManager
+            ? "Your organization engagements"
+            : "Your engagements"
+      }
     >
       {loading ? (
         <div className="flex items-center justify-center h-64">

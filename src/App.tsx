@@ -76,6 +76,25 @@ function EmployeeRequiredRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function OrgManagerRoute({ children }: { children: React.ReactNode }) {
+  const { employeeRole, isLoading } = useAuth();
+  const location = useLocation();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
+  if (employeeRole === "organization_manager") {
+    const path = location.pathname;
+    if (path === "/" || !path.startsWith("/organisations")) {
+      return <Navigate to="/organisations" replace />;
+    }
+  }
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -85,7 +104,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AdminOnlyRoute>
-              <AdminLayout />
+              <OrgManagerRoute>
+                <AdminLayout />
+              </OrgManagerRoute>
             </AdminOnlyRoute>
           </ProtectedRoute>
         }

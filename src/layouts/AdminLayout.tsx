@@ -45,6 +45,11 @@ const libraryNavItems = [
   { to: "/notifications/notifications", icon: Bell, label: "Notifications" },
 ];
 
+const orgManagerNavItems = [
+  { to: "/organisations", icon: Building2, label: "Organisations" },
+  { to: "/engagements/console", icon: CalendarCheck, label: "Engagement Console" },
+];
+
 function isLibraryPath(pathname: string) {
   return (
     pathname.startsWith("/assessments") ||
@@ -59,11 +64,12 @@ function isLibraryPath(pathname: string) {
 export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout, userProfile, userId } = useAuth();
+  const { logout, userProfile, userId, employeeRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const pendingTaskCount = usePendingTaskCount(location.pathname);
   const [libraryOpen, setLibraryOpen] = useState(() => isLibraryPath(location.pathname));
+  const isOrgManager = employeeRole === "organization_manager";
 
   const handleLogout = async () => {
     await logout();
@@ -137,6 +143,22 @@ export function AdminLayout() {
           </div>
         </div>
         <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          {isOrgManager ? (
+            orgManagerNavItems.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                onClick={closeMobileMenu}
+                className={({ isActive }) =>
+                  `${navLinkClass({ isActive })} ${sidebarCollapsed ? "justify-center" : ""}`
+                }
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                {!sidebarCollapsed && <span>{label}</span>}
+              </NavLink>
+            ))
+          ) : (
+            <>
           {primaryNavItems.slice(0, 4).map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
@@ -225,6 +247,8 @@ export function AdminLayout() {
               {!sidebarCollapsed && <span>{label}</span>}
             </NavLink>
           ))}
+            </>
+          )}
         </nav>
       </aside>
 
@@ -238,6 +262,7 @@ export function AdminLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0" />
+          {!isOrgManager && (
           <NavLink
             to="/my-tasks"
             className={({ isActive }) =>
@@ -262,6 +287,7 @@ export function AdminLayout() {
               </span>
             ) : null}
           </NavLink>
+          )}
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="text-sm text-zinc-600 truncate max-w-[120px] sm:max-w-none">
               {userProfile?.first_name || userProfile?.last_name
