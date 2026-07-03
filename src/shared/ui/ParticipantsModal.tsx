@@ -77,11 +77,11 @@ type ConsultationField =
   | "want_nutritionist_consultation"
   | "want_doctor_and_nutritionist_consultation";
 
-const BOOL_SELECT_OPTIONS = [
-  { value: "yes", label: "Yes", bool: true as const },
-  { value: "no", label: "No", bool: false as const },
-  { value: "unset", label: "—", bool: null as const },
-] as const;
+const BOOL_SELECT_OPTIONS: { value: string; label: string; bool: boolean | null }[] = [
+  { value: "yes", label: "Yes", bool: true },
+  { value: "no", label: "No", bool: false },
+  { value: "unset", label: "—", bool: null },
+];
 
 function boolToSelectValue(value: boolean | null | undefined): string {
   if (value === true) return "yes";
