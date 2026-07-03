@@ -68,6 +68,10 @@ export function CampReportsPage() {
     data: Record<string, unknown>;
   } | null>(null);
   const [validatePWExpanded, setValidatePWExpanded] = useState<Record<string, boolean>>({});
+  const [validateQModal, setValidateQModal] = useState<{
+    title: string;
+    data: Record<string, unknown>;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -250,6 +254,48 @@ export function CampReportsPage() {
     }
   };
 
+  const handleValidateQuestionnaire = async (
+    report: CampReportRow,
+    sectionKey: string
+  ) => {
+    const loadStateKey = `${report.report_id}:${sectionKey}`;
+    setLoadingKey(`${loadStateKey}:validate`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+
+    try {
+      let response;
+      if (sectionKey === "distribution_by_physical_activity_frequency") {
+        response =
+          report.department === null
+            ? await campReportsApi.validatePhysicalActivity(campNo)
+            : await campReportsApi.validateDepartmentPhysicalActivity(
+                campNo,
+                report.department
+              );
+      } else {
+        response =
+          report.department === null
+            ? await campReportsApi.validateSleepingHours(campNo)
+            : await campReportsApi.validateDepartmentSleepingHours(
+                campNo,
+                report.department
+              );
+      }
+      const title =
+        sectionKey === "distribution_by_physical_activity_frequency"
+          ? "Validate: Physical Activity Frequency"
+          : "Validate: Sleeping Hours";
+      setValidateQModal({ title, data: response.data.data });
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   if (!Number.isFinite(campNo)) {
     return (
       <div className="p-6">
@@ -389,6 +435,22 @@ export function CampReportsPage() {
                                       disabled={isSectionBusy}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate positive wins"
+                                    >
+                                      {isValidateLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <ShieldCheck className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  )}
+                                  {(section.section_key === "distribution_by_physical_activity_frequency" ||
+                                    section.section_key === "distribution_by_sleeping_hours") && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleValidateQuestionnaire(report, section.section_key)}
+                                      disabled={isSectionBusy}
+                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                      title="Validate distribution"
                                     >
                                       {isValidateLoading ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -710,6 +772,112 @@ export function CampReportsPage() {
             })}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={validateQModal !== null}
+        onClose={() => setValidateQModal(null)}
+        title={validateQModal?.title ?? "Validate"}
+        maxWidthClassName="max-w-2xl"
+      >
+        {validateQModal && (() => {
+          const data = validateQModal.data;
+          const totalEnrolled = (data.total_enrolled as number) ?? 0;
+          const questionKey = (data.question_key as string) ?? "";
+          const summary = data.summary as Record<string, { enrolled: number; responded: number; not_responded: number }> | undefined;
+          const participants = (data.participants as Array<{
+            user_id: number;
+            name: string;
+            gender: string | null;
+            answer: string | null;
+            bucket: string | null;
+            reason: string | null;
+          }>) ?? [];
+
+          const notResponded = participants.filter((p) => p.reason !== null);
+          const responded = participants.filter((p) => p.reason === null);
+
+          return (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="px-4 py-2.5 bg-zinc-50 rounded-lg text-xs text-zinc-600 space-y-1">
+                <div>Question key: <span className="font-medium font-mono">{questionKey}</span></div>
+                <div>Total enrolled: <span className="font-medium">{totalEnrolled}</span></div>
+              </div>
+
+              {summary && (
+                <div className="grid grid-cols-2 gap-2">
+                  {(["male", "female"] as const).map((g) => {
+                    const s = summary[g];
+                    if (!s) return null;
+                    return (
+                      <div key={g} className="rounded-lg border border-zinc-200 px-3 py-2.5">
+                        <h4 className="text-xs font-medium text-zinc-900 capitalize mb-1">{g}</h4>
+                        <div className="text-[11px] text-zinc-600 space-y-0.5">
+                          <div>Enrolled: <span className="font-medium">{s.enrolled}</span></div>
+                          <div>Responded: <span className="font-medium text-emerald-700">{s.responded}</span></div>
+                          <div>Not responded: <span className="font-medium text-amber-700">{s.not_responded}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {notResponded.length > 0 && (
+                <div className="rounded-lg border border-amber-200 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-amber-50">
+                    <h4 className="text-xs font-medium text-amber-800">
+                      Participants without valid response ({notResponded.length})
+                    </h4>
+                  </div>
+                  <div className="divide-y divide-amber-100">
+                    {notResponded.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
+                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-amber-700 mt-0.5">{p.reason}</p>
+                        {p.answer !== null && (
+                          <p className="text-[10px] text-zinc-500 mt-0.5">Raw answer: <span className="font-mono">{p.answer}</span></p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {responded.length > 0 && (
+                <div className="rounded-lg border border-zinc-200 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-emerald-50">
+                    <h4 className="text-xs font-medium text-emerald-800">
+                      Participants with valid response ({responded.length})
+                    </h4>
+                  </div>
+                  <div className="divide-y divide-zinc-100">
+                    {responded.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-medium text-zinc-800 truncate">{p.name}</span>
+                          <span className="text-[10px] text-zinc-400 capitalize shrink-0">{p.gender ?? "unknown"}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800">
+                            {p.bucket}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
