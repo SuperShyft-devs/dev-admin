@@ -1454,6 +1454,22 @@ export interface Participant {
   country?: string | null;
 }
 
+export interface EngagementParticipantUpdatePayload {
+  participant_department?: string | null;
+  want_doctor_consultation?: boolean | null;
+  want_nutritionist_consultation?: boolean | null;
+  want_doctor_and_nutritionist_consultation?: boolean | null;
+}
+
+export interface EngagementParticipantUpdateResponse {
+  engagement_id: number;
+  user_id: number;
+  participant_department?: string | null;
+  want_doctor_consultation?: boolean | null;
+  want_nutritionist_consultation?: boolean | null;
+  want_doctor_and_nutritionist_consultation?: boolean | null;
+}
+
 export const participantsApi = {
   byEngagementId: (engagementId: number, params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
@@ -1499,14 +1515,24 @@ export const participantsApi = {
         deleted_category_progress_rows: number;
       };
     }>(`/engagements/${engagementId}/participants`),
+  updateParticipant: (
+    engagementId: number,
+    userId: number,
+    payload: EngagementParticipantUpdatePayload
+  ) =>
+    api.patch<{ data: EngagementParticipantUpdateResponse }>(
+      `/engagements/${engagementId}/participants/${userId}`,
+      payload
+    ),
   updateDepartment: (
     engagementId: number,
     userId: number,
     participant_department: string | null
   ) =>
-    api.patch<{
-      data: { engagement_id: number; user_id: number; participant_department: string | null };
-    }>(`/engagements/${engagementId}/participants/${userId}`, { participant_department }),
+    api.patch<{ data: EngagementParticipantUpdateResponse }>(
+      `/engagements/${engagementId}/participants/${userId}`,
+      { participant_department }
+    ),
 };
 
 // Engagement Questionnaire Status

@@ -72,6 +72,68 @@ function formatBool(value: boolean | null | undefined): string {
   return "—";
 }
 
+type ConsultationField =
+  | "want_doctor_consultation"
+  | "want_nutritionist_consultation"
+  | "want_doctor_and_nutritionist_consultation";
+
+const BOOL_SELECT_OPTIONS = [
+  { value: "yes", label: "Yes", bool: true as const },
+  { value: "no", label: "No", bool: false as const },
+  { value: "unset", label: "—", bool: null as const },
+] as const;
+
+function boolToSelectValue(value: boolean | null | undefined): string {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return "unset";
+}
+
+function selectValueToBool(value: string): boolean | null {
+  const match = BOOL_SELECT_OPTIONS.find((opt) => opt.value === value);
+  return match?.bool ?? null;
+}
+
+function normalizeBool(value: boolean | null | undefined): boolean | null {
+  return value === undefined ? null : value;
+}
+
+function EditableColumnHeader({
+  label,
+  editable,
+  isEditing,
+  onToggleEdit,
+  editTitle,
+}: {
+  label: string;
+  editable: boolean;
+  isEditing: boolean;
+  onToggleEdit: () => void;
+  editTitle: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      {editable && (
+        <button
+          type="button"
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onToggleEdit();
+          }}
+          className={`inline-flex items-center justify-center p-0.5 rounded hover:bg-zinc-200 ${
+            isEditing ? "text-zinc-900" : "text-zinc-500"
+          }`}
+          title={isEditing ? `Done editing ${editTitle}` : `Edit ${editTitle}`}
+          aria-label={isEditing ? `Done editing ${editTitle}` : `Edit ${editTitle}`}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </span>
+  );
+}
+
 function resolveDepartmentDisplay(
   slug: string | null | undefined,
   departments: OrganizationDepartment[]
@@ -243,6 +305,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   } | null>(null);
   const [departmentUpdateLoading, setDepartmentUpdateLoading] = useState(false);
   const [departmentUpdateError, setDepartmentUpdateError] = useState<string | null>(null);
+  const [consultationEditMode, setConsultationEditMode] = useState<Set<ConsultationField>>(
+    () => new Set()
+  );
+  const [consultationUpdateLoading, setConsultationUpdateLoading] = useState<string | null>(null);
+  const [consultationUpdateError, setConsultationUpdateError] = useState<string | null>(null);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -341,6 +408,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setDepartmentEditMode(false);
       setDepartmentConfirm(null);
       setDepartmentUpdateError(null);
+      setConsultationEditMode(new Set());
+      setConsultationUpdateLoading(null);
+      setConsultationUpdateError(null);
       fetchParticipants();
       void fetchOrganizationDepartments();
     }
@@ -384,6 +454,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const canEditDepartment =
     source.kind === "engagement-id" && organizationId != null && orgDepartments.length > 0;
+
+  const canEditConsultation = source.kind === "engagement-id";
 
   const afterColumnFilters = useMemo(
     () => applyColumnFilters(participants, columnFilters),
@@ -444,6 +516,69 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     } finally {
       setDepartmentUpdateLoading(false);
     }
+  };
+
+  const toggleConsultationEditMode = (field: ConsultationField) => {
+    setConsultationEditMode((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  };
+
+  const handleConsultationUpdate = async (
+    participant: Participant,
+    field: ConsultationField,
+    value: boolean | null
+  ) => {
+    if (!engagementIdForDepartment || !participant.user_id) return;
+
+    const loadingKey = `${participant.user_id}:${field}`;
+    try {
+      setConsultationUpdateLoading(loadingKey);
+      setConsultationUpdateError(null);
+      await participantsApi.updateParticipant(engagementIdForDepartment, participant.user_id, {
+        [field]: value,
+      });
+      setParticipants((prev) =>
+        prev.map((row) => (row.user_id === participant.user_id ? { ...row, [field]: value } : row))
+      );
+    } catch (err) {
+      setConsultationUpdateError(getApiError(err));
+    } finally {
+      setConsultationUpdateLoading(null);
+    }
+  };
+
+  const renderConsultationCell = (p: Participant, field: ConsultationField) => {
+    const isEditing = consultationEditMode.has(field);
+
+    if (isEditing && canEditConsultation) {
+      const loadingKey = `${p.user_id}:${field}`;
+      const isLoading = consultationUpdateLoading === loadingKey;
+
+      return (
+        <select
+          value={boolToSelectValue(p[field])}
+          disabled={isLoading}
+          onChange={(e) => {
+            const nextValue = selectValueToBool(e.target.value);
+            if (normalizeBool(p[field]) === nextValue) return;
+            void handleConsultationUpdate(p, field, nextValue);
+          }}
+          className="max-w-[100px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+        >
+          {BOOL_SELECT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return formatBool(p[field]);
   };
 
   const engagementIdForDelete =
@@ -795,6 +930,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         {/* Table */}
         {!loading && !error && visibleRows.length > 0 && (
           <>
+            {consultationUpdateError && (
+              <p className="text-sm text-red-600 mb-3">{consultationUpdateError}</p>
+            )}
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
@@ -865,13 +1003,35 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       Blood Group
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Doctor Consultation
+                      <EditableColumnHeader
+                        label="Doctor Consultation"
+                        editable={canEditConsultation}
+                        isEditing={consultationEditMode.has("want_doctor_consultation")}
+                        onToggleEdit={() => toggleConsultationEditMode("want_doctor_consultation")}
+                        editTitle="doctor consultation"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Nutritionist Consultation
+                      <EditableColumnHeader
+                        label="Nutritionist Consultation"
+                        editable={canEditConsultation}
+                        isEditing={consultationEditMode.has("want_nutritionist_consultation")}
+                        onToggleEdit={() => toggleConsultationEditMode("want_nutritionist_consultation")}
+                        editTitle="nutritionist consultation"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Doctor + Nutritionist
+                      <EditableColumnHeader
+                        label="Doctor + Nutritionist"
+                        editable={canEditConsultation}
+                        isEditing={consultationEditMode.has(
+                          "want_doctor_and_nutritionist_consultation"
+                        )}
+                        onToggleEdit={() =>
+                          toggleConsultationEditMode("want_doctor_and_nutritionist_consultation")
+                        }
+                        editTitle="doctor + nutritionist consultation"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Profile Created On Metsights
@@ -978,14 +1138,46 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.participant_blood_group || "—"}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {formatBool(p.want_doctor_consultation)}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (
+                              consultationEditMode.has("want_doctor_consultation") &&
+                              canEditConsultation
+                            ) {
+                              ev.stopPropagation();
+                            }
+                          }}
+                        >
+                          {renderConsultationCell(p, "want_doctor_consultation")}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {formatBool(p.want_nutritionist_consultation)}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (
+                              consultationEditMode.has("want_nutritionist_consultation") &&
+                              canEditConsultation
+                            ) {
+                              ev.stopPropagation();
+                            }
+                          }}
+                        >
+                          {renderConsultationCell(p, "want_nutritionist_consultation")}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {formatBool(p.want_doctor_and_nutritionist_consultation)}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (
+                              consultationEditMode.has(
+                                "want_doctor_and_nutritionist_consultation"
+                              ) &&
+                              canEditConsultation
+                            ) {
+                              ev.stopPropagation();
+                            }
+                          }}
+                        >
+                          {renderConsultationCell(p, "want_doctor_and_nutritionist_consultation")}
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {formatBool(p.is_profile_created_on_metsights)}
