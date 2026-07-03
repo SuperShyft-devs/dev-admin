@@ -860,6 +860,8 @@ export interface CampReportSectionPayload {
     total_blood_test?: number;
     blood_test_percent?: number;
     doctor_consultation?: number;
+    nutritionist_consultation?: number;
+    doctor_and_nutritionist_consultation?: number;
     high_risk_group?: number;
   };
 }
