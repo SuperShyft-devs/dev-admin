@@ -1139,6 +1139,7 @@ export const engagementsApi = {
     status?: string;
     city?: string;
     engagement_type?: string;
+    audience?: "b2b" | "b2c";
     search?: string;
     sort_by?: string;
     sort_dir?: "asc" | "desc";
