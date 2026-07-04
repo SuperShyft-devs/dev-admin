@@ -6,6 +6,7 @@ import {
   MoreVertical,
   Eye,
   Users,
+  CheckCircle2,
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
@@ -16,6 +17,7 @@ import {
   getApiErrorDetails,
   type Participant,
   type ConsoleEngagementListItem,
+  type ConsoleParticipantBookResponse,
 } from "../../lib/api";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 
@@ -31,9 +33,24 @@ function formatBool(value: boolean | null | undefined): string {
   return "—";
 }
 
+function isParticipantBooked(p: Participant): boolean {
+  return Boolean(p.booking_id?.trim());
+}
+
+function applyBookingToParticipant(
+  p: Participant,
+  result: ConsoleParticipantBookResponse
+): Participant {
+  return {
+    ...p,
+    booking_id: result.booking_id ?? p.booking_id,
+    barcode: result.barcode ?? p.barcode,
+  };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type ModalMode = "detail" | "book" | "result" | null;
+type ModalMode = "detail" | "book" | null;
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
@@ -66,7 +83,6 @@ export function EngagementConsolePage() {
   const [barcode, setBarcode] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [bookingResult, setBookingResult] = useState<Record<string, unknown> | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!engId || isNaN(engId)) return;
@@ -163,13 +179,11 @@ export function EngagementConsolePage() {
     setSelectedParticipant(null);
     setBarcode("");
     setBookingError(null);
-    setBookingResult(null);
   };
 
   const openBookModal = () => {
     setBarcode("");
     setBookingError(null);
-    setBookingResult(null);
     setModalMode("book");
   };
 
@@ -177,7 +191,7 @@ export function EngagementConsolePage() {
     (engagement?.status ?? "").toLowerCase() === "running";
 
   const canBookParticipant = (p: Participant | null) =>
-    Boolean(p && isEngagementRunning && !p.booking_id);
+    Boolean(p && isEngagementRunning && !isParticipantBooked(p));
 
   const handleCreateBooking = async () => {
     if (!selectedParticipant || !engId) return;
@@ -188,19 +202,32 @@ export function EngagementConsolePage() {
     }
     setBookingLoading(true);
     setBookingError(null);
+    const userId = selectedParticipant.user_id;
     try {
-      const res = await consoleApi.bookParticipant(engId, selectedParticipant.user_id, {
+      const res = await consoleApi.bookParticipant(engId, userId, {
         barcode: trimmed,
       });
-      setBookingResult(res.data.data);
-      setModalMode("result");
-      const parts = await fetchAllPages<Participant>(
+      const result = res.data.data;
+
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.user_id === userId ? applyBookingToParticipant(p, result) : p
+        )
+      );
+      setSelectedParticipant((prev) =>
+        prev ? applyBookingToParticipant(prev, result) : prev
+      );
+      setBarcode("");
+      setModalMode("detail");
+
+      void fetchAllPages<Participant>(
         (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
         100
-      );
-      setParticipants(parts);
-      const updated = parts.find((p) => p.user_id === selectedParticipant.user_id);
-      if (updated) setSelectedParticipant(updated);
+      ).then((parts) => {
+        setParticipants(parts);
+        const updated = parts.find((p) => p.user_id === userId);
+        if (updated) setSelectedParticipant(updated);
+      });
     } catch (err) {
       setBookingError(getApiError(err));
     } finally {
@@ -396,21 +423,30 @@ export function EngagementConsolePage() {
                         {p.participant_department ?? "—"}
                       </td>
                       <td className="px-2 sm:px-4 py-3 text-center relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActionMenuRow(
-                              actionMenuRow ===
-                                (p.engagement_participant_id ?? p.user_id)
-                                ? null
-                                : (p.engagement_participant_id ?? p.user_id)
-                            );
-                          }}
-                          className="p-1.5 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
-                          aria-label="Actions"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          {isParticipantBooked(p) && (
+                            <CheckCircle2
+                              className="w-4 h-4 text-emerald-600 shrink-0"
+                              title="Booking complete"
+                              aria-label="Booking complete"
+                            />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActionMenuRow(
+                                actionMenuRow ===
+                                  (p.engagement_participant_id ?? p.user_id)
+                                  ? null
+                                  : (p.engagement_participant_id ?? p.user_id)
+                              );
+                            }}
+                            className="p-1.5 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                            aria-label="Actions"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </div>
                         {actionMenuRow ===
                           (p.engagement_participant_id ?? p.user_id) && (
                           <div className="absolute right-2 sm:right-4 top-full z-20 mt-0.5 w-36 bg-white border border-zinc-200 rounded-lg shadow-lg py-1">
@@ -455,6 +491,12 @@ export function EngagementConsolePage() {
                 >
                   Book
                 </button>
+              </div>
+            )}
+            {isParticipantBooked(selectedParticipant) && (
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+                <span className="text-sm font-medium text-emerald-700">Booking complete</span>
               </div>
             )}
           </div>
@@ -504,26 +546,6 @@ export function EngagementConsolePage() {
             </div>
           </div>
         )}
-      </Modal>
-
-      <Modal
-        open={modalMode === "result"}
-        onClose={closeModal}
-        title="Booking Response"
-        maxWidthClassName="max-w-lg"
-      >
-        <pre className="text-xs font-mono text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap">
-          {bookingResult ? JSON.stringify(bookingResult, null, 2) : "—"}
-        </pre>
-        <div className="flex justify-end pt-4">
-          <button
-            type="button"
-            onClick={closeModal}
-            className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
-          >
-            Close
-          </button>
-        </div>
       </Modal>
     </ConsoleLayout>
   );

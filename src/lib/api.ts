@@ -1693,6 +1693,18 @@ export interface ConsoleEngagementListItem {
   participant_count?: number | null;
 }
 
+export interface ConsoleParticipantBookResponse {
+  status?: boolean;
+  message?: string | null;
+  lead_id?: number | null;
+  booking_id?: string | null;
+  resCode?: string | null;
+  tatDetail?: Record<string, unknown> | null;
+  barcode?: string | null;
+  engagement_participant_id?: number | null;
+  user_id?: number | null;
+}
+
 export const consoleApi = {
   listEngagements: () =>
     api.get<{ data: ConsoleEngagementListItem[] }>("/engagements/console/engagements"),
@@ -1708,7 +1720,7 @@ export const consoleApi = {
     userId: number,
     payload: { barcode: string }
   ) =>
-    api.post<{ data: Record<string, unknown> }>(
+    api.post<{ data: ConsoleParticipantBookResponse }>(
       `/engagements/${engagementId}/console/participants/${userId}/book`,
       payload
     ),
