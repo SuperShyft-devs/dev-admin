@@ -17,7 +17,6 @@ import {
   CloudCog,
   Send,
   UserPlus,
-  Bell,
   PlayCircle,
   CheckCircle2,
   Link2,
@@ -69,8 +68,6 @@ import {
 
 const METSIGHTS_BLOOD_PACKAGE_CODES = new Set(["METSIGHTS_BASIC", "METSIGHTS_PRO"]);
 import { useLocation } from "react-router-dom";
-
-const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
 
 type PushCategoryOption = { key: string; label: string };
 
