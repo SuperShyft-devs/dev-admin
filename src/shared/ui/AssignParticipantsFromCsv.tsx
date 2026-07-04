@@ -227,16 +227,26 @@ export function AssignParticipantsFromCsv({
         className="hidden"
         onChange={(e) => void handleFileChange(e.target.files?.[0])}
       />
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={running}
-        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium disabled:opacity-50"
-      >
-        {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-        Assign participants
-      </button>
-      {parseError && <p className="text-xs text-red-600 w-full">{parseError}</p>}
+      <div className="pt-2 border-t border-zinc-100 space-y-2">
+        <div>
+          <p className="text-sm font-medium text-zinc-700">Assign participants</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Upload a CSV with <span className="font-mono">id</span>,{" "}
+            <span className="font-mono">Phone #</span>, and <span className="font-mono">Email</span> to
+            bulk-enroll users and link them to this engagement via their Metsights record.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={running}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium disabled:opacity-50"
+        >
+          {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          Upload CSV
+        </button>
+        {parseError && <p className="text-xs text-red-600">{parseError}</p>}
+      </div>
 
       <Modal
         open={progressOpen}
