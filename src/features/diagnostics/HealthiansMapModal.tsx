@@ -21,7 +21,7 @@ interface HealthiansMapModalProps {
   testName: string;
   currentHealthiansParameterId?: number | null;
   diagnosticProvider: string | null | undefined;
-  healthiansCampId: number | null | undefined;
+  externalPackageId: number | null | undefined;
   allTests: MapModalTest[];
   onMapped: () => void;
   onSwitchTest: (test: MapModalTest) => void;
@@ -34,7 +34,7 @@ export function HealthiansMapModal({
   testName,
   currentHealthiansParameterId,
   diagnosticProvider,
-  healthiansCampId,
+  externalPackageId,
   allTests,
   onMapped,
   onSwitchTest,
@@ -49,9 +49,10 @@ export function HealthiansMapModal({
   const [mapping, setMapping] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  const providerLabel = diagnosticProvider ?? "provider";
   const providerValid =
     diagnosticProvider?.toLowerCase() === "healthians";
-  const campIdValid = healthiansCampId != null && healthiansCampId > 0;
+  const packageIdValid = externalPackageId != null && externalPackageId > 0;
 
   useEffect(() => {
     if (!open) {
@@ -62,7 +63,7 @@ export function HealthiansMapModal({
     setConfirmConstituent(null);
     setError(null);
 
-    if (!providerValid || !campIdValid) return;
+    if (!providerValid || !packageIdValid) return;
     if (dataLoaded) return;
 
     setConstituents([]);
@@ -72,7 +73,7 @@ export function HealthiansMapModal({
     (async () => {
       setLoading(true);
       try {
-        const res = await healthiansApi.getConstituents(healthiansCampId!);
+        const res = await healthiansApi.getConstituents(externalPackageId!);
         if (cancelled) return;
         const data = res.data.data;
         setConstituents(data.constituents ?? []);
@@ -87,7 +88,7 @@ export function HealthiansMapModal({
     return () => {
       cancelled = true;
     };
-  }, [open, providerValid, campIdValid, healthiansCampId, dataLoaded]);
+  }, [open, providerValid, packageIdValid, externalPackageId, dataLoaded]);
 
   const nextUnmappedTest = useMemo(() => {
     const currentIdx = allTests.findIndex((t) => t.test_id === testId);
@@ -167,24 +168,24 @@ export function HealthiansMapModal({
       return (
         <div className="py-8 text-center">
           <p className="text-sm text-zinc-600">
-            This package's diagnostic provider is not Healthians.
+            This package&apos;s diagnostic provider is not {providerLabel}.
           </p>
           <p className="text-sm text-zinc-500 mt-1">
-            Mapping is only available for packages with Healthians as the
+            Mapping is only available for packages with {providerLabel} as the
             diagnostic provider.
           </p>
         </div>
       );
     }
 
-    if (!campIdValid) {
+    if (!packageIdValid) {
       return (
         <div className="py-8 text-center">
           <p className="text-sm text-zinc-600">
-            This package does not have a Healthians Camp ID configured.
+            This package does not have a {providerLabel} Package ID configured.
           </p>
           <p className="text-sm text-zinc-500 mt-1">
-            Please set the Healthians Camp ID on the package first.
+            Please set the {providerLabel} Package ID on the package first.
           </p>
         </div>
       );
@@ -195,7 +196,7 @@ export function HealthiansMapModal({
         <div className="py-10 flex flex-col items-center gap-2">
           <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
           <p className="text-sm text-zinc-500">
-            Fetching constituents from Healthians...
+            Fetching constituents from {providerLabel}...
           </p>
         </div>
       );
@@ -205,7 +206,7 @@ export function HealthiansMapModal({
       <div className="space-y-3">
         {packageName && (
           <p className="text-xs text-zinc-500">
-            Healthians package:{" "}
+            {providerLabel} package:{" "}
             <span className="font-medium text-zinc-700">{packageName}</span>
           </p>
         )}
@@ -228,7 +229,7 @@ export function HealthiansMapModal({
           <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200">
             <div className="min-w-0">
               <p className="text-xs text-amber-700 font-medium">Currently mapped</p>
-              <p className="text-sm text-zinc-900">Healthians Parameter ID: {currentHealthiansParameterId}</p>
+              <p className="text-sm text-zinc-900">External Parameter ID: {currentHealthiansParameterId}</p>
               <p className="text-xs text-amber-600">This ID was not found in the current constituents list.</p>
             </div>
           </div>
@@ -287,13 +288,13 @@ export function HealthiansMapModal({
       <Modal
         open={open}
         onClose={onClose}
-        title="Map to Healthians Parameter"
+        title={`Map to ${providerLabel} Parameter`}
         maxWidthClassName="max-w-lg"
       >
         <div className="space-y-3">
           <p className="text-sm text-zinc-600">
             Map <span className="font-semibold text-zinc-900">{testName}</span>{" "}
-            to a Healthians constituent parameter.
+            to a {providerLabel} constituent parameter.
           </p>
 
           {error && (

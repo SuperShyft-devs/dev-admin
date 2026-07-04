@@ -19,7 +19,7 @@ type ModalMode = "add" | "edit";
 const EMPTY_FORM: DiagnosticPackageCreate = {
   package_name: "",
   diagnostic_provider: "",
-  healthians_camp_id: null,
+  external_package_id: null,
   collection_type: "",
   gender_suitability: "",
   package_for: "public",
@@ -212,7 +212,7 @@ export function DiagnosticPackages() {
     setForm({
       package_name: row.package_name,
       diagnostic_provider: row.diagnostic_provider ?? "",
-      healthians_camp_id: row.healthians_camp_id ?? null,
+      external_package_id: row.external_package_id ?? null,
       collection_type: row.collection_type ?? "",
       gender_suitability: row.gender_suitability ?? "",
       package_for: row.package_for ?? "public",
@@ -294,7 +294,7 @@ export function DiagnosticPackages() {
       const payload: DiagnosticPackageCreate = {
         package_name: form.package_name.trim(),
         diagnostic_provider: form.diagnostic_provider?.trim() || null,
-        healthians_camp_id: form.healthians_camp_id ?? null,
+        external_package_id: form.external_package_id ?? null,
         collection_type: form.collection_type?.trim() || null,
         gender_suitability: form.gender_suitability?.trim() || null,
         package_for: (form.package_for as "public" | "camp") || "public",
@@ -614,12 +614,16 @@ export function DiagnosticPackages() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Camp ID</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                {form.diagnostic_provider
+                  ? `${form.diagnostic_provider} Package ID`
+                  : "Package ID"}
+              </label>
               <input
                 type="number"
-                value={form.healthians_camp_id ?? ""}
+                value={form.external_package_id ?? ""}
                 onChange={(e) =>
-                  setForm((prev) => ({ ...prev, healthians_camp_id: toNumberOrNull(e.target.value) }))
+                  setForm((prev) => ({ ...prev, external_package_id: toNumberOrNull(e.target.value) }))
                 }
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
               />

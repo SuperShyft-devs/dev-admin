@@ -1969,7 +1969,7 @@ export interface DiagnosticPackageListItem {
   diagnostic_package_id: number;
   package_name: string;
   diagnostic_provider?: string | null;
-  healthians_camp_id?: number | null;
+  external_package_id?: number | null;
   created_by_user_id?: number | null;
   no_of_tests?: number | null;
   report_duration_hours?: number | null;
@@ -2000,7 +2000,7 @@ export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
 export interface DiagnosticPackageCreate {
   package_name: string;
   diagnostic_provider?: string | null;
-  healthians_camp_id?: number | null;
+  external_package_id?: number | null;
   /** Public (false) vs custom/owned (true). Non-staff must use true; staff may use either. */
   custom?: boolean;
   report_duration_hours?: number | null;
@@ -2429,10 +2429,10 @@ export interface HealthiansConstituentsResponse {
 }
 
 export const healthiansApi = {
-  getConstituents: (healthians_camp_id: number) =>
+  getConstituents: (external_package_id: number) =>
     api.post<{ data: HealthiansConstituentsResponse }>(
       "/diagnostics/healthians/constituents",
-      { healthians_camp_id }
+      { external_package_id }
     ),
 };
 

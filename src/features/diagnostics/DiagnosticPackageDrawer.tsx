@@ -505,7 +505,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
               <div className="bg-white border border-zinc-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-zinc-500">Package name</p><p className="text-zinc-900 font-medium">{detail?.package_name ?? "—"}</p></div>
                 <div><p className="text-zinc-500">Provider</p><p className="text-zinc-900">{detail?.diagnostic_provider ?? "—"}</p></div>
-                <div><p className="text-zinc-500">Healthians Camp ID</p><p className="text-zinc-900">{detail?.healthians_camp_id ?? "—"}</p></div>
+                <div><p className="text-zinc-500">{detail?.diagnostic_provider ?? "Provider"} Package ID</p><p className="text-zinc-900">{detail?.external_package_id ?? "—"}</p></div>
                 <div><p className="text-zinc-500">Tests</p><p className="text-zinc-900">{detail?.no_of_tests ?? "—"}</p></div>
                 <div><p className="text-zinc-500">Report duration (hrs)</p><p className="text-zinc-900">{detail?.report_duration_hours ?? "—"}</p></div>
                 <div><p className="text-zinc-500">Collection type</p><p className="text-zinc-900">{detail?.collection_type ?? "—"}</p></div>
@@ -778,7 +778,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                                             title={
                                               test.external_parameter_id
                                                 ? `Mapped (ID: ${test.external_parameter_id})`
-                                                : "Map to Healthians parameter"
+                                                : `Map to ${detail?.diagnostic_provider ?? "provider"} parameter`
                                             }
                                           >
                                             {test.external_parameter_id ? (
@@ -1144,7 +1144,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
           testName={mapModalTestName}
           currentHealthiansParameterId={mapModalCurrentParamId}
           diagnosticProvider={detail?.diagnostic_provider}
-          healthiansCampId={detail?.healthians_camp_id}
+          externalPackageId={detail?.external_package_id}
           allTests={testGroups.flatMap((g) =>
             (g.tests ?? []).map((t) => ({
               test_id: t.test_id,
