@@ -69,6 +69,27 @@ import { useLocation } from "react-router-dom";
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
 
+type PushCategoryOption = { key: string; label: string };
+
+const MET_PUSH_CATEGORIES: PushCategoryOption[] = [
+  { key: "physical-measurement", label: "Physical Measurement" },
+  { key: "vitals", label: "Vitals" },
+  { key: "diet-lifestyle-parameters", label: "Diet & Lifestyle" },
+  { key: "blood-parameters", label: "Blood Parameters" },
+  { key: "advanced-blood-parameters", label: "Advanced Blood Parameters" },
+];
+
+const FITPRINT_PUSH_CATEGORIES: PushCategoryOption[] = [
+  { key: "fitness-parameters", label: "Fitness Parameters" },
+];
+
+function pushCategoriesForTypeCode(typeCode?: string | null): PushCategoryOption[] {
+  const tc = (typeCode ?? "").trim();
+  if (tc === "7") return FITPRINT_PUSH_CATEGORIES;
+  if (tc === "1" || tc === "2") return MET_PUSH_CATEGORIES;
+  return [];
+}
+
 const STATUS_OPTIONS = ["running", "completed"] as const;
 
 function formatEngagementStatusLabel(status?: string | null): string {
@@ -854,6 +875,7 @@ export function Engagements({
 
   // ── Push Questionnaires to Metsights state ────────────────
   const [pushConfirmPkg, setPushConfirmPkg] = useState<EngagementAssessmentPackageSummary | null>(null);
+  const [pushSelectedCategories, setPushSelectedCategories] = useState<string[]>([]);
   const [pushing, setPushing] = useState(false);
   const [pushProgress, setPushProgress] = useState<{ current: number; total: number } | null>(null);
   const [pushResult, setPushResult] = useState<{ pushed: number; skipped: number; errors: number } | null>(null);
@@ -1036,6 +1058,7 @@ export function Engagements({
     setAssessmentsList([]);
     setAssessmentsError(null);
     setPushConfirmPkg(null);
+    setPushSelectedCategories([]);
     setPushProgress(null);
     setPushResult(null);
     setPushError(null);
@@ -1168,7 +1191,7 @@ export function Engagements({
   }, [selected, loadAssessmentsForEngagement]);
 
   const handlePushQuestionnaires = useCallback(async () => {
-    if (!selected || !pushConfirmPkg) return;
+    if (!selected || !pushConfirmPkg || pushSelectedCategories.length === 0) return;
     setPushing(true);
     setPushResult(null);
     setPushError(null);
@@ -1197,7 +1220,8 @@ export function Engagements({
           const res = await engagementAssessmentPackagesApi.pushQuestionnaires(
             selected.engagement_id,
             pushConfirmPkg.package_id,
-            inst.assessment_instance_id
+            inst.assessment_instance_id,
+            pushSelectedCategories
           );
           const d = res.data.data;
           pushed += d.pushed ?? 0;
@@ -1228,7 +1252,31 @@ export function Engagements({
       setPushing(false);
       setPushProgress(null);
     }
-  }, [selected, pushConfirmPkg]);
+  }, [selected, pushConfirmPkg, pushSelectedCategories]);
+
+  const openPushConfirm = useCallback((pkg: EngagementAssessmentPackageSummary) => {
+    const options = pushCategoriesForTypeCode(pkg.assessment_type_code);
+    setPushConfirmPkg(pkg);
+    setPushSelectedCategories(options.map((c) => c.key));
+    setPushResult(null);
+    setPushError(null);
+    setPushProgress(null);
+  }, []);
+
+  const closePushConfirm = useCallback(() => {
+    if (pushing) return;
+    setPushConfirmPkg(null);
+    setPushSelectedCategories([]);
+    setPushResult(null);
+    setPushError(null);
+    setPushProgress(null);
+  }, [pushing]);
+
+  const togglePushCategory = useCallback((key: string) => {
+    setPushSelectedCategories((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }, []);
 
   const handleDraftBloodParameters = useCallback(async () => {
     if (!selected) return;
@@ -2190,11 +2238,7 @@ export function Engagements({
                     <button
                       key={pkg.package_id}
                       type="button"
-                      onClick={() => {
-                        setPushConfirmPkg(pkg);
-                        setPushResult(null);
-                        setPushError(null);
-                      }}
+                      onClick={() => openPushConfirm(pkg)}
                       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
                     >
                       <Send className="w-3.5 h-3.5" />
@@ -3283,14 +3327,7 @@ export function Engagements({
       {/* ── Push Questionnaires Confirmation Modal ── */}
       <Modal
         open={pushConfirmPkg !== null}
-        onClose={() => {
-          if (!pushing) {
-            setPushConfirmPkg(null);
-            setPushResult(null);
-            setPushError(null);
-            setPushProgress(null);
-          }
-        }}
+        onClose={closePushConfirm}
         title={`Push ${pushConfirmPkg?.display_name ?? "Answers"} to Metsights`}
       >
         <div className="space-y-4">
@@ -3301,6 +3338,31 @@ export function Engagements({
                 <span className="font-semibold">all participants</span> of{" "}
                 <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span> to Metsights.
               </p>
+              <div>
+                <p className="text-xs font-medium text-zinc-700 mb-2">Categories to push</p>
+                <div className="space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  {pushCategoriesForTypeCode(pushConfirmPkg?.assessment_type_code).map((cat) => {
+                    const checked = pushSelectedCategories.includes(cat.key);
+                    return (
+                      <label
+                        key={cat.key}
+                        className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => togglePushCategory(cat.key)}
+                          className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                        {cat.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                {pushSelectedCategories.length === 0 && (
+                  <p className="mt-1.5 text-xs text-red-600">Select at least one category.</p>
+                )}
+              </div>
               <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
                 <li>Participants who haven't filled any questions will be skipped.</li>
                 <li>Partially filled questionnaires will push whatever answers exist.</li>
@@ -3341,7 +3403,7 @@ export function Engagements({
               <button
                 type="button"
                 onClick={handlePushQuestionnaires}
-                disabled={pushing}
+                disabled={pushing || pushSelectedCategories.length === 0}
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
               >
                 {pushing ? "Pushing…" : "Push Answers"}
@@ -3349,12 +3411,7 @@ export function Engagements({
             )}
             <button
               type="button"
-              onClick={() => {
-                setPushConfirmPkg(null);
-                setPushResult(null);
-                setPushError(null);
-                setPushProgress(null);
-              }}
+              onClick={closePushConfirm}
               disabled={pushing}
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >

@@ -1295,7 +1295,8 @@ export const engagementAssessmentPackagesApi = {
   pushQuestionnaires: (
     engagementId: number,
     packageId: number,
-    assessmentInstanceId?: number
+    assessmentInstanceId?: number,
+    categories?: string[]
   ) =>
     api.post<{
       data: { pushed: number; skipped: number; errors: number; details: unknown[] };
@@ -1306,6 +1307,7 @@ export const engagementAssessmentPackagesApi = {
         ...(assessmentInstanceId != null
           ? { assessment_instance_id: assessmentInstanceId }
           : {}),
+        ...(categories != null ? { categories } : {}),
       },
       { timeout: 120_000 }
     ),
