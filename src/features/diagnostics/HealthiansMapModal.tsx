@@ -11,7 +11,7 @@ import { Modal } from "../../shared/ui/Modal";
 export interface MapModalTest {
   test_id: number;
   test_name: string;
-  healthians_parameter_id?: number | null;
+  external_parameter_id?: number | null;
 }
 
 interface HealthiansMapModalProps {
@@ -93,10 +93,10 @@ export function HealthiansMapModal({
     const currentIdx = allTests.findIndex((t) => t.test_id === testId);
     if (currentIdx === -1) return null;
     for (let i = currentIdx + 1; i < allTests.length; i++) {
-      if (allTests[i].healthians_parameter_id == null) return allTests[i];
+      if (allTests[i].external_parameter_id == null) return allTests[i];
     }
     for (let i = 0; i < currentIdx; i++) {
-      if (allTests[i].healthians_parameter_id == null) return allTests[i];
+      if (allTests[i].external_parameter_id == null) return allTests[i];
     }
     return null;
   }, [allTests, testId]);
@@ -122,7 +122,7 @@ export function HealthiansMapModal({
       setError(null);
       try {
         await diagnosticTestsApi.update(testId, {
-          healthians_parameter_id: parseInt(constituent.id, 10),
+          external_parameter_id: parseInt(constituent.id, 10),
         });
         onMapped();
         setConfirmConstituent(null);
@@ -148,7 +148,7 @@ export function HealthiansMapModal({
       setError(null);
       try {
         await diagnosticTestsApi.update(testId, {
-          healthians_parameter_id: parseInt(constituent.id, 10),
+          external_parameter_id: parseInt(constituent.id, 10),
         });
         onMapped();
         onClose();

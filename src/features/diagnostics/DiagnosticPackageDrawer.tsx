@@ -697,7 +697,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
               {(() => {
                 const allTests = testGroups.flatMap((g) => g.tests ?? []);
                 const totalTests = allTests.length;
-                const mappedTests = allTests.filter((t) => t.healthians_parameter_id != null).length;
+                const mappedTests = allTests.filter((t) => t.external_parameter_id != null).length;
                 if (totalTests === 0) return null;
                 return (
                   <div className="flex items-center gap-2 px-1 text-sm text-zinc-600">
@@ -767,26 +767,26 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
                                             onClick={() => {
                                               setMapModalTestId(test.test_id);
                                               setMapModalTestName(test.test_name);
-                                              setMapModalCurrentParamId(test.healthians_parameter_id ?? null);
+                                              setMapModalCurrentParamId(test.external_parameter_id ?? null);
                                               setMapModalOpen(true);
                                             }}
                                             className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
-                                              test.healthians_parameter_id
+                                              test.external_parameter_id
                                                 ? "border border-green-200 text-green-700 hover:bg-green-50"
                                                 : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
                                             }`}
                                             title={
-                                              test.healthians_parameter_id
-                                                ? `Mapped (ID: ${test.healthians_parameter_id})`
+                                              test.external_parameter_id
+                                                ? `Mapped (ID: ${test.external_parameter_id})`
                                                 : "Map to Healthians parameter"
                                             }
                                           >
-                                            {test.healthians_parameter_id ? (
+                                            {test.external_parameter_id ? (
                                               <Eye className="w-3.5 h-3.5" />
                                             ) : (
                                               <Link className="w-3.5 h-3.5" />
                                             )}
-                                            {test.healthians_parameter_id ? "View" : "Map"}
+                                            {test.external_parameter_id ? "View" : "Map"}
                                           </button>
                                         </div>
                                       </div>
@@ -1149,7 +1149,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
             (g.tests ?? []).map((t) => ({
               test_id: t.test_id,
               test_name: t.test_name,
-              healthians_parameter_id: t.healthians_parameter_id,
+              external_parameter_id: t.external_parameter_id,
             }))
           )}
           onMapped={() => {
@@ -1159,7 +1159,7 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
           onSwitchTest={(next: MapModalTest) => {
             setMapModalTestId(next.test_id);
             setMapModalTestName(next.test_name);
-            setMapModalCurrentParamId(next.healthians_parameter_id ?? null);
+            setMapModalCurrentParamId(next.external_parameter_id ?? null);
           }}
         />
       </div>
