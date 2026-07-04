@@ -57,10 +57,14 @@ import {
   type ChecklistTemplate,
   type ChecklistTask,
   type UserListItem,
+  assessmentsApi,
   getApiError,
+  getApiErrorDetails,
   engagementAssessmentPackagesApi,
   type EngagementAssessmentPackageSummary,
 } from "../../lib/api";
+
+const METSIGHTS_BLOOD_PACKAGE_CODES = new Set(["METSIGHTS_BASIC", "METSIGHTS_PRO"]);
 import { useLocation } from "react-router-dom";
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
@@ -851,10 +855,22 @@ export function Engagements({
   // ── Push Questionnaires to Metsights state ────────────────
   const [pushConfirmPkg, setPushConfirmPkg] = useState<EngagementAssessmentPackageSummary | null>(null);
   const [pushing, setPushing] = useState(false);
+  const [pushProgress, setPushProgress] = useState<{ current: number; total: number } | null>(null);
   const [pushResult, setPushResult] = useState<{ pushed: number; skipped: number; errors: number } | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [advSettingsPackages, setAdvSettingsPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
   const [advSettingsLoading, setAdvSettingsLoading] = useState(false);
+  // ── Draft Blood Parameters state ──────────────────────────
+  const [draftBloodOpen, setDraftBloodOpen] = useState(false);
+  const [draftingBlood, setDraftingBlood] = useState(false);
+  const [draftBloodProgress, setDraftBloodProgress] = useState<{ current: number; total: number } | null>(null);
+  const [draftBloodResult, setDraftBloodResult] = useState<{
+    drafted: number;
+    skipped: number;
+    errors: number;
+    messages: string[];
+  } | null>(null);
+  const [draftBloodError, setDraftBloodError] = useState<string | null>(null);
   const [createProfilesOpen, setCreateProfilesOpen] = useState(false);
   const [creatingProfiles, setCreatingProfiles] = useState(false);
   const [createProfilesMode, setCreateProfilesMode] = useState<"enrol_force" | "enrol" | "profile">("profile");
@@ -1020,6 +1036,13 @@ export function Engagements({
     setAssessmentsList([]);
     setAssessmentsError(null);
     setPushConfirmPkg(null);
+    setPushProgress(null);
+    setPushResult(null);
+    setPushError(null);
+    setDraftBloodOpen(false);
+    setDraftBloodProgress(null);
+    setDraftBloodResult(null);
+    setDraftBloodError(null);
     setAdvSettingsPackages([]);
     Promise.all([
       engagementsApi.get(row.engagement_id),
@@ -1149,19 +1172,125 @@ export function Engagements({
     setPushing(true);
     setPushResult(null);
     setPushError(null);
+    setPushProgress(null);
     try {
-      const res = await engagementAssessmentPackagesApi.pushQuestionnaires(
+      const listRes = await engagementAssessmentPackagesApi.listInstances(
         selected.engagement_id,
-        pushConfirmPkg.package_id,
+        pushConfirmPkg.package_id
       );
-      const d = res.data.data;
-      setPushResult({ pushed: d.pushed, skipped: d.skipped, errors: d.errors });
+      const instances = listRes.data.data ?? [];
+      const total = instances.length;
+      let pushed = 0;
+      let skipped = 0;
+      let errors = 0;
+      const errorMessages: string[] = [];
+
+      if (total === 0) {
+        setPushResult({ pushed: 0, skipped: 0, errors: 0 });
+        return;
+      }
+
+      for (let i = 0; i < instances.length; i++) {
+        const inst = instances[i];
+        setPushProgress({ current: i + 1, total });
+        try {
+          const res = await engagementAssessmentPackagesApi.pushQuestionnaires(
+            selected.engagement_id,
+            pushConfirmPkg.package_id,
+            inst.assessment_instance_id
+          );
+          const d = res.data.data;
+          pushed += d.pushed ?? 0;
+          skipped += d.skipped ?? 0;
+          errors += d.errors ?? 0;
+        } catch (err) {
+          const details = getApiErrorDetails(err);
+          if (details.status === 422) {
+            skipped += 1;
+          } else {
+            errors += 1;
+            if (errorMessages.length < 5) {
+              errorMessages.push(
+                `#${inst.assessment_instance_id}: ${details.message}`
+              );
+            }
+          }
+        }
+      }
+
+      setPushResult({ pushed, skipped, errors });
+      if (errors > 0 && pushed === 0 && skipped === 0) {
+        setPushError(errorMessages.join(" · ") || "Push failed for all participants");
+      }
     } catch (err) {
       setPushError(getApiError(err));
     } finally {
       setPushing(false);
+      setPushProgress(null);
     }
   }, [selected, pushConfirmPkg]);
+
+  const handleDraftBloodParameters = useCallback(async () => {
+    if (!selected) return;
+    setDraftingBlood(true);
+    setDraftBloodResult(null);
+    setDraftBloodError(null);
+    setDraftBloodProgress(null);
+    try {
+      const listRes = await engagementAssessmentPackagesApi.listInstances(
+        selected.engagement_id
+      );
+      const instances = (listRes.data.data ?? []).filter((row) =>
+        METSIGHTS_BLOOD_PACKAGE_CODES.has((row.package_code ?? "").trim())
+      );
+      const total = instances.length;
+      let drafted = 0;
+      let skipped = 0;
+      let errors = 0;
+      const messages: string[] = [];
+
+      if (total === 0) {
+        setDraftBloodResult({ drafted: 0, skipped: 0, errors: 0, messages: [] });
+        return;
+      }
+
+      for (let i = 0; i < instances.length; i++) {
+        const inst = instances[i];
+        setDraftBloodProgress({ current: i + 1, total });
+        try {
+          const res = await assessmentsApi.draftBloodParameters(
+            inst.assessment_instance_id
+          );
+          const count = res.data.data.responses_drafted ?? 0;
+          if (count > 0) {
+            drafted += 1;
+          } else {
+            skipped += 1;
+          }
+        } catch (err) {
+          const details = getApiErrorDetails(err);
+          if (details.status === 422) {
+            skipped += 1;
+          } else {
+            errors += 1;
+            if (messages.length < 5) {
+              messages.push(`#${inst.assessment_instance_id}: ${details.message}`);
+            }
+          }
+        }
+      }
+
+      setDraftBloodResult({ drafted, skipped, errors, messages });
+      if (errors > 0 && drafted === 0 && skipped === 0) {
+        setDraftBloodError(messages.join(" · ") || "Draft failed for all assessments");
+      }
+    } catch (err) {
+      setDraftBloodError(getApiError(err));
+    } finally {
+      setDraftingBlood(false);
+      setDraftBloodProgress(null);
+    }
+  }, [selected]);
 
   const loadAdvSettingsPackages = useCallback(async (engagementId: number) => {
     setAdvSettingsLoading(true);
@@ -2023,6 +2152,19 @@ export function Engagements({
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   Create Profiles
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftBloodOpen(true);
+                    setDraftBloodResult(null);
+                    setDraftBloodError(null);
+                    setDraftBloodProgress(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                >
+                  <CloudCog className="w-3.5 h-3.5" />
+                  Draft Blood Parameters
                 </button>
               </div>
 
@@ -3146,6 +3288,7 @@ export function Engagements({
             setPushConfirmPkg(null);
             setPushResult(null);
             setPushError(null);
+            setPushProgress(null);
           }
         }}
         title={`Push ${pushConfirmPkg?.display_name ?? "Answers"} to Metsights`}
@@ -3162,6 +3305,7 @@ export function Engagements({
                 <li>Participants who haven't filled any questions will be skipped.</li>
                 <li>Partially filled questionnaires will push whatever answers exist.</li>
                 <li>Answers from all assessment packages will be merged per participant.</li>
+                <li>Each participant is processed one at a time to avoid timeouts.</li>
               </ul>
             </>
           )}
@@ -3169,7 +3313,12 @@ export function Engagements({
           {pushing && (
             <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-xs">Pushing {pushConfirmPkg?.display_name} to Metsights…</span>
+              <span className="text-xs">
+                Pushing {pushConfirmPkg?.display_name} to Metsights
+                {pushProgress
+                  ? `… ${pushProgress.current}/${pushProgress.total}`
+                  : "…"}
+              </span>
             </div>
           )}
 
@@ -3204,11 +3353,105 @@ export function Engagements({
                 setPushConfirmPkg(null);
                 setPushResult(null);
                 setPushError(null);
+                setPushProgress(null);
               }}
               disabled={pushing}
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
             >
               {pushResult || pushError ? "Close" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Draft Blood Parameters Confirmation Modal ── */}
+      <Modal
+        open={draftBloodOpen}
+        onClose={() => {
+          if (!draftingBlood) {
+            setDraftBloodOpen(false);
+            setDraftBloodResult(null);
+            setDraftBloodError(null);
+            setDraftBloodProgress(null);
+          }
+        }}
+        title="Draft Blood Parameters"
+      >
+        <div className="space-y-4">
+          {!draftBloodResult && !draftBloodError && !draftingBlood && (
+            <>
+              <p className="text-sm text-zinc-700">
+                Draft Metsights blood-parameter answers from each participant&apos;s individual health
+                report into questionnaire responses for{" "}
+                <span className="font-semibold">{selected?.engagement_name ?? "this engagement"}</span>.
+              </p>
+              <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                <li>Only Metsights Basic and Pro assessments are included.</li>
+                <li>Participants without a blood report or Metsights record are skipped.</li>
+                <li>Existing answers for matched parameters are overwritten as drafts.</li>
+                <li>Each assessment is processed one at a time to avoid timeouts.</li>
+              </ul>
+            </>
+          )}
+
+          {draftingBlood && (
+            <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">
+                Drafting blood parameters
+                {draftBloodProgress
+                  ? `… ${draftBloodProgress.current}/${draftBloodProgress.total}`
+                  : "…"}
+              </span>
+            </div>
+          )}
+
+          {draftBloodError && (
+            <p className="text-sm text-red-600">{draftBloodError}</p>
+          )}
+
+          {draftBloodResult && (
+            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+              <div className="text-emerald-700">Drafted: {draftBloodResult.drafted}</div>
+              <div className="text-zinc-500">
+                Skipped (no blood report / ineligible / no values): {draftBloodResult.skipped}
+              </div>
+              {draftBloodResult.errors > 0 && (
+                <div className="text-red-600">Errors: {draftBloodResult.errors}</div>
+              )}
+              {draftBloodResult.messages.length > 0 && (
+                <div className="text-red-600 pt-1 space-y-0.5">
+                  {draftBloodResult.messages.map((msg) => (
+                    <div key={msg}>{msg}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+            {!draftBloodResult && !draftBloodError && (
+              <button
+                type="button"
+                onClick={handleDraftBloodParameters}
+                disabled={draftingBlood}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {draftingBlood ? "Drafting…" : "Draft Blood Parameters"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setDraftBloodOpen(false);
+                setDraftBloodResult(null);
+                setDraftBloodError(null);
+                setDraftBloodProgress(null);
+              }}
+              disabled={draftingBlood}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {draftBloodResult || draftBloodError ? "Close" : "Cancel"}
             </button>
           </div>
         </div>

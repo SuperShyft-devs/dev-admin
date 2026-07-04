@@ -527,6 +527,17 @@ export interface MetsightsCategoryImportResult {
   reason?: string;
 }
 
+export interface DraftBloodParametersResult {
+  assessment_instance_id: number;
+  package_code: string;
+  responses_drafted: number;
+  categories: {
+    category: string;
+    responses_drafted: number;
+    skipped: string[];
+  }[];
+}
+
 export const assessmentsApi = {
   importMetsightsCategoryAnswers: (
     assessmentInstanceId: number,
@@ -544,6 +555,12 @@ export const assessmentsApi = {
   importMetsightsAnswersLegacy: (assessmentInstanceId: number) =>
     api.post<{ data: MetsightsImportAnswersResult }>(
       `/assessments/${assessmentInstanceId}/metsights/import-answers-legacy`,
+      undefined,
+      { timeout: 120_000 }
+    ),
+  draftBloodParameters: (assessmentInstanceId: number) =>
+    api.post<{ data: DraftBloodParametersResult }>(
+      `/assessments/${assessmentInstanceId}/metsights/draft-blood-parameters`,
       undefined,
       { timeout: 120_000 }
     ),
@@ -1240,10 +1257,24 @@ export interface EngagementAssessmentPackageSummary {
   synced_count: number;
 }
 
+export interface EngagementAssessmentInstanceRow {
+  assessment_instance_id: number;
+  user_id: number;
+  package_id: number;
+  package_code?: string | null;
+  metsights_record_id?: string | null;
+  status?: string | null;
+}
+
 export const engagementAssessmentPackagesApi = {
   list: (engagementId: number) =>
     api.get<{ data: EngagementAssessmentPackageSummary[] }>(
       `/engagements/${engagementId}/assessment-packages`
+    ),
+  listInstances: (engagementId: number, packageId?: number) =>
+    api.get<{ data: EngagementAssessmentInstanceRow[] }>(
+      `/engagements/${engagementId}/assessment-instances`,
+      packageId != null ? { params: { package_id: packageId } } : undefined
     ),
   add: (engagementId: number, packageCode: string) =>
     api.post<{
@@ -1261,12 +1292,23 @@ export const engagementAssessmentPackagesApi = {
     api.delete<{
       data: { package_id: number; package_code: string; deleted_instances: number };
     }>(`/engagements/${engagementId}/assessment-packages/${packageCode}`),
-  pushQuestionnaires: (engagementId: number, packageId: number) =>
+  pushQuestionnaires: (
+    engagementId: number,
+    packageId: number,
+    assessmentInstanceId?: number
+  ) =>
     api.post<{
       data: { pushed: number; skipped: number; errors: number; details: unknown[] };
-    }>(`/engagements/${engagementId}/push-questionnaires`, {
-      package_id: packageId,
-    }),
+    }>(
+      `/engagements/${engagementId}/push-questionnaires`,
+      {
+        package_id: packageId,
+        ...(assessmentInstanceId != null
+          ? { assessment_instance_id: assessmentInstanceId }
+          : {}),
+      },
+      { timeout: 120_000 }
+    ),
   connectMetsightsRecords: (engagementId: number, packageId: number) =>
     api.post<{
       data: {
