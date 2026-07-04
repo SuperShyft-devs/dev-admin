@@ -17,12 +17,15 @@ import {
   CloudCog,
   Send,
   UserPlus,
-  Link2,
   Bell,
   PlayCircle,
   CheckCircle2,
+  Link2,
 } from "lucide-react";
 import { EngagementNotificationModal } from "./EngagementNotificationModal";
+import { EngagementFormModal } from "./EngagementFormModal";
+import { EngagementViewPanel } from "./EngagementViewPanel";
+import { ConsoleUrlActions } from "./consoleUrlActions";
 import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -97,49 +100,6 @@ function formatEngagementStatusLabel(status?: string | null): string {
   if (normalized === "running") return "Running";
   if (normalized === "completed") return "Completed";
   return status ?? "—";
-}
-
-function consoleUrlForEngagement(engagementId: number): string {
-  return `${window.location.origin}/engagements/${engagementId}/console`;
-}
-
-function ConsoleUrlActions({ engagementId }: { engagementId: number }) {
-  const [copied, setCopied] = useState(false);
-  const url = consoleUrlForEngagement(engagementId);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-2 mt-1">
-      <code className="text-xs bg-zinc-100 px-2 py-1.5 rounded break-all text-zinc-700">{url}</code>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void handleCopy()}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
-        >
-          {copied ? "Copied" : "Copy URL"}
-        </button>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
-        >
-          <Link2 className="w-3.5 h-3.5" />
-          Open Console
-        </a>
-      </div>
-    </div>
-  );
 }
 
 function formatDate(value?: string | null) {
@@ -773,7 +733,13 @@ export function Engagements({
     diagnostic_package_id: undefined,
     city: "",
     address: "",
+    sub_locality: "",
+    landmark: "",
     pincode: "",
+    state: "",
+    country: "",
+    latitude: null,
+    longitude: null,
     slot_duration: 60,
     start_date: "",
     end_date: "",
@@ -1390,7 +1356,13 @@ export function Engagements({
       diagnostic_package_id: undefined,
       city: preset?.city ?? "",
       address: preset?.address ?? "",
+      sub_locality: preset?.sub_locality ?? "",
+      landmark: preset?.landmark ?? "",
       pincode: preset?.pincode ?? "",
+      state: preset?.state ?? "",
+      country: preset?.country ?? "",
+      latitude: preset?.latitude ?? null,
+      longitude: preset?.longitude ?? null,
       slot_duration: preset?.slot_duration ?? 60,
       start_date: preset?.start_date ?? today,
       end_date: preset?.end_date ?? today,
@@ -1435,7 +1407,13 @@ export function Engagements({
         diagnostic_package_id: e.diagnostic_package_id ?? undefined,
         city: e.city ?? "",
         address: e.address ?? "",
+        sub_locality: e.sub_locality ?? "",
+        landmark: e.landmark ?? "",
         pincode: e.pincode ?? "",
+        state: e.state ?? "",
+        country: e.country ?? "",
+        latitude: e.latitude ?? null,
+        longitude: e.longitude ?? null,
         slot_duration: e.slot_duration ?? 60,
         start_date: (e.start_date ?? "").toString().slice(0, 10),
         end_date: (e.end_date ?? "").toString().slice(0, 10),
@@ -1454,12 +1432,18 @@ export function Engagements({
     }).catch((err) => setError(getApiError(err)));
   };
 
-  const resolveOrganizationId = () =>
-    formData.organization_id && formData.organization_id > 0 ? formData.organization_id : null;
+  const resolveOrganizationId = (data: EngagementCreate) =>
+    data.organization_id && data.organization_id > 0 ? data.organization_id : null;
 
-  const handleSubmit = async () => {
-    const missingOrg = modalMode === "add" && !resolveOrganizationId();
-    const missingDates = !formData.start_date || !formData.end_date;
+  const emptyToNull = (value: string | null | undefined) => {
+    const trimmed = (value ?? "").trim();
+    return trimmed ? trimmed : null;
+  };
+
+  const handleSubmit = async (data: EngagementCreate) => {
+    const orgId = resolveOrganizationId(data);
+    const missingOrg = modalMode === "add" && !orgId;
+    const missingDates = !data.start_date || !data.end_date;
     if (missingOrg || missingDates) {
       const parts: string[] = [];
       if (missingOrg) parts.push("organisation");
@@ -1471,30 +1455,43 @@ export function Engagements({
     setSubmitting(true);
     setError(null);
     try {
+      const locationFields = {
+        city: emptyToNull(data.city),
+        address: emptyToNull(data.address),
+        sub_locality: emptyToNull(data.sub_locality),
+        landmark: emptyToNull(data.landmark),
+        pincode: emptyToNull(data.pincode),
+        state: emptyToNull(data.state),
+        country: emptyToNull(data.country),
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+      };
+
       if (modalMode === "add") {
         const createPayload: EngagementCreate = {
-          ...formData,
-          organization_id: resolveOrganizationId()!,
-          metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
+          ...data,
+          ...locationFields,
+          organization_id: orgId!,
+          metsights_engagement_id: data.metsights_engagement_id?.trim() || null,
           assessment_package_id:
-            formData.assessment_package_id && formData.assessment_package_id > 0
-              ? formData.assessment_package_id
+            data.assessment_package_id && data.assessment_package_id > 0
+              ? data.assessment_package_id
               : null,
           diagnostic_package_id:
-            formData.diagnostic_package_id && formData.diagnostic_package_id > 0
-              ? formData.diagnostic_package_id
+            data.diagnostic_package_id && data.diagnostic_package_id > 0
+              ? data.diagnostic_package_id
               : null,
-          create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
-          enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
+          create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
+          enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notification_service_key:
-            formData.notification_service_key?.trim() ||
+            data.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
-          pretest_guidelines_notification: formData.pretest_guidelines_notification || null,
-          questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
-          questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
-          blood_report_notification: formData.blood_report_notification || null,
-          bioai_report_notification: formData.bioai_report_notification || null,
-          camp_no: computeCampNo(resolveOrganizationId(), formData.start_date),
+          pretest_guidelines_notification: data.pretest_guidelines_notification || null,
+          questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
+          questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
+          blood_report_notification: data.blood_report_notification || null,
+          bioai_report_notification: data.bioai_report_notification || null,
+          camp_no: computeCampNo(orgId, data.start_date),
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1505,36 +1502,34 @@ export function Engagements({
         setAddChecklistPromptOpen(true);
       } else if (selected) {
         const payload = {
-          engagement_name: formData.engagement_name,
-          engagement_code: (formData.engagement_code ?? "").trim(),
-          metsights_engagement_id: formData.metsights_engagement_id?.trim() || null,
-          organization_id: resolveOrganizationId(),
-          engagement_type: formData.engagement_type,
+          engagement_name: data.engagement_name,
+          engagement_code: (data.engagement_code ?? "").trim(),
+          metsights_engagement_id: data.metsights_engagement_id?.trim() || null,
+          organization_id: orgId,
+          engagement_type: data.engagement_type,
           assessment_package_id:
-            formData.assessment_package_id && formData.assessment_package_id > 0
-              ? formData.assessment_package_id
+            data.assessment_package_id && data.assessment_package_id > 0
+              ? data.assessment_package_id
               : null,
           diagnostic_package_id:
-            formData.diagnostic_package_id && formData.diagnostic_package_id > 0
-              ? formData.diagnostic_package_id
+            data.diagnostic_package_id && data.diagnostic_package_id > 0
+              ? data.diagnostic_package_id
               : null,
-          city: formData.city,
-          address: formData.address,
-          pincode: formData.pincode,
-          slot_duration: formData.slot_duration,
-          start_date: formData.start_date,
-          end_date: formData.end_date,
-          create_profile_on_metsights: Boolean(formData.create_profile_on_metsights),
-          enroll_for_fitprint_full: Boolean(formData.enroll_for_fitprint_full),
+          ...locationFields,
+          slot_duration: data.slot_duration,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
+          enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notification_service_key:
-            formData.notification_service_key?.trim() ||
+            data.notification_service_key?.trim() ||
             DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
-          pretest_guidelines_notification: formData.pretest_guidelines_notification || null,
-          questionnaire_reminder_1: formData.questionnaire_reminder_1 || null,
-          questionnaire_reminder_2: formData.questionnaire_reminder_2 || null,
-          blood_report_notification: formData.blood_report_notification || null,
-          bioai_report_notification: formData.bioai_report_notification || null,
-          camp_no: computeCampNo(resolveOrganizationId(), formData.start_date),
+          pretest_guidelines_notification: data.pretest_guidelines_notification || null,
+          questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
+          questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
+          blood_report_notification: data.blood_report_notification || null,
+          bioai_report_notification: data.bioai_report_notification || null,
+          camp_no: computeCampNo(orgId, data.start_date),
         };
         await engagementsApi.update(selected.engagement_id, payload);
       }
@@ -1932,91 +1927,49 @@ export function Engagements({
       </div>
       </div>
 
-      <Modal
-        open={modalOpen}
+      <EngagementFormModal
+        open={modalOpen && (modalMode === "add" || modalMode === "edit")}
+        mode={modalMode === "edit" ? "edit" : "add"}
+        initialData={formData}
+        organizations={organizations}
+        assessmentPackages={assessmentPackages}
+        diagnosticPackages={diagnosticPackages}
+        notificationServices={notificationServices}
+        submitting={submitting}
         onClose={() => {
           setModalOpen(false);
           if (onCloseModal) onCloseModal();
         }}
-        title={
-          modalMode === "add"
-            ? "Add Engagement"
-            : modalMode === "edit"
-              ? "Edit Engagement"
-              : "View Engagement"
-        }
+        onSubmit={(data) => void handleSubmit(data)}
+      />
+
+      <Modal
+        open={modalOpen && modalMode === "view"}
+        onClose={() => {
+          setModalOpen(false);
+          if (onCloseModal) onCloseModal();
+        }}
+        title="View Engagement"
+        maxWidthClassName="max-w-2xl"
       >
         {modalMode === "view" && selected ? (
-          <div className="space-y-3 text-sm">
-            <div><span className="text-zinc-500">Name:</span> {selected.engagement_name ?? "—"}</div>
-            <div><span className="text-zinc-500">Metsights Engagement ID:</span> {selected.metsights_engagement_id ?? "—"}</div>
-            <div><span className="text-zinc-500">Code:</span> {selected.engagement_code ?? "—"}</div>
-            <div><span className="text-zinc-500">Organisation:</span> {getOrgName(selected.organization_id ?? 0)}</div>
-            <div><span className="text-zinc-500">Type:</span> {selected.engagement_type ?? "—"}</div>
-            <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
-            <div><span className="text-zinc-500">Address:</span> {selected.address ?? "—"}</div>
-            <div><span className="text-zinc-500">Pincode:</span> {selected.pincode ?? "—"}</div>
-            <div><span className="text-zinc-500">Start:</span> {String(selected.start_date ?? "—")}</div>
-            <div><span className="text-zinc-500">End:</span> {String(selected.end_date ?? "—")}</div>
-            <div><span className="text-zinc-500">Status:</span> {formatEngagementStatusLabel(selected.status)}</div>
-            <div>
-              <span className="text-zinc-500">Console:</span>
-              <ConsoleUrlActions engagementId={selected.engagement_id} />
-            </div>
-            <div><span className="text-zinc-500">Create profile on Metsights:</span> {selected.create_profile_on_metsights ? "Yes" : "No"}</div>
-            <div><span className="text-zinc-500">Enroll for FitPrint Full:</span> {selected.enroll_for_fitprint_full ? "Yes" : "No"}</div>
-            <div>
-              <span className="text-zinc-500">Onboarding notification service:</span>{" "}
-              {notificationServiceLabel(selected.notification_service_key)}
-            </div>
-            <div>
-              <span className="text-zinc-500">Pretest Guidelines Notification:</span>{" "}
-              {selected.pretest_guidelines_notification
-                ? selected.pretest_guidelines_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
-                : "—"}
-            </div>
-            <div>
-              <span className="text-zinc-500">Questionnaire Reminder 1 (day before):</span>{" "}
-              {selected.questionnaire_reminder_1
-                ? selected.questionnaire_reminder_1.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
-                : "—"}
-            </div>
-            <div>
-              <span className="text-zinc-500">Questionnaire Reminder 2 (day after):</span>{" "}
-              {selected.questionnaire_reminder_2
-                ? selected.questionnaire_reminder_2.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
-                : "—"}
-            </div>
-            <div>
-              <span className="text-zinc-500">Blood Report Notification:</span>{" "}
-              {selected.blood_report_notification
-                ? selected.blood_report_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
-                : "—"}
-            </div>
-            <div>
-              <span className="text-zinc-500">BioAI Report Notification:</span>{" "}
-              {selected.bioai_report_notification
-                ? selected.bioai_report_notification.split(",").map((k) => notificationServiceLabel(k.trim())).join(", ")
-                : "—"}
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-zinc-500">Participants:</span>
-              <span>{selected.participant_count ?? 0}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setModalOpen(false);
-                  setParticipantsSource({
-                    kind: "engagement-id",
-                    engagementId: selected.engagement_id,
-                    name: selected.engagement_name ?? selected.engagement_code ?? undefined,
-                  });
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
-              >
-                <Users className="w-3.5 h-3.5" />
-                View Participants
-              </button>
+          <EngagementViewPanel
+            engagement={selected}
+            orgName={getOrgName(selected.organization_id ?? 0)}
+            assessmentPackages={assessmentPackages}
+            diagnosticPackages={diagnosticPackages}
+            notificationServiceLabel={notificationServiceLabel}
+            onEdit={() => openEdit(selected)}
+            onViewParticipants={() => {
+              setModalOpen(false);
+              setParticipantsSource({
+                kind: "engagement-id",
+                engagementId: selected.engagement_id,
+                name: selected.engagement_name ?? selected.engagement_code ?? undefined,
+              });
+            }}
+            onNotify={() => setNotifyModalOpen(true)}
+            participantsActions={
               <AssignParticipantsFromCsv
                 engagementId={selected.engagement_id}
                 engagementName={selected.engagement_name ?? selected.engagement_code}
@@ -2037,545 +1990,212 @@ export function Engagements({
                     .catch(() => { });
                 }}
               />
-            </div>
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setNotifyModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
-              >
-                <Bell className="w-3.5 h-3.5" />
-                Notification
-              </button>
-            </div>
+            }
+            operations={
+              <>
+          {/* ── Questionnaire Status Section ── */}
+          <div className="pt-2 border-t border-zinc-100">
+            <button
+              type="button"
+              onClick={async () => {
+                if (qStatusOpen) {
+                  setQStatusOpen(false);
+                  return;
+                }
+                setQStatusOpen(true);
+                if (!qStatusData && !qStatusLoading) {
+                  setQStatusLoading(true);
+                  setQStatusError(null);
+                  try {
+                    const res = await engagementQuestionnaireStatusApi.get(selected.engagement_id);
+                    setQStatusData(res.data.data);
+                  } catch (err) {
+                    setQStatusError(getApiError(err));
+                  } finally {
+                    setQStatusLoading(false);
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-700 hover:text-zinc-900"
+            >
+              {qStatusOpen ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+              <ClipboardList className="w-4 h-4" />
+              Questionnaire Status
+            </button>
 
-            {/* ── Questionnaire Status Section ── */}
-            <div className="pt-2 border-t border-zinc-100">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (qStatusOpen) {
-                    setQStatusOpen(false);
-                    return;
-                  }
-                  setQStatusOpen(true);
-                  if (!qStatusData && !qStatusLoading) {
-                    setQStatusLoading(true);
-                    setQStatusError(null);
-                    try {
-                      const res = await engagementQuestionnaireStatusApi.get(selected.engagement_id);
-                      setQStatusData(res.data.data);
-                    } catch (err) {
-                      setQStatusError(getApiError(err));
-                    } finally {
-                      setQStatusLoading(false);
-                    }
-                  }
-                }}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-700 hover:text-zinc-900"
-              >
-                {qStatusOpen ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
+            {qStatusOpen && (
+              <div className="mt-3">
+                {qStatusLoading && (
+                  <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-xs">Loading…</span>
+                  </div>
                 )}
-                <ClipboardList className="w-4 h-4" />
-                Questionnaire Status
-              </button>
 
-              {qStatusOpen && (
-                <div className="mt-3">
-                  {qStatusLoading && (
-                    <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="text-xs">Loading…</span>
-                    </div>
-                  )}
+                {!qStatusLoading && qStatusError && (
+                  <p className="text-sm text-red-600">{qStatusError}</p>
+                )}
 
-                  {!qStatusLoading && qStatusError && (
-                    <p className="text-sm text-red-600">{qStatusError}</p>
-                  )}
-
-                  {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length === 0 && (
-                    <p className="text-xs text-zinc-400 italic">
-                      No assessment instances found for this engagement.
-                    </p>
-                  )}
-
-                  {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length > 0 && (
-                    <div className="space-y-3">
-                      {/* Summary: 3 stat cards */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-center">
-                          <div className="text-lg font-semibold text-amber-700">{qStatusData.summary.drafted}</div>
-                          <div className="text-[11px] text-amber-600">Drafted</div>
-                        </div>
-                        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-center">
-                          <div className="text-lg font-semibold text-emerald-700">{qStatusData.summary.submitted}</div>
-                          <div className="text-[11px] text-emerald-600">Submitted</div>
-                        </div>
-                        <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-center">
-                          <div className="text-lg font-semibold text-zinc-500">{qStatusData.summary.not_started}</div>
-                          <div className="text-[11px] text-zinc-500">Not Started</div>
-                        </div>
-                      </div>
-
-                      {/* Participants table */}
-                      <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-zinc-200 bg-zinc-50">
-                              <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
-                              <th className="px-3 py-2 text-center font-medium text-zinc-600">State</th>
-                              <th className="px-3 py-2 text-center font-medium text-zinc-600">Responses</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {qStatusData.participants.map((row) => {
-                              const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
-                              return (
-                                <tr
-                                  key={row.user_id}
-                                  className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
-                                >
-                                  <td className="px-3 py-2">
-                                    <div className="font-medium text-zinc-800">{name}</div>
-                                    <div className="text-zinc-400">{row.phone || row.email || ""}</div>
-                                  </td>
-                                  <td className="px-3 py-2 text-center">
-                                    <span
-                                      className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${row.questionnaire_state === "submitted"
-                                          ? "bg-emerald-100 text-emerald-700"
-                                          : row.questionnaire_state === "drafted"
-                                            ? "bg-amber-100 text-amber-700"
-                                            : "bg-zinc-100 text-zinc-500"
-                                        }`}
-                                    >
-                                      {row.questionnaire_state === "submitted"
-                                        ? "Submitted"
-                                        : row.questionnaire_state === "drafted"
-                                          ? "Drafted"
-                                          : "Not Started"}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-center text-zinc-600">
-                                    {row.total_responses || "—"}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ── Advanced Settings Section ── */}
-            <div className="pt-2 border-t border-zinc-100">
-              <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 mb-2">
-                <Settings className="w-4 h-4" />
-                Advanced Settings
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openAssessmentsModal(selected.engagement_id)}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-                >
-                  <ClipboardList className="w-3.5 h-3.5" />
-                  Manage Assessments
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreateProfilesOpen(true);
-                    setCreateProfilesMode("profile");
-                    setCreateProfilesResult(null);
-                    setCreateProfilesError(null);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Create Profiles
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraftBloodOpen(true);
-                    setDraftBloodResult(null);
-                    setDraftBloodError(null);
-                    setDraftBloodProgress(null);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-                >
-                  <CloudCog className="w-3.5 h-3.5" />
-                  Draft Blood Parameters
-                </button>
-              </div>
-
-              {/* ── Per-package Push Buttons ── */}
-              {advSettingsPackages.length === 0 && !advSettingsLoading && (
-                <button
-                  type="button"
-                  onClick={() => loadAdvSettingsPackages(selected.engagement_id)}
-                  className="mt-2 text-xs text-zinc-500 underline hover:text-zinc-700"
-                >
-                  Load push options…
-                </button>
-              )}
-              {advSettingsLoading && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Loading assessments…
-                </div>
-              )}
-              {advSettingsPackages.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {advSettingsPackages.map((pkg) => (
-                    <button
-                      key={pkg.package_id}
-                      type="button"
-                      onClick={() => openPushConfirm(pkg)}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      Push {pkg.display_name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSubmit();
-            }}
-            className="space-y-6"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={formData.engagement_name ?? ""}
-                  onChange={(e) => setFormData({ ...formData, engagement_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Metsights Engagement ID</label>
-                <input
-                  type="text"
-                  value={formData.metsights_engagement_id ?? ""}
-                  onChange={(e) => setFormData({ ...formData, metsights_engagement_id: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  placeholder="Optional external Metsights ID"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">
-                  Organisation{modalMode === "add" ? " *" : ""}
-                </label>
-                <select
-                  value={formData.organization_id ?? 0}
-                  onChange={(e) => setFormData({ ...formData, organization_id: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required={modalMode === "add"}
-                >
-                  <option value={0}>
-                    {modalMode === "edit" ? "None (B2C / public)" : "Select organisation"}
-                  </option>
-                  {organizations.map((o) => (
-                    <option key={o.organization_id} value={o.organization_id}>
-                      {o.name ?? o.organization_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Code</label>
-                <input
-                  type="text"
-                  value={formData.engagement_code ?? ""}
-                  onChange={(e) => setFormData({ ...formData, engagement_code: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
-                <select
-                  value={formData.engagement_type}
-                  onChange={(e) =>
-                    setFormData({ ...formData, engagement_type: e.target.value as EngagementKind })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required
-                >
-                  {ENGAGEMENT_KIND_OPTIONS.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
-                <select
-                  value={formData.assessment_package_id ?? 0}
-                  onChange={(e) => setFormData({ ...formData, assessment_package_id: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  <option value={0}>None</option>
-                  {assessmentPackages.map((p) => (
-                    <option key={p.package_id} value={p.package_id}>
-                      {p.display_name ?? p.package_code ?? p.package_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic package</label>
-                <select
-                  value={formData.diagnostic_package_id ?? 0}
-                  onChange={(e) => {
-                    const next = Number(e.target.value);
-                    setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  <option value={0}>None</option>
-                  {diagnosticPackages.map((p) => (
-                    <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
-                      {p.package_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={formData.address ?? ""}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Pincode</label>
-                <input
-                  type="text"
-                  value={formData.pincode ?? ""}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">City</label>
-                <input
-                  type="text"
-                  value={formData.city ?? ""}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Create Profile On Metsights</label>
-                <div className="flex gap-5 py-2">
-                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                    <input
-                      type="radio"
-                      name="create_profile_on_metsights"
-                      checked={Boolean(formData.create_profile_on_metsights)}
-                      onChange={() => setFormData({ ...formData, create_profile_on_metsights: true })}
-                    />
-                    Yes
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                    <input
-                      type="radio"
-                      name="create_profile_on_metsights"
-                      checked={!formData.create_profile_on_metsights}
-                      onChange={() => setFormData({ ...formData, create_profile_on_metsights: false })}
-                    />
-                    No
-                  </label>
-                </div>
-                {Boolean(formData.create_profile_on_metsights) && (
-                  <p className="text-xs text-zinc-500 mt-1">
-                    {(formData.metsights_engagement_id ?? "").trim()
-                      ? "Users will be registered to the Metsights engagement on onboarding."
-                      : "A standalone Metsights profile will be created for each user on onboarding (no engagement registration)."}
+                {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length === 0 && (
+                  <p className="text-xs text-zinc-400 italic">
+                    No assessment instances found for this engagement.
                   </p>
                 )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Enroll For FitPrint Full</label>
-                <div className="flex gap-5 py-2">
-                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                    <input
-                      type="radio"
-                      name="enroll_for_fitprint_full"
-                      checked={Boolean(formData.enroll_for_fitprint_full)}
-                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
-                    />
-                    Yes
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                    <input
-                      type="radio"
-                      name="enroll_for_fitprint_full"
-                      checked={!formData.enroll_for_fitprint_full}
-                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
-                    />
-                    No
-                  </label>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={480}
-                  value={formData.slot_duration}
-                  onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Start date *</label>
-                <input
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required
-                />
-                <p className="text-xs text-zinc-500 mt-1">
-                  Same start date as other engagements from this organisation groups them into one camp.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">End date *</label>
-                <input
-                  type="date"
-                  value={formData.end_date}
-                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                  required
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">
-                  Onboarding notification service
-                </label>
-                <select
-                  value={
-                    formData.notification_service_key ??
-                    DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY
-                  }
-                  onChange={(e) =>
-                    setFormData({ ...formData, notification_service_key: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  {notificationServices.length === 0 ? (
-                    <option value={DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY}>
-                      booking-alert-whatsapp
-                    </option>
-                  ) : (
-                    notificationServices.map((s) => (
-                      <option key={s.service_key} value={s.service_key}>
-                        {s.display_name} ({s.service_key})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-              {([
-                { field: "pretest_guidelines_notification" as const, label: "Pretest Guidelines Notification" },
-                { field: "questionnaire_reminder_1" as const, label: "Questionnaire Reminder 1 (day before)" },
-                { field: "questionnaire_reminder_2" as const, label: "Questionnaire Reminder 2 (day after)" },
-                { field: "blood_report_notification" as const, label: "Blood Report Notification" },
-                { field: "bioai_report_notification" as const, label: "BioAI Report Notification" },
-              ] as const).map(({ field, label }) => {
-                const currentValue = formData[field] as string | null;
-                const selectedKeys = currentValue ? currentValue.split(",").filter(Boolean) : [];
-                const isEnabled = currentValue !== null;
-                return (
-                  <div key={field} className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-zinc-700 mb-1">{label}</label>
-                    <div className="flex items-center gap-4 mb-2">
-                      <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`${field}_toggle`}
-                          checked={!isEnabled}
-                          onChange={() => setFormData({ ...formData, [field]: null })}
-                        />
-                        No
-                      </label>
-                      <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`${field}_toggle`}
-                          checked={isEnabled}
-                          onChange={() => setFormData({ ...formData, [field]: "" })}
-                        />
-                        Yes
-                      </label>
-                    </div>
-                    {isEnabled && (
-                      <div className="border border-zinc-300 rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
-                        {notificationServices.length === 0 ? (
-                          <p className="text-xs text-zinc-400">No notification services available</p>
-                        ) : (
-                          notificationServices.map((s) => (
-                            <label key={s.service_key} className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer hover:bg-zinc-50 px-1 py-0.5 rounded">
-                              <input
-                                type="checkbox"
-                                checked={selectedKeys.includes(s.service_key)}
-                                onChange={(e) => {
-                                  const next = e.target.checked
-                                    ? [...selectedKeys, s.service_key]
-                                    : selectedKeys.filter((k) => k !== s.service_key);
-                                  setFormData({ ...formData, [field]: next.length > 0 ? next.join(",") : "" });
-                                }}
-                                className="rounded border-zinc-300"
-                              />
-                              {s.display_name} ({s.service_key})
-                            </label>
-                          ))
-                        )}
+
+                {!qStatusLoading && !qStatusError && qStatusData && qStatusData.participants.length > 0 && (
+                  <div className="space-y-3">
+                    {/* Summary: 3 stat cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-center">
+                        <div className="text-lg font-semibold text-amber-700">{qStatusData.summary.drafted}</div>
+                        <div className="text-[11px] text-amber-600">Drafted</div>
                       </div>
-                    )}
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-center">
+                        <div className="text-lg font-semibold text-emerald-700">{qStatusData.summary.submitted}</div>
+                        <div className="text-[11px] text-emerald-600">Submitted</div>
+                      </div>
+                      <div className="rounded-lg bg-zinc-50 border border-zinc-200 px-3 py-2 text-center">
+                        <div className="text-lg font-semibold text-zinc-500">{qStatusData.summary.not_started}</div>
+                        <div className="text-[11px] text-zinc-500">Not Started</div>
+                      </div>
+                    </div>
+
+                    {/* Participants table */}
+                    <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-200 bg-zinc-50">
+                            <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
+                            <th className="px-3 py-2 text-center font-medium text-zinc-600">State</th>
+                            <th className="px-3 py-2 text-center font-medium text-zinc-600">Responses</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {qStatusData.participants.map((row) => {
+                            const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
+                            return (
+                              <tr
+                                key={row.user_id}
+                                className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                              >
+                                <td className="px-3 py-2">
+                                  <div className="font-medium text-zinc-800">{name}</div>
+                                  <div className="text-zinc-400">{row.phone || row.email || ""}</div>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <span
+                                    className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium ${row.questionnaire_state === "submitted"
+                                        ? "bg-emerald-100 text-emerald-700"
+                                        : row.questionnaire_state === "drafted"
+                                          ? "bg-amber-100 text-amber-700"
+                                          : "bg-zinc-100 text-zinc-500"
+                                      }`}
+                                  >
+                                    {row.questionnaire_state === "submitted"
+                                      ? "Submitted"
+                                      : row.questionnaire_state === "drafted"
+                                        ? "Drafted"
+                                        : "Not Started"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-center text-zinc-600">
+                                  {row.total_responses || "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Advanced Settings Section ── */}
+          <div className="pt-2 border-t border-zinc-100">
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 mb-2">
+              <Settings className="w-4 h-4" />
+              Advanced Settings
             </div>
-            <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+            <div className="flex flex-wrap gap-2">
               <button
-                type="submit"
-                disabled={submitting}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                type="button"
+                onClick={() => openAssessmentsModal(selected.engagement_id)}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
               >
-                {submitting ? "Saving..." : modalMode === "add" ? "Create" : "Update"}
+                <ClipboardList className="w-3.5 h-3.5" />
+                Manage Assessments
               </button>
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
-                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+                onClick={() => {
+                  setCreateProfilesOpen(true);
+                  setCreateProfilesMode("profile");
+                  setCreateProfilesResult(null);
+                  setCreateProfilesError(null);
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
               >
-                Cancel
+                <UserPlus className="w-3.5 h-3.5" />
+                Create Profiles
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftBloodOpen(true);
+                  setDraftBloodResult(null);
+                  setDraftBloodError(null);
+                  setDraftBloodProgress(null);
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+              >
+                <CloudCog className="w-3.5 h-3.5" />
+                Draft Blood Parameters
               </button>
             </div>
-          </form>
-        )}
+
+            {/* ── Per-package Push Buttons ── */}
+            {advSettingsPackages.length === 0 && !advSettingsLoading && (
+              <button
+                type="button"
+                onClick={() => loadAdvSettingsPackages(selected.engagement_id)}
+                className="mt-2 text-xs text-zinc-500 underline hover:text-zinc-700"
+              >
+                Load push options…
+              </button>
+            )}
+            {advSettingsLoading && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Loading assessments…
+              </div>
+            )}
+            {advSettingsPackages.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {advSettingsPackages.map((pkg) => (
+                  <button
+                    key={pkg.package_id}
+                    type="button"
+                    onClick={() => openPushConfirm(pkg)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Push {pkg.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+              </>
+            }
+          />
+        ) : null}
       </Modal>
 
       {deleteConfirm && (

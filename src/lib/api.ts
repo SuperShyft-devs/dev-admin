@@ -1009,6 +1009,18 @@ export interface ChecklistReadiness {
 export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
 export type EngagementStatus = "running" | "completed";
 
+export interface EngagementLocationFields {
+  city?: string | null;
+  address?: string | null;
+  sub_locality?: string | null;
+  landmark?: string | null;
+  pincode?: string | null;
+  state?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
 export interface Engagement {
   engagement_id: number;
   engagement_name?: string | null;
@@ -1021,7 +1033,13 @@ export interface Engagement {
   diagnostic_package_id?: number | null;
   city?: string | null;
   address?: string | null;
+  sub_locality?: string | null;
+  landmark?: string | null;
   pincode?: string | null;
+  state?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -1048,7 +1066,13 @@ export interface EngagementListItem {
   diagnostic_package_id?: number | null;
   city?: string | null;
   address?: string | null;
+  sub_locality?: string | null;
+  landmark?: string | null;
   pincode?: string | null;
+  state?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   slot_duration?: number | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -1076,7 +1100,13 @@ export interface EngagementCreate {
   diagnostic_package_id?: number | null;
   city?: string | null;
   address?: string | null;
+  sub_locality?: string | null;
+  landmark?: string | null;
   pincode?: string | null;
+  state?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   slot_duration: number;
   start_date: string;
   end_date: string;
@@ -1089,6 +1119,16 @@ export interface EngagementCreate {
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
 }
+
+export interface GeocodeSuggestion extends EngagementLocationFields {
+  display_name?: string | null;
+}
+
+export const geocodeApi = {
+  search: (q: string, limit = 3) =>
+    api.get<{ data: GeocodeSuggestion[] }>("/geocode/search", { params: { q, limit } }),
+};
+
 
 export const engagementsApi = {
   list: (params?: {
