@@ -5,7 +5,7 @@ import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "..
 
 type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
-type SyncLogsVariant = "metsights" | "n8n" | "nutrition_api";
+type SyncLogsVariant = "metsights" | "n8n" | "nutrition_api" | "healthians";
 
 const STATUS_OPTIONS = ["pending", "success", "failed", "skipped"] as const;
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
@@ -164,21 +164,32 @@ export function IntegrationSyncLogsModal({
   open,
   onClose,
   variant = "metsights",
+  initialEngagementId,
 }: {
   open: boolean;
   onClose: () => void;
   variant?: SyncLogsVariant;
+  initialEngagementId?: number;
 }) {
   const isN8n = variant === "n8n";
   const isNutritionApi = variant === "nutrition_api";
+  const isHealthians = variant === "healthians";
   const isMetsights = variant === "metsights";
-  const showUserEngagementFilters = isMetsights || isNutritionApi;
-  const defaultProvider = isN8n ? "n8n" : isNutritionApi ? "nutrition_api" : "metsights";
+  const showUserEngagementFilters = isMetsights || isNutritionApi || isHealthians;
+  const defaultProvider = isN8n
+    ? "n8n"
+    : isNutritionApi
+      ? "nutrition_api"
+      : isHealthians
+        ? "healthians"
+        : "metsights";
   const modalTitle = isN8n
     ? "Notification Sync Logs"
     : isNutritionApi
       ? "Nutrition API Sync Logs"
-      : "Integration Sync Logs";
+      : isHealthians
+        ? "Healthians Sync Logs"
+        : "Integration Sync Logs";
   const columnCount = isN8n ? 5 : isNutritionApi ? 6 : 7;
 
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
@@ -201,12 +212,12 @@ export function IntegrationSyncLogsModal({
       setProvider(defaultProvider);
       setPage(1);
       setStatusFilters([]);
-      setTimePreset("1h");
+      setTimePreset(initialEngagementId ? "" : "1h");
       setUserIdFilter("");
-      setEngagementIdFilter("");
+      setEngagementIdFilter(initialEngagementId ? String(initialEngagementId) : "");
       setExpandedId(null);
     }
-  }, [open, defaultProvider]);
+  }, [open, defaultProvider, initialEngagementId]);
 
   const listParams = useMemo(() => {
     const range = getTimeRange(timePreset);
@@ -215,7 +226,14 @@ export function IntegrationSyncLogsModal({
     return {
       page,
       limit,
-      provider: isN8n ? "n8n" : isNutritionApi ? "nutrition_api" : provider || undefined,
+      provider:
+        isN8n
+          ? "n8n"
+          : isNutritionApi
+            ? "nutrition_api"
+            : isHealthians
+              ? "healthians"
+              : provider || undefined,
       status: statusFilters.length ? statusFilters.join(",") : undefined,
       user_id: showUserEngagementFilters && Number.isFinite(userId) && userId! > 0 ? userId : undefined,
       engagement_id:
@@ -232,6 +250,7 @@ export function IntegrationSyncLogsModal({
     engagementIdFilter,
     isN8n,
     isNutritionApi,
+    isHealthians,
     showUserEngagementFilters,
   ]);
 

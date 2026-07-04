@@ -7,6 +7,7 @@ import {
   ExternalLink,
   MapPin,
   Pencil,
+  ScrollText,
   Users,
 } from "lucide-react";
 import type {
@@ -70,6 +71,7 @@ type Props = {
   onEdit: () => void;
   onViewParticipants: () => void;
   onNotify: () => void;
+  onSyncLogs?: () => void;
   participantsActions?: ReactNode;
   operations?: ReactNode;
 };
@@ -83,6 +85,7 @@ export function EngagementViewPanel({
   onEdit,
   onViewParticipants,
   onNotify,
+  onSyncLogs,
   participantsActions,
   operations,
 }: Props) {
@@ -179,6 +182,16 @@ export function EngagementViewPanel({
               <Bell className="w-3.5 h-3.5" />
               Notification
             </button>
+            {onSyncLogs && (
+              <button
+                type="button"
+                onClick={onSyncLogs}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
+              >
+                <ScrollText className="w-3.5 h-3.5" />
+                Sync Logs
+              </button>
+            )}
           </div>
         </div>
         <div>

@@ -24,6 +24,7 @@ import {
 import { EngagementNotificationModal } from "./EngagementNotificationModal";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementViewPanel } from "./EngagementViewPanel";
+import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -804,6 +805,7 @@ export function Engagements({
   const [qStatusError, setQStatusError] = useState<string | null>(null);
 
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  const [syncLogsOpen, setSyncLogsOpen] = useState(false);
 
   // ── Engagement Assessments modal state ─────────────────────
   const [assessmentsModalOpen, setAssessmentsModalOpen] = useState(false);
@@ -1966,6 +1968,10 @@ export function Engagements({
               });
             }}
             onNotify={() => setNotifyModalOpen(true)}
+            onSyncLogs={() => {
+              setModalOpen(false);
+              setSyncLogsOpen(true);
+            }}
             participantsActions={
               <AssignParticipantsFromCsv
                 engagementId={selected.engagement_id}
@@ -2939,6 +2945,13 @@ export function Engagements({
         open={notifyModalOpen}
         onClose={() => setNotifyModalOpen(false)}
         engagement={selected}
+      />
+
+      <IntegrationSyncLogsModal
+        open={syncLogsOpen}
+        onClose={() => setSyncLogsOpen(false)}
+        variant="healthians"
+        initialEngagementId={selected?.engagement_id}
       />
 
       {/* ── Push Questionnaires Confirmation Modal ── */}

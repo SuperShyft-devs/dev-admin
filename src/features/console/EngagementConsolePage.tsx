@@ -12,6 +12,7 @@ import { Modal } from "../../shared/ui/Modal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   consoleApi,
+  getApiError,
   getApiErrorDetails,
   type Participant,
   type ConsoleEngagementListItem,
@@ -31,6 +32,8 @@ function formatBool(value: boolean | null | undefined): string {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
+
+type ModalMode = "detail" | "book" | "result" | null;
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
@@ -59,7 +62,11 @@ export function EngagementConsolePage() {
   const [actionMenuRow, setActionMenuRow] = useState<number | null>(null);
   const [selectedParticipant, setSelectedParticipant] =
     useState<Participant | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [barcode, setBarcode] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingResult, setBookingResult] = useState<Record<string, unknown> | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!engId || isNaN(engId)) return;
@@ -147,13 +154,58 @@ export function EngagementConsolePage() {
 
   const openDetail = (p: Participant) => {
     setSelectedParticipant(p);
-    setDetailOpen(true);
+    setModalMode("detail");
     setActionMenuRow(null);
   };
 
-  const closeDetail = () => {
-    setDetailOpen(false);
+  const closeModal = () => {
+    setModalMode(null);
     setSelectedParticipant(null);
+    setBarcode("");
+    setBookingError(null);
+    setBookingResult(null);
+  };
+
+  const openBookModal = () => {
+    setBarcode("");
+    setBookingError(null);
+    setBookingResult(null);
+    setModalMode("book");
+  };
+
+  const isEngagementRunning =
+    (engagement?.status ?? "").toLowerCase() === "running";
+
+  const canBookParticipant = (p: Participant | null) =>
+    Boolean(p && isEngagementRunning && !p.booking_id);
+
+  const handleCreateBooking = async () => {
+    if (!selectedParticipant || !engId) return;
+    const trimmed = barcode.trim();
+    if (!trimmed) {
+      setBookingError("Barcode is required.");
+      return;
+    }
+    setBookingLoading(true);
+    setBookingError(null);
+    try {
+      const res = await consoleApi.bookParticipant(engId, selectedParticipant.user_id, {
+        barcode: trimmed,
+      });
+      setBookingResult(res.data.data);
+      setModalMode("result");
+      const parts = await fetchAllPages<Participant>(
+        (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+        100
+      );
+      setParticipants(parts);
+      const updated = parts.find((p) => p.user_id === selectedParticipant.user_id);
+      if (updated) setSelectedParticipant(updated);
+    } catch (err) {
+      setBookingError(getApiError(err));
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -384,16 +436,94 @@ export function EngagementConsolePage() {
         </div>
       )}
 
-      {/* Participant Detail Modal */}
+      {/* Participant modals */}
       <Modal
-        open={detailOpen}
-        onClose={closeDetail}
+        open={modalMode === "detail"}
+        onClose={closeModal}
         title="Participant Details"
         maxWidthClassName="max-w-lg"
       >
         {selectedParticipant && (
-          <ParticipantDetail participant={selectedParticipant} />
+          <div className="space-y-4">
+            <ParticipantDetail participant={selectedParticipant} />
+            {canBookParticipant(selectedParticipant) && (
+              <div className="flex justify-end pt-2 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={openBookModal}
+                  className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+                >
+                  Book
+                </button>
+              </div>
+            )}
+          </div>
         )}
+      </Modal>
+
+      <Modal
+        open={modalMode === "book"}
+        onClose={closeModal}
+        title="Create Booking"
+        maxWidthClassName="max-w-md"
+      >
+        {selectedParticipant && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600">
+              Create a Healthians booking for{" "}
+              <span className="font-medium text-zinc-900">{fullName(selectedParticipant)}</span>.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Barcode</label>
+              <input
+                type="text"
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                placeholder="Enter barcode"
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              />
+            </div>
+            {bookingError && <p className="text-sm text-red-600">{bookingError}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCreateBooking()}
+                disabled={bookingLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-60"
+              >
+                {bookingLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create Booking
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={modalMode === "result"}
+        onClose={closeModal}
+        title="Booking Response"
+        maxWidthClassName="max-w-lg"
+      >
+        <pre className="text-xs font-mono text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap">
+          {bookingResult ? JSON.stringify(bookingResult, null, 2) : "—"}
+        </pre>
+        <div className="flex justify-end pt-4">
+          <button
+            type="button"
+            onClick={closeModal}
+            className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            Close
+          </button>
+        </div>
       </Modal>
     </ConsoleLayout>
   );
@@ -431,6 +561,8 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
         "Doctor + Nutritionist",
         formatBool(p.want_doctor_and_nutritionist_consultation)
       )}
+      {field("Barcode", p.barcode)}
+      {field("Booking ID", p.booking_id)}
     </div>
   );
 }
