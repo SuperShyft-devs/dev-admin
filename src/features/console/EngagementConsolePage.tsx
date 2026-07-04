@@ -425,11 +425,16 @@ export function EngagementConsolePage() {
                       <td className="px-2 sm:px-4 py-3 text-center relative">
                         <div className="flex items-center justify-center gap-1">
                           {isParticipantBooked(p) && (
-                            <CheckCircle2
-                              className="w-4 h-4 text-emerald-600 shrink-0"
+                            <span
                               title="Booking complete"
                               aria-label="Booking complete"
-                            />
+                              className="inline-flex"
+                            >
+                              <CheckCircle2
+                                className="w-4 h-4 text-emerald-600 shrink-0"
+                                aria-hidden="true"
+                              />
+                            </span>
                           )}
                           <button
                             onClick={(e) => {
