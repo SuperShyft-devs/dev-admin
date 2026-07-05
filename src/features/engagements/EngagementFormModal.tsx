@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   type AssessmentPackage,
@@ -8,8 +8,15 @@ import {
   type GeocodeSuggestion,
   type NotificationServiceItem,
   type OrganizationListItem,
+  bookingApi,
 } from "../../lib/api";
 import { AddressAutocomplete } from "./AddressAutocomplete";
+
+const BLOOD_COLLECTION_TYPE_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "home_collection", label: "Home Collection" },
+  { value: "camp_collection", label: "Camp Collection" },
+] as const;
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
 const DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY = "booking-alert-whatsapp";
@@ -52,6 +59,8 @@ export function EngagementFormModal({
   const [formData, setFormData] = useState<EngagementCreate>(initialData);
   const [stepError, setStepError] = useState<string | null>(null);
 
+  const [zoneLoading, setZoneLoading] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     setFormData(initialData);
@@ -60,6 +69,26 @@ export function EngagementFormModal({
     // Only hydrate when the modal opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const checkZoneId = useCallback(async (pkgId: number, lat: number | null, lng: number | null) => {
+    const pkg = diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
+    if (!pkg || (pkg.diagnostic_provider || "").toLowerCase() !== "healthians") return;
+    if (!lat || !lng) return;
+    setZoneLoading(true);
+    try {
+      const res = await bookingApi.checkServiceAvailability({
+        members: [{ user_id: 0, address: "", city: "", latitude: lat, longitude: lng, diagnostic_package_id: pkgId }],
+      });
+      const member = res.data?.data?.members?.[0];
+      if (member?.zone_id) {
+        setFormData((prev) => ({ ...prev, healthians_zone_id: String(member.zone_id) }));
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setZoneLoading(false);
+    }
+  }, [diagnosticPackages]);
 
 
   const applySuggestion = (suggestion: GeocodeSuggestion) => {
@@ -356,6 +385,9 @@ export function EngagementFormModal({
                 onChange={(e) => {
                   const next = Number(e.target.value);
                   setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
+                  if (next > 0) {
+                    checkZoneId(next, formData.latitude ?? null, formData.longitude ?? null);
+                  }
                 }}
                 className={inputClass}
               >
@@ -366,6 +398,34 @@ export function EngagementFormModal({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Blood Collection Type</label>
+              <select
+                value={formData.blood_collection_type ?? ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, blood_collection_type: e.target.value || undefined })
+                }
+                className={inputClass}
+              >
+                {BLOOD_COLLECTION_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Healthians Zone ID {zoneLoading && <span className="text-xs text-zinc-400">(loading...)</span>}
+              </label>
+              <input
+                type="text"
+                value={formData.healthians_zone_id ?? ""}
+                onChange={(e) => setFormData({ ...formData, healthians_zone_id: e.target.value || undefined })}
+                className={inputClass}
+                placeholder="Auto-filled for Healthians packages"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>

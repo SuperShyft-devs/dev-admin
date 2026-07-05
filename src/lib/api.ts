@@ -1007,7 +1007,8 @@ export interface ChecklistReadiness {
 
 // Engagements
 export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
-export type EngagementStatus = "running" | "completed";
+export type EngagementStatus = "draft" | "scheduled" | "running" | "completed" | "cancelled";
+export type BloodCollectionType = "home_collection" | "camp_collection";
 
 export interface EngagementLocationFields {
   city?: string | null;
@@ -1045,6 +1046,9 @@ export interface Engagement {
   end_date?: string | null;
   status?: EngagementStatus | string | null;
   participant_count?: number | null;
+  created_at?: string | null;
+  healthians_zone_id?: string | null;
+  blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
@@ -1078,6 +1082,9 @@ export interface EngagementListItem {
   end_date?: string | null;
   status?: EngagementStatus | string | null;
   participant_count?: number | null;
+  created_at?: string | null;
+  healthians_zone_id?: string | null;
+  blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   notification_service_key?: string | null;
@@ -1110,6 +1117,8 @@ export interface EngagementCreate {
   slot_duration: number;
   start_date: string;
   end_date: string;
+  healthians_zone_id?: string | null;
+  blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
   notification_service_key?: string | null;
@@ -2755,5 +2764,43 @@ export const notificationsApi = {
   deleteService: (notificationServiceId: number) =>
     api.delete<{ data: { notification_service_id: number; deleted: boolean } }>(
       `/notifications/services/${notificationServiceId}`
+    ),
+};
+
+// Booking flow APIs
+export const bookingApi = {
+  getMyDrafts: () =>
+    api.get<{ data: { engagement_ids: number[] } }>("/book/me/drafts"),
+  checkServiceAvailability: (payload: {
+    members: Array<{
+      user_id: number;
+      address?: string;
+      sub_locality?: string;
+      landmark?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      latitude: number;
+      longitude: number;
+      diagnostic_package_id: number;
+    }>;
+  }) =>
+    api.post<{ data: { members: Array<{ user_id: number; engagement_id?: number; status: string; message?: string; zone_id?: string }> } }>(
+      "/book/check-service-availability",
+      payload
+    ),
+  getAvailableSlots: (payload: {
+    members: Array<{ user_id: number; engagement_id: number; blood_collection_date: string }>;
+  }) =>
+    api.post<{ data: { members: Array<{ user_id: number; engagement_id: number; status: string; slots?: unknown[]; message?: string }> } }>(
+      "/book/available-slots",
+      payload
+    ),
+  lockSlot: (payload: {
+    members: Array<{ user_id: number; engagement_id: number; blood_collection_date: string; blood_collection_time_slot_id: string }>;
+  }) =>
+    api.post<{ data: { members: Array<{ user_id: number; engagement_id: number; status: string; message?: string }> } }>(
+      "/book/lock",
+      payload
     ),
 };

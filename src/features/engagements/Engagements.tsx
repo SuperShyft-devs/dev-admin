@@ -10,8 +10,6 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
-  PlayCircle,
-  CheckCircle2,
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementDrawer } from "./EngagementDrawer";
@@ -51,12 +49,15 @@ import {
 } from "../../lib/api";
 import { useLocation } from "react-router-dom";
 
-const STATUS_OPTIONS = ["running", "completed"] as const;
+const STATUS_OPTIONS = ["draft", "scheduled", "running", "completed", "cancelled"] as const;
 
 function formatEngagementStatusLabel(status?: string | null): string {
   const normalized = (status ?? "").toLowerCase();
+  if (normalized === "draft") return "Draft";
+  if (normalized === "scheduled") return "Scheduled";
   if (normalized === "running") return "Running";
   if (normalized === "completed") return "Completed";
+  if (normalized === "cancelled") return "Cancelled";
   return status ?? "—";
 }
 
@@ -943,6 +944,8 @@ export function Engagements({
       slot_duration: preset?.slot_duration ?? 60,
       start_date: preset?.start_date ?? today,
       end_date: preset?.end_date ?? today,
+      healthians_zone_id: preset?.healthians_zone_id ?? undefined,
+      blood_collection_type: preset?.blood_collection_type ?? undefined,
       create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
       notification_service_key:
@@ -994,6 +997,8 @@ export function Engagements({
         slot_duration: e.slot_duration ?? 60,
         start_date: (e.start_date ?? "").toString().slice(0, 10),
         end_date: (e.end_date ?? "").toString().slice(0, 10),
+        healthians_zone_id: e.healthians_zone_id ?? undefined,
+        blood_collection_type: e.blood_collection_type ?? undefined,
         create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
         notification_service_key:
@@ -1058,6 +1063,8 @@ export function Engagements({
             data.diagnostic_package_id && data.diagnostic_package_id > 0
               ? data.diagnostic_package_id
               : null,
+          healthians_zone_id: data.healthians_zone_id?.trim() || null,
+          blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notification_service_key:
@@ -1096,6 +1103,8 @@ export function Engagements({
           slot_duration: data.slot_duration,
           start_date: data.start_date,
           end_date: data.end_date,
+          healthians_zone_id: data.healthians_zone_id?.trim() || null,
+          blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notification_service_key:
@@ -1390,28 +1399,22 @@ export function Engagements({
         label: "Status",
         sortable: true,
         render: (row) => {
-          const isRunning = (row.status ?? "").toLowerCase() === "running";
+          const normalized = (row.status ?? "").toLowerCase();
+          const statusStyles: Record<string, string> = {
+            draft: "bg-zinc-100 text-zinc-600",
+            scheduled: "bg-blue-50 text-blue-700",
+            running: "bg-emerald-50 text-emerald-700",
+            completed: "bg-zinc-100 text-zinc-500",
+            cancelled: "bg-red-50 text-red-600",
+          };
+          const cls = statusStyles[normalized] ?? "bg-zinc-100 text-zinc-500";
           return (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                const nextStatus = isRunning ? "completed" : "running";
-                engagementsApi
-                  .updateStatus(row.engagement_id, nextStatus)
-                  .then(() => fetchList())
-                  .catch((err) => setError(getApiError(err)));
-              }}
-              className="inline-flex items-center justify-center p-1 rounded-md hover:bg-zinc-100 transition"
-              aria-label={`Set ${row.engagement_name ?? "engagement"} ${isRunning ? "completed" : "running"}`}
-              title={isRunning ? "Running — click to mark completed" : "Completed — click to mark running"}
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
+              title={`Status: ${formatEngagementStatusLabel(row.status)}`}
             >
-              {isRunning ? (
-                <PlayCircle className="w-5 h-5 text-emerald-600" aria-hidden="true" />
-              ) : (
-                <CheckCircle2 className="w-5 h-5 text-zinc-500" aria-hidden="true" />
-              )}
-            </button>
+              {formatEngagementStatusLabel(row.status)}
+            </span>
           );
         },
       }
