@@ -8,7 +8,8 @@ import {
   type GeocodeSuggestion,
   type NotificationServiceItem,
   type OrganizationListItem,
-  bookingApi,
+  engagementsApi,
+  getApiError,
 } from "../../lib/api";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 
@@ -60,50 +61,119 @@ export function EngagementFormModal({
   const [stepError, setStepError] = useState<string | null>(null);
 
   const [zoneLoading, setZoneLoading] = useState(false);
+  const [zoneMessage, setZoneMessage] = useState<string | null>(null);
+  const [zoneMessageTone, setZoneMessageTone] = useState<"info" | "success" | "error">("info");
 
   useEffect(() => {
     if (!open) return;
     setFormData(initialData);
     setStep(1);
     setStepError(null);
+    setZoneMessage(null);
+    setZoneMessageTone("info");
     // Only hydrate when the modal opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const checkZoneId = useCallback(async (pkgId: number, lat: number | null, lng: number | null) => {
-    const pkg = diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
-    if (!pkg || (pkg.diagnostic_provider || "").toLowerCase() !== "healthians") return;
-    if (!lat || !lng) return;
-    setZoneLoading(true);
-    try {
-      const res = await bookingApi.checkServiceAvailability({
-        members: [{ user_id: 0, address: "", city: "", latitude: lat, longitude: lng, diagnostic_package_id: pkgId }],
-      });
-      const member = res.data?.data?.members?.[0];
-      if (member?.zone_id) {
-        setFormData((prev) => ({ ...prev, healthians_zone_id: String(member.zone_id) }));
+  const checkZoneId = useCallback(
+    async (
+      pkgId: number | undefined,
+      lat: number | null | undefined,
+      lng: number | null | undefined,
+      pincode: string | null | undefined
+    ) => {
+      if (!pkgId || pkgId <= 0) {
+        setZoneMessage(null);
+        setFormData((prev) => ({ ...prev, healthians_zone_id: undefined }));
+        return;
       }
-    } catch {
-      // silently ignore
-    } finally {
-      setZoneLoading(false);
-    }
-  }, [diagnosticPackages]);
+
+      const pkg = diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
+      if (!pkg || (pkg.diagnostic_provider || "").toLowerCase() !== "healthians") {
+        setZoneMessage("Zone auto-fill applies only to Healthians diagnostic packages.");
+        setZoneMessageTone("info");
+        return;
+      }
+
+      if (lat == null || lng == null) {
+        setZoneMessage("Set location coordinates in step 1 (Basics & location) to auto-fill zone ID.");
+        setZoneMessageTone("info");
+        return;
+      }
+
+      const normalizedPincode = (pincode ?? "").trim();
+      if (!normalizedPincode) {
+        setZoneMessage("Set pincode in step 1 to auto-fill zone ID.");
+        setZoneMessageTone("info");
+        return;
+      }
+
+      setZoneLoading(true);
+      setZoneMessage(null);
+      try {
+        const res = await engagementsApi.resolveHealthiansZone({
+          diagnostic_package_id: pkgId,
+          latitude: lat,
+          longitude: lng,
+          pincode: normalizedPincode,
+        });
+        const result = res.data.data;
+        if (result.serviceable && result.zone_id) {
+          setFormData((prev) => ({ ...prev, healthians_zone_id: String(result.zone_id) }));
+          setZoneMessage(result.message || "Zone ID auto-filled from Healthians.");
+          setZoneMessageTone("success");
+        } else {
+          setZoneMessage(result.message || "Location is not serviceable.");
+          setZoneMessageTone("error");
+        }
+      } catch (err) {
+        setZoneMessage(getApiError(err));
+        setZoneMessageTone("error");
+      } finally {
+        setZoneLoading(false);
+      }
+    },
+    [diagnosticPackages]
+  );
+
+  useEffect(() => {
+    if (!open || mode !== "edit") return;
+    if (!initialData.diagnostic_package_id || initialData.healthians_zone_id?.trim()) return;
+    void checkZoneId(
+      initialData.diagnostic_package_id,
+      initialData.latitude,
+      initialData.longitude,
+      initialData.pincode
+    );
+    // Resolve zone once when editing an engagement that is missing zone ID.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
 
   const applySuggestion = (suggestion: GeocodeSuggestion) => {
-    setFormData((prev) => ({
-      ...prev,
-      address: suggestion.display_name || suggestion.address || prev.address || "",
-      sub_locality: suggestion.sub_locality ?? prev.sub_locality ?? "",
-      landmark: suggestion.landmark ?? prev.landmark ?? "",
-      city: suggestion.city ?? prev.city ?? "",
-      pincode: suggestion.pincode ?? prev.pincode ?? "",
-      state: suggestion.state ?? prev.state ?? "",
-      country: suggestion.country ?? prev.country ?? "",
-      latitude: suggestion.latitude ?? prev.latitude ?? null,
-      longitude: suggestion.longitude ?? prev.longitude ?? null,
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        address: suggestion.display_name || suggestion.address || prev.address || "",
+        sub_locality: suggestion.sub_locality ?? prev.sub_locality ?? "",
+        landmark: suggestion.landmark ?? prev.landmark ?? "",
+        city: suggestion.city ?? prev.city ?? "",
+        pincode: suggestion.pincode ?? prev.pincode ?? "",
+        state: suggestion.state ?? prev.state ?? "",
+        country: suggestion.country ?? prev.country ?? "",
+        latitude: suggestion.latitude ?? prev.latitude ?? null,
+        longitude: suggestion.longitude ?? prev.longitude ?? null,
+      };
+      if (next.diagnostic_package_id) {
+        void checkZoneId(
+          next.diagnostic_package_id,
+          next.latitude,
+          next.longitude,
+          next.pincode
+        );
+      }
+      return next;
+    });
   };
 
   const validateStep1 = () => {
@@ -122,7 +192,16 @@ export function EngagementFormModal({
 
   const goNext = () => {
     if (step === 1 && !validateStep1()) return;
-    setStep((s) => Math.min(3, s + 1));
+    const nextStep = Math.min(3, step + 1);
+    setStep(nextStep);
+    if (nextStep === 2 && formData.diagnostic_package_id) {
+      void checkZoneId(
+        formData.diagnostic_package_id,
+        formData.latitude,
+        formData.longitude,
+        formData.pincode
+      );
+    }
   };
 
   const goBack = () => {
@@ -385,9 +464,12 @@ export function EngagementFormModal({
                 onChange={(e) => {
                   const next = Number(e.target.value);
                   setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
-                  if (next > 0) {
-                    checkZoneId(next, formData.latitude ?? null, formData.longitude ?? null);
-                  }
+                  void checkZoneId(
+                    next > 0 ? next : undefined,
+                    formData.latitude,
+                    formData.longitude,
+                    formData.pincode
+                  );
                 }}
                 className={inputClass}
               >
@@ -426,6 +508,19 @@ export function EngagementFormModal({
                 className={inputClass}
                 placeholder="Auto-filled for Healthians packages"
               />
+              {zoneMessage && (
+                <p
+                  className={`mt-1 text-xs ${
+                    zoneMessageTone === "success"
+                      ? "text-green-700"
+                      : zoneMessageTone === "error"
+                        ? "text-red-600"
+                        : "text-amber-700"
+                  }`}
+                >
+                  {zoneMessage}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>

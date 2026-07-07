@@ -1160,6 +1160,16 @@ export const engagementsApi = {
     ),
   filterOptions: () =>
     api.get<{ data: { engagement_types: string[]; cities: string[] } }>("/engagements/filter-options"),
+  resolveHealthiansZone: (payload: {
+    diagnostic_package_id: number;
+    latitude: number;
+    longitude: number;
+    pincode: string;
+  }) =>
+    api.post<{ data: { serviceable: boolean; zone_id?: string | null; message: string } }>(
+      "/engagements/resolve-healthians-zone",
+      payload
+    ),
   get: (id: number) =>
     api.get<{ data: Engagement }>(`/engagements/${id}`),
   create: (payload: EngagementCreate) =>

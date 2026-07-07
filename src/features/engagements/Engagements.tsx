@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Search,
   Plus,
@@ -59,6 +59,11 @@ function formatEngagementStatusLabel(status?: string | null): string {
   if (normalized === "completed") return "Completed";
   if (normalized === "cancelled") return "Cancelled";
   return status ?? "—";
+}
+
+function formatStatusFiltersLabel(statusFilters: string[]): string {
+  if (statusFilters.length === 0) return "All statuses";
+  return statusFilters.map((status) => formatEngagementStatusLabel(status)).join(", ");
 }
 
 function formatDate(value?: string | null) {
@@ -652,7 +657,9 @@ export function Engagements({
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilters, setStatusFilters] = useState<string[]>(["scheduled", "running"]);
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
+  const statusFilterRef = useRef<HTMLDivElement>(null);
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
@@ -873,7 +880,7 @@ export function Engagements({
       const res = await engagementsApi.list({
         page,
         limit,
-        status: statusFilter || undefined,
+        status: statusFilters.length ? statusFilters.join(",") : undefined,
         search: search.trim() || undefined,
         engagement_type: typeFilter || undefined,
         city: cityFilter || undefined,
@@ -888,7 +895,18 @@ export function Engagements({
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, typeFilter, cityFilter, sortKey, sortDir, listTab]);
+  }, [page, limit, statusFilters, search, typeFilter, cityFilter, sortKey, sortDir, listTab]);
+
+  useEffect(() => {
+    if (!statusFilterOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusFilterRef.current && !statusFilterRef.current.contains(event.target as Node)) {
+        setStatusFilterOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [statusFilterOpen]);
 
   useEffect(() => {
     fetchOrgs();
@@ -902,7 +920,7 @@ export function Engagements({
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, typeFilter, cityFilter, listTab]);
+  }, [search, statusFilters, typeFilter, cityFilter, listTab]);
 
   const openView = (row: EngagementListItem) => {
     setDrawerEngagementId(row.engagement_id);
@@ -1512,18 +1530,51 @@ export function Engagements({
               </option>
             ))}
           </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-          >
-            <option value="">All statuses</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {formatEngagementStatusLabel(s)}
-              </option>
-            ))}
-          </select>
+          <div className="relative flex-1 sm:flex-none sm:w-auto" ref={statusFilterRef}>
+            <button
+              type="button"
+              onClick={() => setStatusFilterOpen((open) => !open)}
+              className="w-full sm:w-auto min-w-[10rem] px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-white flex items-center justify-between gap-2"
+            >
+              <span className="truncate">{formatStatusFiltersLabel(statusFilters)}</span>
+              <ChevronDown className="w-4 h-4 shrink-0 text-zinc-500" />
+            </button>
+            {statusFilterOpen && (
+              <div className="absolute right-0 z-20 mt-1 w-56 rounded-lg border border-zinc-200 bg-white shadow-lg p-2">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilters([])}
+                  className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-zinc-50 text-zinc-700"
+                >
+                  All statuses
+                </button>
+                <div className="my-1 border-t border-zinc-100" />
+                {STATUS_OPTIONS.map((status) => {
+                  const checked = statusFilters.includes(status);
+                  return (
+                    <label
+                      key={status}
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-zinc-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setStatusFilters((prev) =>
+                            prev.includes(status)
+                              ? prev.filter((value) => value !== status)
+                              : [...prev, status]
+                          );
+                        }}
+                        className="rounded border-zinc-300"
+                      />
+                      <span>{formatEngagementStatusLabel(status)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
