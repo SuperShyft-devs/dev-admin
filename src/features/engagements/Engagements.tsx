@@ -643,14 +643,22 @@ function EngagementChecklistModal({
   );
 }
 
-const EMPTY_NOTIFICATION_FIELDS = {
+const EMPTY_NOTIFICATION_FIELDS: Pick<
+  EngagementCreate,
+  | "onboarding_notification"
+  | "pretest_guidelines_notification"
+  | "questionnaire_reminder_1"
+  | "questionnaire_reminder_2"
+  | "blood_report_notification"
+  | "bioai_report_notification"
+> = {
   onboarding_notification: null,
   pretest_guidelines_notification: null,
   questionnaire_reminder_1: null,
   questionnaire_reminder_2: null,
   blood_report_notification: null,
   bioai_report_notification: null,
-} as const;
+};
 
 export function Engagements({
   asModalForEngagementId,
