@@ -50,7 +50,7 @@ function applyBookingToParticipant(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type ModalMode = "detail" | "book" | null;
+type ModalMode = "detail" | "book" | "cancel" | null;
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
@@ -83,6 +83,9 @@ export function EngagementConsolePage() {
   const [barcode, setBarcode] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [cancelRemarks, setCancelRemarks] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!engId || isNaN(engId)) return;
@@ -179,6 +182,14 @@ export function EngagementConsolePage() {
     setSelectedParticipant(null);
     setBarcode("");
     setBookingError(null);
+    setCancelRemarks("");
+    setCancelError(null);
+  };
+
+  const openCancelModal = () => {
+    setCancelRemarks("");
+    setCancelError(null);
+    setModalMode("cancel");
   };
 
   const openBookModal = () => {
@@ -232,6 +243,46 @@ export function EngagementConsolePage() {
       setBookingError(getApiError(err));
     } finally {
       setBookingLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async () => {
+    if (!selectedParticipant || !engId) return;
+    const trimmed = cancelRemarks.trim();
+    if (!trimmed) {
+      setCancelError("Remarks are required.");
+      return;
+    }
+    setCancelLoading(true);
+    setCancelError(null);
+    const userId = selectedParticipant.user_id;
+    try {
+      await consoleApi.cancelParticipantBooking(engId, userId, trimmed);
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.user_id === userId
+            ? { ...p, booking_id: null, barcode: null }
+            : p
+        )
+      );
+      setSelectedParticipant((prev) =>
+        prev ? { ...prev, booking_id: null, barcode: null } : prev
+      );
+      setCancelRemarks("");
+      setModalMode("detail");
+
+      void fetchAllPages<Participant>(
+        (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+        100
+      ).then((parts) => {
+        setParticipants(parts);
+        const updated = parts.find((p) => p.user_id === userId);
+        if (updated) setSelectedParticipant(updated);
+      });
+    } catch (err) {
+      setCancelError(getApiError(err));
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -499,11 +550,69 @@ export function EngagementConsolePage() {
               </div>
             )}
             {isParticipantBooked(selectedParticipant) && (
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
-                <span className="text-sm font-medium text-emerald-700">Booking complete</span>
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
+                  <span className="text-sm font-medium text-emerald-700">Booking complete</span>
+                </div>
+                {isEngagementRunning && (
+                  <button
+                    type="button"
+                    onClick={openCancelModal}
+                    className="px-4 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50"
+                  >
+                    Cancel booking
+                  </button>
+                )}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={modalMode === "cancel"}
+        onClose={closeModal}
+        title="Cancel Booking"
+        maxWidthClassName="max-w-md"
+      >
+        {selectedParticipant && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600">
+              Cancel Healthians booking for {fullName(selectedParticipant)}.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">
+                Remarks
+              </label>
+              <textarea
+                value={cancelRemarks}
+                onChange={(e) => setCancelRemarks(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
+                placeholder="Reason for cancellation"
+              />
+            </div>
+            {cancelError && (
+              <p className="text-sm text-red-600">{cancelError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelBooking}
+                disabled={cancelLoading}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+              >
+                {cancelLoading ? "Cancelling…" : "Confirm cancel"}
+              </button>
+            </div>
           </div>
         )}
       </Modal>
@@ -590,6 +699,7 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
       )}
       {field("Barcode", p.barcode)}
       {field("Booking ID", p.booking_id)}
+      {field("Booked by user ID", p.booked_by_user_id)}
     </div>
   );
 }

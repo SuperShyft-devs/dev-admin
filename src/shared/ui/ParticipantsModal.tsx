@@ -240,6 +240,9 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "is_profile_created_on_metsights",
     "is_primary_record_id_synced",
     "is_fitprint_record_id_synced",
+    "booked_by_user_id",
+    "booking_id",
+    "barcode",
   ];
 
   const discoveredColumns = new Set<string>();

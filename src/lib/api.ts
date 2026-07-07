@@ -1568,6 +1568,7 @@ export interface Participant {
   is_fitprint_record_id_synced?: boolean | null;
   barcode?: string | null;
   booking_id?: string | null;
+  booked_by_user_id?: number | null;
   engagement_name?: string | null;
   engagement_code?: string | null;
   engagement_type?: string | null;
@@ -1760,6 +1761,15 @@ export const consoleApi = {
     api.post<{ data: ConsoleParticipantBookResponse }>(
       `/engagements/${engagementId}/console/participants/${userId}/book`,
       payload
+    ),
+  cancelParticipantBooking: (
+    engagementId: number,
+    userId: number,
+    remarks: string
+  ) =>
+    api.delete<{ data: { status: boolean; message?: string; booking_id?: string } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/book`,
+      { params: { remarks } }
     ),
 };
 
