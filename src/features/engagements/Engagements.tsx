@@ -40,6 +40,7 @@ import {
   checklistTemplatesApi,
   checklistTasksApi,
   notificationsApi,
+  platformSettingsApi,
   type NotificationServiceItem,
   type EngagementChecklist,
   type ChecklistTemplate,
@@ -642,7 +643,14 @@ function EngagementChecklistModal({
   );
 }
 
-const DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY = "booking-alert-whatsapp";
+const EMPTY_NOTIFICATION_FIELDS = {
+  onboarding_notification: null,
+  pretest_guidelines_notification: null,
+  questionnaire_reminder_1: null,
+  questionnaire_reminder_2: null,
+  blood_report_notification: null,
+  bioai_report_notification: null,
+} as const;
 
 export function Engagements({
   asModalForEngagementId,
@@ -710,12 +718,7 @@ export function Engagements({
     end_date: "",
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
-    notification_service_key: DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
-    pretest_guidelines_notification: null,
-    questionnaire_reminder_1: null,
-    questionnaire_reminder_2: null,
-    blood_report_notification: null,
-    bioai_report_notification: null,
+    ...EMPTY_NOTIFICATION_FIELDS,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -935,13 +938,30 @@ export function Engagements({
     if (onCloseModal) onCloseModal();
   };
 
-  const openAdd = (preset?: Partial<EngagementCreate>) => {
+  const openAdd = async (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
     const today = new Date().toISOString().slice(0, 10);
     const nextOrganizationId =
       preset?.organization_id ?? organizations[0]?.organization_id ?? 0;
     const nextAssessmentPackageId =
       preset?.assessment_package_id ?? assessmentPackages[0]?.package_id ?? 0;
+
+    let notificationDefaults = { ...EMPTY_NOTIFICATION_FIELDS };
+    try {
+      const res = await platformSettingsApi.getEngagementNotificationDefaults();
+      const d = res.data.data;
+      notificationDefaults = {
+        onboarding_notification: d.default_onboarding_notification ?? null,
+        pretest_guidelines_notification: d.default_pretest_guidelines_notification ?? null,
+        questionnaire_reminder_1: d.default_questionnaire_reminder_1 ?? null,
+        questionnaire_reminder_2: d.default_questionnaire_reminder_2 ?? null,
+        blood_report_notification: d.default_blood_report_notification ?? null,
+        bioai_report_notification: d.default_bioai_report_notification ?? null,
+      };
+    } catch {
+      // keep empty defaults
+    }
+
     setFormData({
       engagement_name: preset?.engagement_name ?? "",
       metsights_engagement_id: preset?.metsights_engagement_id ?? "",
@@ -966,13 +986,19 @@ export function Engagements({
       blood_collection_type: preset?.blood_collection_type ?? undefined,
       create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
-      notification_service_key:
-        preset?.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
-      pretest_guidelines_notification: preset?.pretest_guidelines_notification ?? null,
-      questionnaire_reminder_1: preset?.questionnaire_reminder_1 ?? null,
-      questionnaire_reminder_2: preset?.questionnaire_reminder_2 ?? null,
-      blood_report_notification: preset?.blood_report_notification ?? null,
-      bioai_report_notification: preset?.bioai_report_notification ?? null,
+      onboarding_notification:
+        preset?.onboarding_notification ?? notificationDefaults.onboarding_notification,
+      pretest_guidelines_notification:
+        preset?.pretest_guidelines_notification ??
+        notificationDefaults.pretest_guidelines_notification,
+      questionnaire_reminder_1:
+        preset?.questionnaire_reminder_1 ?? notificationDefaults.questionnaire_reminder_1,
+      questionnaire_reminder_2:
+        preset?.questionnaire_reminder_2 ?? notificationDefaults.questionnaire_reminder_2,
+      blood_report_notification:
+        preset?.blood_report_notification ?? notificationDefaults.blood_report_notification,
+      bioai_report_notification:
+        preset?.bioai_report_notification ?? notificationDefaults.bioai_report_notification,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1019,8 +1045,7 @@ export function Engagements({
         blood_collection_type: e.blood_collection_type ?? undefined,
         create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
-        notification_service_key:
-          e.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+        onboarding_notification: e.onboarding_notification ?? null,
         pretest_guidelines_notification: e.pretest_guidelines_notification ?? null,
         questionnaire_reminder_1: e.questionnaire_reminder_1 ?? null,
         questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
@@ -1085,9 +1110,7 @@ export function Engagements({
           blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
-          notification_service_key:
-            data.notification_service_key?.trim() ||
-            DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          onboarding_notification: data.onboarding_notification || null,
           pretest_guidelines_notification: data.pretest_guidelines_notification || null,
           questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
@@ -1125,9 +1148,7 @@ export function Engagements({
           blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
-          notification_service_key:
-            data.notification_service_key?.trim() ||
-            DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY,
+          onboarding_notification: data.onboarding_notification || null,
           pretest_guidelines_notification: data.pretest_guidelines_notification || null,
           questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
           questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
@@ -1454,7 +1475,7 @@ export function Engagements({
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         {listTab === "organizations" ? (
           <button
-            onClick={() => openAdd()}
+            onClick={() => void openAdd()}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
           >
             <Plus className="w-4 h-4 shrink-0" />

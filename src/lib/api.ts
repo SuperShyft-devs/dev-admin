@@ -241,6 +241,15 @@ export interface B2cOnboardingDefaults {
   b2c_default_diagnostic_package_id: number;
 }
 
+export interface EngagementNotificationDefaults {
+  default_onboarding_notification?: string | null;
+  default_pretest_guidelines_notification?: string | null;
+  default_questionnaire_reminder_1?: string | null;
+  default_questionnaire_reminder_2?: string | null;
+  default_blood_report_notification?: string | null;
+  default_bioai_report_notification?: string | null;
+}
+
 export interface MetsightsProfilesStats {
   local_total_users: number;
   local_with_metsights_profile_id: number;
@@ -269,6 +278,15 @@ export const platformSettingsApi = {
   patchB2cOnboarding: (payload: B2cOnboardingDefaults) =>
     api.patch<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>(
       "/platform-settings/b2c-onboarding",
+      payload
+    ),
+  getEngagementNotificationDefaults: () =>
+    api.get<{ data: EngagementNotificationDefaults; meta: Record<string, unknown> }>(
+      "/platform-settings/engagement-notification-defaults"
+    ),
+  patchEngagementNotificationDefaults: (payload: EngagementNotificationDefaults) =>
+    api.patch<{ data: EngagementNotificationDefaults; meta: Record<string, unknown> }>(
+      "/platform-settings/engagement-notification-defaults",
       payload
     ),
   getMetsightsProfileStats: () =>
@@ -1051,7 +1069,7 @@ export interface Engagement {
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
-  notification_service_key?: string | null;
+  onboarding_notification?: string | null;
   pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
@@ -1087,7 +1105,7 @@ export interface EngagementListItem {
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
-  notification_service_key?: string | null;
+  onboarding_notification?: string | null;
   pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;
@@ -1121,7 +1139,7 @@ export interface EngagementCreate {
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
-  notification_service_key?: string | null;
+  onboarding_notification?: string | null;
   pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
   questionnaire_reminder_2?: string | null;

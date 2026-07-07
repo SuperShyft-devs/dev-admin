@@ -280,8 +280,8 @@ export function EngagementNotificationsTab({
   return (
     <div className="bg-white border border-zinc-200 rounded-xl p-4">
       <div className="grid grid-cols-1 gap-3">
-        <Field label="Onboarding notification service">
-          {notificationServiceLabel(engagement.notification_service_key)}
+        <Field label="Onboarding notification">
+          {formatServices(engagement.onboarding_notification)}
         </Field>
         <Field label="Pretest Guidelines Notification">
           {formatServices(engagement.pretest_guidelines_notification)}

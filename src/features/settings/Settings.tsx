@@ -5,13 +5,17 @@ import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModa
 import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
+  notificationsApi,
   platformSettingsApi,
   type AssessmentPackage,
   type DiagnosticPackageListItem,
+  type EngagementNotificationDefaults,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
+  type NotificationServiceItem,
   getApiError,
 } from "../../lib/api";
+import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const SYNC_STORAGE_KEY = "metsights-sync-v1";
@@ -79,6 +83,12 @@ export function Settings() {
   const [assessmentId, setAssessmentId] = useState<number>(1);
   const [diagnosticId, setDiagnosticId] = useState<number>(1);
 
+  const [notificationServices, setNotificationServices] = useState<NotificationServiceItem[]>([]);
+  const [notificationDefaults, setNotificationDefaults] = useState<EngagementNotificationDefaults>({});
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notificationSaveOk, setNotificationSaveOk] = useState<string | null>(null);
+
   const [msStats, setMsStats] = useState<MetsightsProfilesStats | null>(null);
   const [msStatsLoading, setMsStatsLoading] = useState(false);
   const [msStatsError, setMsStatsError] = useState<string | null>(null);
@@ -105,8 +115,10 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, aPkgs, dRes] = await Promise.all([
+      const [defaultsRes, notifDefaultsRes, notifServicesRes, aPkgs, dRes] = await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
+        platformSettingsApi.getEngagementNotificationDefaults(),
+        notificationsApi.listServices(),
         fetchAllPages<AssessmentPackage>((page, limit) =>
           assessmentPackagesApi.list({ page, limit, status: "active" })
         ),
@@ -116,6 +128,10 @@ export function Settings() {
       const d = defaultsRes.data.data;
       setAssessmentId(d.b2c_default_assessment_package_id);
       setDiagnosticId(d.b2c_default_diagnostic_package_id);
+      setNotificationDefaults(notifDefaultsRes.data.data ?? {});
+      setNotificationServices(
+        (notifServicesRes.data.data ?? []).filter((s) => s.is_active !== false)
+      );
 
       setAssessmentPackages(aPkgs);
       const dPkgs = (dRes.data.data ?? []).filter(
@@ -188,6 +204,23 @@ export function Settings() {
       setError(getApiError(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveNotificationDefaults(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingNotifications(true);
+    setNotificationError(null);
+    setNotificationSaveOk(null);
+    try {
+      await platformSettingsApi.patchEngagementNotificationDefaults(notificationDefaults);
+      setNotificationSaveOk(
+        "Saved. New engagements and B2C auto-engagements will use these notification defaults."
+      );
+    } catch (err) {
+      setNotificationError(getApiError(err));
+    } finally {
+      setSavingNotifications(false);
     }
   }
 
@@ -388,6 +421,106 @@ export function Settings() {
           </button>
         </form>
       )}
+
+      {!loading ? (
+        <form
+          onSubmit={(e) => void handleSaveNotificationDefaults(e)}
+          className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm"
+        >
+          <h2 className="text-sm font-semibold text-zinc-900">Engagement notification defaults</h2>
+          <p className="text-xs text-zinc-500 -mt-2">
+            Pre-selected when creating engagements in admin or auto B2C engagements.
+          </p>
+
+          <NotificationServiceChipInput
+            label="Onboarding notification"
+            value={notificationDefaults.default_onboarding_notification ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({ ...prev, default_onboarding_notification: next }))
+            }
+            services={notificationServices}
+          />
+          <NotificationServiceChipInput
+            label="Pretest guidelines notification"
+            value={notificationDefaults.default_pretest_guidelines_notification ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({
+                ...prev,
+                default_pretest_guidelines_notification: next,
+              }))
+            }
+            services={notificationServices}
+          />
+          <NotificationServiceChipInput
+            label="Questionnaire reminder 1"
+            value={notificationDefaults.default_questionnaire_reminder_1 ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({ ...prev, default_questionnaire_reminder_1: next }))
+            }
+            services={notificationServices}
+            excludeKeys={
+              notificationDefaults.default_questionnaire_reminder_2
+                ? notificationDefaults.default_questionnaire_reminder_2
+                    .split(",")
+                    .map((k) => k.trim())
+                    .filter(Boolean)
+                : []
+            }
+          />
+          <NotificationServiceChipInput
+            label="Questionnaire reminder 2"
+            value={notificationDefaults.default_questionnaire_reminder_2 ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({ ...prev, default_questionnaire_reminder_2: next }))
+            }
+            services={notificationServices}
+            excludeKeys={
+              notificationDefaults.default_questionnaire_reminder_1
+                ? notificationDefaults.default_questionnaire_reminder_1
+                    .split(",")
+                    .map((k) => k.trim())
+                    .filter(Boolean)
+                : []
+            }
+          />
+          <NotificationServiceChipInput
+            label="Blood report notification"
+            value={notificationDefaults.default_blood_report_notification ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({ ...prev, default_blood_report_notification: next }))
+            }
+            services={notificationServices}
+          />
+          <NotificationServiceChipInput
+            label="BioAI report notification"
+            value={notificationDefaults.default_bioai_report_notification ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({ ...prev, default_bioai_report_notification: next }))
+            }
+            services={notificationServices}
+          />
+
+          {notificationError ? (
+            <p className="text-sm text-red-600" role="alert">
+              {notificationError}
+            </p>
+          ) : null}
+          {notificationSaveOk ? <p className="text-sm text-emerald-700">{notificationSaveOk}</p> : null}
+
+          <button
+            type="submit"
+            disabled={savingNotifications}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {savingNotifications ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save notification defaults
+          </button>
+        </form>
+      ) : null}
 
       <section className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">

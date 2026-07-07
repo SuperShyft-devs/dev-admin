@@ -11,6 +11,7 @@ import {
   engagementsApi,
   getApiError,
 } from "../../lib/api";
+import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 
 const BLOOD_COLLECTION_TYPE_OPTIONS = [
@@ -20,7 +21,6 @@ const BLOOD_COLLECTION_TYPE_OPTIONS = [
 ] as const;
 
 const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
-const DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY = "booking-alert-whatsapp";
 
 const STEPS = [
   { id: 1, label: "Basics & location" },
@@ -221,6 +221,14 @@ export function EngagementFormModal({
     }
     onSubmit(formData);
   };
+
+  const submitLabel = (() => {
+    if (submitting) return "Saving...";
+    if (mode === "edit") return "Update";
+    const today = new Date().toISOString().slice(0, 10);
+    if (formData.start_date && formData.start_date > today) return "Schedule";
+    return "Start";
+  })();
 
   return (
     <Modal
@@ -609,109 +617,53 @@ export function EngagementFormModal({
 
         {step === 3 && (
           <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Onboarding notification service
-              </label>
-              <select
-                value={
-                  formData.notification_service_key ?? DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY
-                }
-                onChange={(e) =>
-                  setFormData({ ...formData, notification_service_key: e.target.value })
-                }
-                className={inputClass}
-              >
-                {notificationServices.length === 0 ? (
-                  <option value={DEFAULT_ENGAGEMENT_NOTIFICATION_SERVICE_KEY}>
-                    booking-alert-whatsapp
-                  </option>
-                ) : (
-                  notificationServices.map((s) => (
-                    <option key={s.service_key} value={s.service_key}>
-                      {s.display_name} ({s.service_key})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            {(
-              [
-                {
-                  field: "pretest_guidelines_notification" as const,
-                  label: "Pretest Guidelines Notification",
-                },
-                {
-                  field: "questionnaire_reminder_1" as const,
-                  label: "Questionnaire Reminder 1 (day before)",
-                },
-                {
-                  field: "questionnaire_reminder_2" as const,
-                  label: "Questionnaire Reminder 2 (day after)",
-                },
-                { field: "blood_report_notification" as const, label: "Blood Report Notification" },
-                { field: "bioai_report_notification" as const, label: "BioAI Report Notification" },
-              ] as const
-            ).map(({ field, label }) => {
-              const currentValue = formData[field] as string | null;
-              const selectedKeys = currentValue ? currentValue.split(",").filter(Boolean) : [];
-              const isEnabled = currentValue !== null;
-              return (
-                <div key={field}>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">{label}</label>
-                  <div className="flex items-center gap-4 mb-2">
-                    <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`${field}_toggle`}
-                        checked={!isEnabled}
-                        onChange={() => setFormData({ ...formData, [field]: null })}
-                      />
-                      No
-                    </label>
-                    <label className="flex items-center gap-1.5 text-sm text-zinc-600 cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`${field}_toggle`}
-                        checked={isEnabled}
-                        onChange={() => setFormData({ ...formData, [field]: "" })}
-                      />
-                      Yes
-                    </label>
-                  </div>
-                  {isEnabled && (
-                    <div className="border border-zinc-300 rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
-                      {notificationServices.length === 0 ? (
-                        <p className="text-xs text-zinc-400">No notification services available</p>
-                      ) : (
-                        notificationServices.map((s) => (
-                          <label
-                            key={s.service_key}
-                            className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer hover:bg-zinc-50 px-1 py-0.5 rounded"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedKeys.includes(s.service_key)}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...selectedKeys, s.service_key]
-                                  : selectedKeys.filter((k) => k !== s.service_key);
-                                setFormData({
-                                  ...formData,
-                                  [field]: next.length > 0 ? next.join(",") : "",
-                                });
-                              }}
-                              className="rounded border-zinc-300"
-                            />
-                            {s.display_name} ({s.service_key})
-                          </label>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            <NotificationServiceChipInput
+              label="Onboarding notification"
+              value={formData.onboarding_notification ?? null}
+              onChange={(next) => setFormData({ ...formData, onboarding_notification: next })}
+              services={notificationServices}
+              placeholder="Add onboarding notification services…"
+            />
+            <NotificationServiceChipInput
+              label="Pretest Guidelines Notification"
+              value={formData.pretest_guidelines_notification ?? null}
+              onChange={(next) => setFormData({ ...formData, pretest_guidelines_notification: next })}
+              services={notificationServices}
+            />
+            <NotificationServiceChipInput
+              label="Questionnaire Reminder 1 (day before)"
+              value={formData.questionnaire_reminder_1 ?? null}
+              onChange={(next) => setFormData({ ...formData, questionnaire_reminder_1: next })}
+              services={notificationServices}
+              excludeKeys={
+                formData.questionnaire_reminder_2
+                  ? formData.questionnaire_reminder_2.split(",").map((k) => k.trim()).filter(Boolean)
+                  : []
+              }
+            />
+            <NotificationServiceChipInput
+              label="Questionnaire Reminder 2 (day after)"
+              value={formData.questionnaire_reminder_2 ?? null}
+              onChange={(next) => setFormData({ ...formData, questionnaire_reminder_2: next })}
+              services={notificationServices}
+              excludeKeys={
+                formData.questionnaire_reminder_1
+                  ? formData.questionnaire_reminder_1.split(",").map((k) => k.trim()).filter(Boolean)
+                  : []
+              }
+            />
+            <NotificationServiceChipInput
+              label="Blood Report Notification"
+              value={formData.blood_report_notification ?? null}
+              onChange={(next) => setFormData({ ...formData, blood_report_notification: next })}
+              services={notificationServices}
+            />
+            <NotificationServiceChipInput
+              label="BioAI Report Notification"
+              value={formData.bioai_report_notification ?? null}
+              onChange={(next) => setFormData({ ...formData, bioai_report_notification: next })}
+              services={notificationServices}
+            />
           </div>
         )}
 
@@ -729,7 +681,7 @@ export function EngagementFormModal({
               disabled={submitting}
               className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
             >
-              {submitting ? "Saving..." : mode === "add" ? "Create" : "Update"}
+              {submitLabel}
             </button>
           )}
           {step > 1 && (
