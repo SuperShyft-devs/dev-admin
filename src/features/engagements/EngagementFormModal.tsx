@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   type AssessmentPackage,
@@ -30,6 +30,12 @@ const STEPS = [
 
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900";
+
+function toNumberOrNull(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 type Props = {
   open: boolean;
@@ -135,6 +141,15 @@ export function EngagementFormModal({
     },
     [diagnosticPackages]
   );
+
+  const selectedDiagnosticPkg = useMemo(() => {
+    const pkgId = formData.diagnostic_package_id;
+    if (!pkgId || pkgId <= 0) return undefined;
+    return diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
+  }, [diagnosticPackages, formData.diagnostic_package_id]);
+
+  const isHealthiansDiagnosticPkg =
+    (selectedDiagnosticPkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
 
   useEffect(() => {
     if (!open || mode !== "edit") return;
@@ -471,7 +486,14 @@ export function EngagementFormModal({
                 value={formData.diagnostic_package_id ?? 0}
                 onChange={(e) => {
                   const next = Number(e.target.value);
-                  setFormData({ ...formData, diagnostic_package_id: next > 0 ? next : undefined });
+                  const pkg =
+                    next > 0 ? diagnosticPackages.find((p) => p.diagnostic_package_id === next) : undefined;
+                  const isHealthians = (pkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
+                  setFormData({
+                    ...formData,
+                    diagnostic_package_id: next > 0 ? next : undefined,
+                    external_camp_id: isHealthians ? formData.external_camp_id : undefined,
+                  });
                   void checkZoneId(
                     next > 0 ? next : undefined,
                     formData.latitude,
@@ -489,6 +511,20 @@ export function EngagementFormModal({
                 ))}
               </select>
             </div>
+            {isHealthiansDiagnosticPkg && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Camp ID</label>
+                <input
+                  type="number"
+                  value={formData.external_camp_id ?? ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, external_camp_id: toNumberOrNull(e.target.value) })
+                  }
+                  className={inputClass}
+                  placeholder="Optional for B2C engagements"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Blood Collection Type</label>
               <select

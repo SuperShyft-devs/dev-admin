@@ -1066,6 +1066,7 @@ export interface Engagement {
   participant_count?: number | null;
   created_at?: string | null;
   healthians_zone_id?: string | null;
+  external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -1102,6 +1103,7 @@ export interface EngagementListItem {
   participant_count?: number | null;
   created_at?: string | null;
   healthians_zone_id?: string | null;
+  external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
@@ -1136,6 +1138,7 @@ export interface EngagementCreate {
   start_date: string;
   end_date: string;
   healthians_zone_id?: string | null;
+  external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
@@ -2041,7 +2044,6 @@ export interface DiagnosticPackageListItem {
   package_name: string;
   diagnostic_provider?: string | null;
   external_package_id?: number | null;
-  external_camp_id?: number | null;
   created_by_user_id?: number | null;
   no_of_tests?: number | null;
   report_duration_hours?: number | null;
@@ -2073,7 +2075,6 @@ export interface DiagnosticPackageCreate {
   package_name: string;
   diagnostic_provider?: string | null;
   external_package_id?: number | null;
-  external_camp_id?: number | null;
   /** Public (false) vs custom/owned (true). Non-staff must use true; staff may use either. */
   custom?: boolean;
   report_duration_hours?: number | null;
