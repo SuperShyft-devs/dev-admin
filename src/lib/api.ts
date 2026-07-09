@@ -455,11 +455,13 @@ export interface ParticipantJourneyInstanceSummary {
   package_id: number;
   package_code?: string | null;
   package_display_name?: string | null;
+  assessment_type_code?: string | null;
   engagement_id: number;
   engagement_name?: string | null;
   engagement_code?: string | null;
   has_blood_report_url?: boolean;
   has_bio_ai_report_url?: boolean;
+  has_fitprint_report_url?: boolean;
   category_progress: ParticipantJourneyCategoryProgress[];
   questionnaire: ParticipantJourneyQuestionnaireRollup;
 }

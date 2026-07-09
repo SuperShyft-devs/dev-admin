@@ -26,6 +26,12 @@ const GENDER_OPTIONS = ["male", "female", "other"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 const SEARCH_DEBOUNCE_MS = 300;
 
+const METSIGHTS_BIOAI_TYPE_CODES = new Set(["1", "2"]);
+
+function isMetsightsBioAiAssessment(inst: ParticipantJourneyInstanceSummary): boolean {
+  return METSIGHTS_BIOAI_TYPE_CODES.has((inst.assessment_type_code ?? "").trim());
+}
+
 function filterInstancesForService(
   instances: ParticipantJourneyInstanceSummary[],
   svc: NotificationServiceItem | undefined
@@ -36,10 +42,12 @@ function filterInstancesForService(
   if (!needsBlood && !needsBio) return instances;
   return instances.filter((i) => {
     if (needsBlood && needsBio) {
-      return Boolean(i.has_blood_report_url) && Boolean(i.has_bio_ai_report_url);
+      return Boolean(i.has_blood_report_url) && Boolean(i.has_bio_ai_report_url) && isMetsightsBioAiAssessment(i);
     }
     if (needsBlood) return Boolean(i.has_blood_report_url);
-    if (needsBio) return Boolean(i.has_bio_ai_report_url);
+    if (needsBio) {
+      return Boolean(i.has_bio_ai_report_url) && isMetsightsBioAiAssessment(i);
+    }
     return true;
   });
 }
@@ -47,7 +55,8 @@ function filterInstancesForService(
 function formatAssessmentReportBadges(inst: ParticipantJourneyInstanceSummary): string {
   const badges: string[] = [];
   if (inst.has_blood_report_url) badges.push("Blood");
-  if (inst.has_bio_ai_report_url) badges.push("BioAI");
+  if (inst.has_bio_ai_report_url && isMetsightsBioAiAssessment(inst)) badges.push("BioAI");
+  if (inst.has_fitprint_report_url) badges.push("FitPrint");
   return badges.length > 0 ? ` · ${badges.join(", ")}` : "";
 }
 
