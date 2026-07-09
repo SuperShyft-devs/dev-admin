@@ -1751,6 +1751,59 @@ export interface ConsoleParticipantBookResponse {
   user_id?: number | null;
 }
 
+export interface ConsoleParticipantAssessment {
+  assessment_instance_id: number;
+  package_id?: number | null;
+  package_code?: string | null;
+  package_display_name?: string | null;
+  assessment_type_code?: string | null;
+  engagement_id?: number | null;
+  status?: string | null;
+  metsights_record_id?: string | null;
+  assigned_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ConsoleAssessmentCategoryStatus {
+  id?: number | null;
+  category_id: number;
+  category_key?: string | null;
+  display_name?: string | null;
+  category_of?: string | null;
+  status: "complete" | "incomplete" | string;
+}
+
+export interface ConsoleQuestionnaireOption {
+  option_id?: number | null;
+  option_value?: string | null;
+  display_name?: string | null;
+  help_text?: string | null;
+}
+
+export interface ConsoleQuestionnaireQuestion {
+  question_id: number;
+  question_text?: string | null;
+  question_type?: string | null;
+  question_key?: string | null;
+  category_id?: number | null;
+  is_required?: boolean;
+  is_read_only?: boolean;
+  help_text?: string | null;
+  options?: ConsoleQuestionnaireOption[] | null;
+  is_visible?: boolean;
+  answer?: unknown;
+  answer_source?: string | null;
+}
+
+export interface ConsoleQuestionnairePayload {
+  assessment_instance_id?: number;
+  assessment_package?: string | null;
+  category?: string | null;
+  assessment_status?: string | null;
+  category_status?: string | null;
+  questions: ConsoleQuestionnaireQuestion[];
+}
+
 export const consoleApi = {
   listEngagements: () =>
     api.get<{ data: ConsoleEngagementListItem[] }>("/engagements/console/engagements"),
@@ -1778,6 +1831,50 @@ export const consoleApi = {
     api.delete<{ data: { status: boolean; message?: string; booking_id?: string } }>(
       `/engagements/${engagementId}/console/participants/${userId}/book`,
       { params: { remarks } }
+    ),
+  listParticipantAssessments: (engagementId: number, userId: number) =>
+    api.get<{ data: ConsoleParticipantAssessment[] }>(
+      `/engagements/${engagementId}/console/participants/${userId}/assessments`
+    ),
+  getParticipantAssessmentStatus: (
+    engagementId: number,
+    userId: number,
+    assessmentInstanceId: number,
+    params?: { category_of?: string }
+  ) =>
+    api.get<{ data: ConsoleAssessmentCategoryStatus[] }>(
+      `/engagements/${engagementId}/console/participants/${userId}/assessments/${assessmentInstanceId}/status`,
+      { params }
+    ),
+  getParticipantQuestionnaire: (
+    engagementId: number,
+    userId: number,
+    assessmentInstanceId: number,
+    categoryId: number
+  ) =>
+    api.get<{ data: ConsoleQuestionnairePayload }>(
+      `/engagements/${engagementId}/console/participants/${userId}/questionnaire/${assessmentInstanceId}/category/${categoryId}`
+    ),
+  upsertParticipantQuestionnaireResponses: (
+    engagementId: number,
+    userId: number,
+    assessmentInstanceId: number,
+    categoryId: number,
+    payload: { responses: { question_id: number; answer: unknown }[] }
+  ) =>
+    api.put<{ data: { message: string } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/questionnaire/${assessmentInstanceId}/category/${categoryId}/responses`,
+      payload
+    ),
+  submitParticipantAssessment: (
+    engagementId: number,
+    userId: number,
+    assessmentInstanceId: number,
+    payload: { category: string; category_of?: string }
+  ) =>
+    api.post<{ data: Record<string, unknown> }>(
+      `/engagements/${engagementId}/console/participants/${userId}/assessments/${assessmentInstanceId}/submit`,
+      payload
     ),
 };
 

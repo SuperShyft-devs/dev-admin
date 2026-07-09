@@ -7,9 +7,12 @@ import {
   Eye,
   Users,
   CheckCircle2,
+  ClipboardList,
+  AlertTriangle,
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
+import { ParticipantQuestionnaireModal } from "./ParticipantQuestionnaireModal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   consoleApi,
@@ -50,7 +53,7 @@ function applyBookingToParticipant(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type ModalMode = "detail" | "book" | "cancel" | null;
+type ModalMode = "detail" | "book" | "cancel_confirm" | "cancel" | "questionnaires" | null;
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
@@ -186,10 +189,20 @@ export function EngagementConsolePage() {
     setCancelError(null);
   };
 
-  const openCancelModal = () => {
+  const openCancelConfirm = () => {
+    setCancelRemarks("");
+    setCancelError(null);
+    setModalMode("cancel_confirm");
+  };
+
+  const openCancelRemarksModal = () => {
     setCancelRemarks("");
     setCancelError(null);
     setModalMode("cancel");
+  };
+
+  const openQuestionnairesModal = () => {
+    setModalMode("questionnaires");
   };
 
   const openBookModal = () => {
@@ -203,6 +216,9 @@ export function EngagementConsolePage() {
 
   const canBookParticipant = (p: Participant | null) =>
     Boolean(p && isEngagementRunning && !isParticipantBooked(p));
+
+  const canCancelBooking = (p: Participant | null) =>
+    Boolean(p && isEngagementRunning && isParticipantBooked(p));
 
   const handleCreateBooking = async () => {
     if (!selectedParticipant || !engId) return;
@@ -538,8 +554,16 @@ export function EngagementConsolePage() {
         {selectedParticipant && (
           <div className="space-y-4">
             <ParticipantDetail participant={selectedParticipant} />
-            {canBookParticipant(selectedParticipant) && (
-              <div className="flex justify-end pt-2 border-t border-zinc-100">
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={openQuestionnairesModal}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-zinc-200 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Questionnaires
+              </button>
+              {canBookParticipant(selectedParticipant) && (
                 <button
                   type="button"
                   onClick={openBookModal}
@@ -547,25 +571,52 @@ export function EngagementConsolePage() {
                 >
                   Book
                 </button>
-              </div>
-            )}
-            {isParticipantBooked(selectedParticipant) && (
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
-                  <span className="text-sm font-medium text-emerald-700">Booking complete</span>
-                </div>
-                {isEngagementRunning && (
-                  <button
-                    type="button"
-                    onClick={openCancelModal}
-                    className="px-4 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50"
-                  >
-                    Cancel booking
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+              {canCancelBooking(selectedParticipant) && (
+                <button
+                  type="button"
+                  onClick={openCancelConfirm}
+                  className="px-4 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50"
+                >
+                  Cancel booking
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={modalMode === "cancel_confirm"}
+        onClose={closeModal}
+        title="Cancel Booking"
+        maxWidthClassName="max-w-md"
+      >
+        {selectedParticipant && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-900">
+                Are you sure you want to cancel the Healthians booking for{" "}
+                <span className="font-medium">{fullName(selectedParticipant)}</span>?
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                No, keep booking
+              </button>
+              <button
+                type="button"
+                onClick={openCancelRemarksModal}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+              >
+                Yes, cancel booking
+              </button>
+            </div>
           </div>
         )}
       </Modal>
@@ -661,6 +712,16 @@ export function EngagementConsolePage() {
           </div>
         )}
       </Modal>
+
+      {selectedParticipant && (
+        <ParticipantQuestionnaireModal
+          open={modalMode === "questionnaires"}
+          onClose={closeModal}
+          engagementId={engId}
+          participant={selectedParticipant}
+          isEngagementRunning={isEngagementRunning}
+        />
+      )}
     </ConsoleLayout>
   );
 }
