@@ -42,11 +42,15 @@ function filterInstancesForService(
   if (!needsBlood && !needsBio) return instances;
   return instances.filter((i) => {
     if (needsBlood && needsBio) {
-      return Boolean(i.has_blood_report_url) && Boolean(i.has_bio_ai_report_url) && isMetsightsBioAiAssessment(i);
+      return (
+        Boolean(i.has_blood_report_url)
+        && Boolean(i.bio_ai_report_available)
+        && isMetsightsBioAiAssessment(i)
+      );
     }
     if (needsBlood) return Boolean(i.has_blood_report_url);
     if (needsBio) {
-      return Boolean(i.has_bio_ai_report_url) && isMetsightsBioAiAssessment(i);
+      return Boolean(i.bio_ai_report_available) && isMetsightsBioAiAssessment(i);
     }
     return true;
   });
@@ -55,7 +59,7 @@ function filterInstancesForService(
 function formatAssessmentReportBadges(inst: ParticipantJourneyInstanceSummary): string {
   const badges: string[] = [];
   if (inst.has_blood_report_url) badges.push("Blood");
-  if (inst.has_bio_ai_report_url && isMetsightsBioAiAssessment(inst)) badges.push("BioAI");
+  if (inst.bio_ai_report_available && isMetsightsBioAiAssessment(inst)) badges.push("BioAI");
   if (inst.has_fitprint_report_url) badges.push("FitPrint");
   return badges.length > 0 ? ` · ${badges.join(", ")}` : "";
 }
@@ -1146,8 +1150,11 @@ export function Users() {
             <p className="text-sm text-zinc-600">
               Send a notification to{" "}
               <span className="font-semibold text-zinc-900">
-                {[sendMsgUser.first_name, sendMsgUser.last_name].filter(Boolean).join(" ") || sendMsgUser.phone}
+                {[sendMsgUser.first_name, sendMsgUser.last_name].filter(Boolean).join(" ") || "Participant"}
               </span>
+              {sendMsgUser.phone ? (
+                <span className="text-zinc-500"> · {sendMsgUser.phone}</span>
+              ) : null}
             </p>
 
             {sendMsgError && (

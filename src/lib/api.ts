@@ -461,6 +461,7 @@ export interface ParticipantJourneyInstanceSummary {
   engagement_code?: string | null;
   has_blood_report_url?: boolean;
   has_bio_ai_report_url?: boolean;
+  bio_ai_report_available?: boolean;
   has_fitprint_report_url?: boolean;
   category_progress: ParticipantJourneyCategoryProgress[];
   questionnaire: ParticipantJourneyQuestionnaireRollup;
