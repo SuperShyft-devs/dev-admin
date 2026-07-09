@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, ListTree, Info, AlertTriangle } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -44,13 +44,13 @@ function filterInstancesForService(
     if (needsBlood && needsBio) {
       return (
         Boolean(i.has_blood_report_url)
-        && Boolean(i.bio_ai_report_available)
+        && Boolean(i.has_bio_ai_report_url)
         && isMetsightsBioAiAssessment(i)
       );
     }
     if (needsBlood) return Boolean(i.has_blood_report_url);
     if (needsBio) {
-      return Boolean(i.bio_ai_report_available) && isMetsightsBioAiAssessment(i);
+      return Boolean(i.has_bio_ai_report_url) && isMetsightsBioAiAssessment(i);
     }
     return true;
   });
@@ -59,7 +59,7 @@ function filterInstancesForService(
 function formatAssessmentReportBadges(inst: ParticipantJourneyInstanceSummary): string {
   const badges: string[] = [];
   if (inst.has_blood_report_url) badges.push("Blood");
-  if (inst.bio_ai_report_available && isMetsightsBioAiAssessment(inst)) badges.push("BioAI");
+  if (inst.has_bio_ai_report_url && isMetsightsBioAiAssessment(inst)) badges.push("BioAI");
   if (inst.has_fitprint_report_url) badges.push("FitPrint");
   return badges.length > 0 ? ` · ${badges.join(", ")}` : "";
 }
@@ -97,6 +97,40 @@ function uniqueEngagementsFromInstances(
     }
   }
   return [...map.values()];
+}
+
+type PrepareReportDetail = {
+  assessment_instance_id: number;
+  blood?: { status: string; message?: string };
+  bio_ai?: { status: string; message?: string };
+};
+
+function participantDetailsFromUser(
+  user: UserListItem,
+  engagementLabel?: string | null
+): Record<string, string> {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return {
+    name: name || "",
+    email: user.email ?? "",
+    phone: user.phone ?? "",
+    engagement: engagementLabel ?? "",
+  };
+}
+
+function formatPrepareDetailsSummary(details: PrepareReportDetail[]): string | null {
+  const failures: string[] = [];
+  for (const item of details) {
+    const label = `#${item.assessment_instance_id}`;
+    if (item.blood?.status === "failed") {
+      failures.push(`Blood ${label}: ${item.blood.message ?? "failed"}`);
+    }
+    if (item.bio_ai?.status === "failed") {
+      failures.push(`BioAI ${label}: ${item.bio_ai.message ?? "failed"}`);
+    }
+  }
+  if (failures.length === 0) return null;
+  return failures.slice(0, 3).join(" · ") + (failures.length > 3 ? ` (+${failures.length - 3} more)` : "");
 }
 
 type ModalMode = "view" | "add" | "edit";
@@ -161,8 +195,14 @@ export function Users() {
   const [sendMsgSearch, setSendMsgSearch] = useState("");
   const [sendMsgDropdownOpen, setSendMsgDropdownOpen] = useState(false);
   const [sendMsgSubmitting, setSendMsgSubmitting] = useState(false);
+  const [sendMsgPreparing, setSendMsgPreparing] = useState(false);
+  const [sendMsgLoading, setSendMsgLoading] = useState(false);
+  const [sendMsgOtp, setSendMsgOtp] = useState("");
+  const [sendMsgPrepareDetails, setSendMsgPrepareDetails] = useState<PrepareReportDetail[]>([]);
   const [sendMsgError, setSendMsgError] = useState<string | null>(null);
   const [sendMsgSuccess, setSendMsgSuccess] = useState<string | null>(null);
+  const sendMsgOpenRequestId = useRef(0);
+  const sendMsgPrepareRequestId = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
@@ -374,7 +414,20 @@ export function Users() {
     }
   };
 
+  const closeSendMessage = () => {
+    sendMsgOpenRequestId.current += 1;
+    sendMsgPrepareRequestId.current += 1;
+    setSendMsgUser(null);
+    setSendMsgPreparing(false);
+    setSendMsgSubmitting(false);
+    setSendMsgLoading(false);
+    setSendMsgOtp("");
+    setSendMsgPrepareDetails([]);
+    setSendMsgDropdownOpen(false);
+  };
+
   const openSendMessage = async (row: UserListItem) => {
+    const requestId = ++sendMsgOpenRequestId.current;
     setSendMsgUser(row);
     setSendMsgKey("");
     setSendMsgSearch("");
@@ -385,16 +438,28 @@ export function Users() {
     setSendMsgInstanceId("");
     setSendMsgEngagementId("");
     setSendMsgScopeEngagement(false);
+    setSendMsgOtp("");
+    setSendMsgPrepareDetails([]);
+    setSendMsgPreparing(false);
+    setSendMsgSubmitting(false);
+    setSendMsgLoading(true);
     try {
       const [servicesRes, journeyRes] = await Promise.all([
         notificationsApi.listServices(),
         participantJourneyApi.summary(row.user_id, { page: 1, limit: 100 }),
       ]);
+      if (requestId !== sendMsgOpenRequestId.current) return;
       setSendMsgServices(servicesRes.data.data.filter((s) => s.is_active));
       setSendMsgInstances(journeyRes.data.data.instances ?? []);
-    } catch {
+    } catch (err) {
+      if (requestId !== sendMsgOpenRequestId.current) return;
       setSendMsgServices([]);
       setSendMsgInstances([]);
+      setSendMsgError(getApiError(err));
+    } finally {
+      if (requestId === sendMsgOpenRequestId.current) {
+        setSendMsgLoading(false);
+      }
     }
   };
 
@@ -414,6 +479,57 @@ export function Users() {
   const needsSendMsgAssessment = Boolean(
     selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url
   );
+  const sendMsgPrepareSummary = useMemo(
+    () => formatPrepareDetailsSummary(sendMsgPrepareDetails),
+    [sendMsgPrepareDetails]
+  );
+
+  useEffect(() => {
+    if (sendMsgInstanceId === "") return;
+    const stillEligible = sendMsgEligibleInstances.some(
+      (i) => i.assessment_instance_id === sendMsgInstanceId
+    );
+    if (!stillEligible) {
+      setSendMsgInstanceId("");
+    }
+  }, [sendMsgEligibleInstances, sendMsgInstanceId]);
+
+  const handleSelectSendMsgService = async (s: NotificationServiceItem) => {
+    setSendMsgKey(s.service_key);
+    setSendMsgSearch(s.display_name);
+    setSendMsgDropdownOpen(false);
+    setSendMsgInstanceId("");
+    setSendMsgEngagementId("");
+    setSendMsgScopeEngagement(false);
+    setSendMsgOtp("");
+    setSendMsgError(null);
+    setSendMsgPrepareDetails([]);
+
+    const needsReports = s.require_blood_report_url || s.require_bio_ai_report_url;
+    if (!needsReports || !sendMsgUser) return;
+
+    const requestId = ++sendMsgPrepareRequestId.current;
+    setSendMsgPreparing(true);
+    try {
+      const res = await notificationsApi.prepareReports({
+        user_id: sendMsgUser.user_id,
+        require_blood_report_url: s.require_blood_report_url,
+        require_bio_ai_report_url: s.require_bio_ai_report_url,
+      });
+      if (requestId !== sendMsgPrepareRequestId.current) return;
+      setSendMsgInstances(res.data.data.instances ?? []);
+      setSendMsgPrepareDetails(res.data.data.prepare_details ?? []);
+    } catch (err) {
+      if (requestId !== sendMsgPrepareRequestId.current) return;
+      setSendMsgInstances([]);
+      setSendMsgPrepareDetails([]);
+      setSendMsgError(getApiError(err));
+    } finally {
+      if (requestId === sendMsgPrepareRequestId.current) {
+        setSendMsgPreparing(false);
+      }
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!sendMsgUser || !sendMsgKey) return;
@@ -423,7 +539,21 @@ export function Users() {
     const needsAssessment = svc.require_blood_report_url || svc.require_bio_ai_report_url;
     if (needsAssessment && sendMsgEligibleInstances.length === 0) return;
     if (needsAssessment && !selectedSendMsgInstance) return;
-    if (!needsAssessment && sendMsgScopeEngagement && sendMsgEngagementId === "") return;
+    if (!needsAssessment && sendMsgScopeEngagement && sendMsgEngagements.length > 0 && sendMsgEngagementId === "") return;
+    if (svc.require_otp && !sendMsgOtp.trim()) {
+      setSendMsgError("This service requires an OTP.");
+      return;
+    }
+
+    const engagementLabel = needsAssessment
+      ? selectedSendMsgInstance?.engagement_name ||
+        selectedSendMsgInstance?.engagement_code ||
+        null
+      : sendMsgScopeEngagement
+        ? sendMsgEngagements.find((e) => e.engagement_id === sendMsgEngagementId)?.engagement_name ||
+          sendMsgEngagements.find((e) => e.engagement_id === sendMsgEngagementId)?.engagement_code ||
+          null
+        : null;
 
     setSendMsgSubmitting(true);
     setSendMsgError(null);
@@ -440,6 +570,10 @@ export function Users() {
         assessment_instance_id: needsAssessment
           ? selectedSendMsgInstance?.assessment_instance_id ?? null
           : null,
+        participant_details: svc.require_participant_detail
+          ? participantDetailsFromUser(sendMsgUser, engagementLabel)
+          : undefined,
+        otp: svc.require_otp ? sendMsgOtp.trim() : undefined,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1143,7 +1277,7 @@ export function Users() {
       {sendMsgUser && (
         <Modal
           open={!!sendMsgUser}
-          onClose={() => setSendMsgUser(null)}
+          onClose={closeSendMessage}
           title="Send Message"
         >
           <div className="space-y-4">
@@ -1168,6 +1302,12 @@ export function Users() {
               <label className="block text-sm font-medium text-zinc-700 mb-1">
                 Notification Service
               </label>
+              {sendMsgLoading ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-50 text-zinc-600 text-sm border border-zinc-100">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  Loading services…
+                </div>
+              ) : (
               <div className="relative">
                 <input
                   type="text"
@@ -1192,14 +1332,7 @@ export function Users() {
                         <button
                           key={s.service_key}
                           type="button"
-                          onClick={() => {
-                            setSendMsgKey(s.service_key);
-                            setSendMsgSearch(s.display_name);
-                            setSendMsgDropdownOpen(false);
-                            setSendMsgInstanceId("");
-                            setSendMsgEngagementId("");
-                            setSendMsgScopeEngagement(false);
-                          }}
+                          onClick={() => void handleSelectSendMsgService(s)}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 flex items-center justify-between ${
                             sendMsgKey === s.service_key ? "bg-zinc-50 font-medium" : "text-zinc-700"
                           }`}
@@ -1224,14 +1357,40 @@ export function Users() {
                   </div>
                 )}
               </div>
+              )}
             </div>
+
+            {sendMsgPrepareSummary && (
+              <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-100">
+                Some reports could not be loaded: {sendMsgPrepareSummary}
+              </div>
+            )}
+
+            {selectedSendMsgService?.require_otp && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">OTP</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={sendMsgOtp}
+                  onChange={(e) => setSendMsgOtp(e.target.value)}
+                  placeholder="Enter OTP"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+            )}
 
             {needsSendMsgAssessment && selectedSendMsgService && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Assessment
                 </label>
-                {sendMsgEligibleInstances.length === 0 ? (
+                {sendMsgPreparing ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-zinc-50 text-zinc-600 text-sm border border-zinc-100">
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    Loading reports from external services…
+                  </div>
+                ) : sendMsgEligibleInstances.length === 0 ? (
                   <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-100">
                     {reportAssessmentEmptyMessage(selectedSendMsgService)}
                   </div>
@@ -1302,8 +1461,11 @@ export function Users() {
                 onClick={handleSendMessage}
                 disabled={
                   sendMsgSubmitting ||
+                  sendMsgPreparing ||
+                  sendMsgLoading ||
                   !sendMsgKey ||
                   !!sendMsgSuccess ||
+                  (selectedSendMsgService?.require_otp && !sendMsgOtp.trim()) ||
                   (needsSendMsgAssessment &&
                     (sendMsgEligibleInstances.length === 0 || sendMsgInstanceId === "")) ||
                   (!needsSendMsgAssessment &&
@@ -1317,7 +1479,7 @@ export function Users() {
               </button>
               <button
                 type="button"
-                onClick={() => setSendMsgUser(null)}
+                onClick={closeSendMessage}
                 className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
               >
                 {sendMsgSuccess ? "Close" : "Cancel"}

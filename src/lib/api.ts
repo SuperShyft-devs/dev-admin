@@ -2774,6 +2774,25 @@ export const notificationsApi = {
     otp?: string | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
 
+  prepareReports: (body: {
+    user_id: number;
+    require_blood_report_url: boolean;
+    require_bio_ai_report_url: boolean;
+  }) =>
+    api.post<{
+      data: {
+        instances: ParticipantJourneyInstanceSummary[];
+        prepare_details: Array<{
+          assessment_instance_id: number;
+          engagement_id: number;
+          assessment_type_code: string;
+          blood?: { status: string; message?: string };
+          bio_ai?: { status: string; message?: string };
+        }>;
+      };
+      meta: Record<string, unknown>;
+    }>("/notifications/prepare-reports", body),
+
   listServices: () =>
     api.get<{ data: NotificationServiceItem[]; meta: Record<string, unknown> }>("/notifications/services"),
   createService: (body: {
