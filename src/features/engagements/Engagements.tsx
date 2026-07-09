@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
+  ArrowRightLeft,
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementDrawer } from "./EngagementDrawer";
@@ -30,6 +31,7 @@ import {
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
+  type EngagementStatus,
   type EngagementKind,
   type DiagnosticPackageListItem,
   type OrganizationListItem,
@@ -732,6 +734,10 @@ export function Engagements({
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
+  const [statusChangeTarget, setStatusChangeTarget] = useState<EngagementListItem | null>(null);
+  const [statusChangeNext, setStatusChangeNext] = useState<EngagementStatus>("running");
+  const [statusChangeSubmitting, setStatusChangeSubmitting] = useState(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
   const [participantsSource, setParticipantsSource] = useState<
     | { kind: "engagement-id"; engagementId: number; name?: string }
@@ -1222,6 +1228,36 @@ export function Engagements({
     }
   };
 
+  const openStatusChange = useCallback((row: EngagementListItem) => {
+    const normalized = (row.status ?? "draft").toLowerCase();
+    const current = STATUS_OPTIONS.includes(normalized as (typeof STATUS_OPTIONS)[number])
+      ? (normalized as EngagementStatus)
+      : "draft";
+    setStatusChangeNext(current);
+    setStatusChangeError(null);
+    setStatusChangeTarget(row);
+  }, []);
+
+  const handleStatusChange = async () => {
+    if (!statusChangeTarget) return;
+    const current = (statusChangeTarget.status ?? "").toLowerCase();
+    if (current === statusChangeNext) {
+      setStatusChangeTarget(null);
+      return;
+    }
+    setStatusChangeSubmitting(true);
+    setStatusChangeError(null);
+    try {
+      await engagementsApi.updateStatus(statusChangeTarget.engagement_id, statusChangeNext);
+      setStatusChangeTarget(null);
+      fetchList();
+    } catch (err) {
+      setStatusChangeError(getApiError(err));
+    } finally {
+      setStatusChangeSubmitting(false);
+    }
+  };
+
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
 
   // ── Onboarding Assistants handlers ───────────────────────────
@@ -1462,19 +1498,24 @@ export function Engagements({
           };
           const cls = statusStyles[normalized] ?? "bg-zinc-100 text-zinc-500";
           return (
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}
-              title={`Status: ${formatEngagementStatusLabel(row.status)}`}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                openStatusChange(row);
+              }}
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls} hover:ring-2 hover:ring-zinc-300 transition-shadow`}
+              title={`Status: ${formatEngagementStatusLabel(row.status)} — click to change`}
             >
               {formatEngagementStatusLabel(row.status)}
-            </span>
+            </button>
           );
         },
       }
     );
 
     return base;
-  }, [listTab, organizations, fetchList]);
+  }, [listTab, organizations, fetchList, openStatusChange]);
 
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
@@ -1633,6 +1674,18 @@ export function Engagements({
             onAssistants={openAssistantsModal}
             onManageChecklists={(r) => openChecklistModal(r)}
             onDelete={(r) => setDeleteConfirm(r)}
+            renderExtraMenuItems={(row, closeMenu) => (
+              <button
+                type="button"
+                onClick={() => {
+                  openStatusChange(row);
+                  closeMenu();
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+              >
+                <ArrowRightLeft className="w-4 h-4" /> Change status
+              </button>
+            )}
             pagination={{
               page,
               limit,
@@ -1683,6 +1736,72 @@ export function Engagements({
         }}
       />
 
+
+      {statusChangeTarget && (
+        <Modal
+          open={!!statusChangeTarget}
+          onClose={() => {
+            if (statusChangeSubmitting) return;
+            setStatusChangeTarget(null);
+            setStatusChangeError(null);
+          }}
+          title="Change engagement status"
+          maxWidthClassName="max-w-md"
+        >
+          <p className="text-zinc-600 text-sm mb-4">
+            Update status for &quot;
+            {statusChangeTarget.engagement_name || statusChangeTarget.engagement_code}
+            &quot;. Current status:{" "}
+            <span className="font-medium text-zinc-800">
+              {formatEngagementStatusLabel(statusChangeTarget.status)}
+            </span>
+            .
+          </p>
+          <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="engagement-status-select">
+            New status
+          </label>
+          <select
+            id="engagement-status-select"
+            value={statusChangeNext}
+            onChange={(e) => setStatusChangeNext(e.target.value as EngagementStatus)}
+            disabled={statusChangeSubmitting}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400 disabled:opacity-50"
+          >
+            {STATUS_OPTIONS.map((status) => (
+              <option key={status} value={status}>
+                {formatEngagementStatusLabel(status)}
+              </option>
+            ))}
+          </select>
+          {statusChangeError ? (
+            <p className="mt-3 text-sm text-red-600">{statusChangeError}</p>
+          ) : null}
+          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-5">
+            <button
+              type="button"
+              onClick={() => void handleStatusChange()}
+              disabled={
+                statusChangeSubmitting ||
+                (statusChangeTarget.status ?? "").toLowerCase() === statusChangeNext
+              }
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {statusChangeSubmitting ? "Saving..." : "Save status"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusChangeTarget(null);
+                setStatusChangeError(null);
+              }}
+              disabled={statusChangeSubmitting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {deleteConfirm && (
         <Modal
