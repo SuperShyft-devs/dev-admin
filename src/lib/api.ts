@@ -2736,7 +2736,8 @@ export interface NotificationServiceItem {
   channel: "email" | "whatsapp";
   webhook_path: string;
   is_active: boolean;
-  require_record_id: boolean;
+  require_blood_report_url: boolean;
+  require_bio_ai_report_url: boolean;
   require_participant_detail: boolean;
   require_otp: boolean;
   created_at: string | null;
@@ -2762,7 +2763,6 @@ export const notificationsApi = {
     service_key: string;
     user_ids: number[];
     engagement_id: number | null;
-    record_id?: string | null;
     participant_details?: Record<string, string> | null;
     otp?: string | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
@@ -2775,7 +2775,8 @@ export const notificationsApi = {
     channel: string;
     webhook_path: string;
     is_active?: boolean;
-    require_record_id?: boolean;
+    require_blood_report_url?: boolean;
+    require_bio_ai_report_url?: boolean;
     require_participant_detail?: boolean;
     require_otp?: boolean;
   }) =>
@@ -2787,7 +2788,8 @@ export const notificationsApi = {
       channel?: string;
       webhook_path?: string;
       is_active?: boolean;
-      require_record_id?: boolean;
+      require_blood_report_url?: boolean;
+      require_bio_ai_report_url?: boolean;
       require_participant_detail?: boolean;
       require_otp?: boolean;
     }

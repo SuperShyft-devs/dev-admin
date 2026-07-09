@@ -338,13 +338,13 @@ export function Users() {
     const svc = selectedSendMsgService;
     if (!svc) return;
 
-    const recordId = (selectedSendMsgInstance?.metsights_record_id ?? "").trim();
-    if (svc.require_record_id && !recordId && sendMsgInstances.length > 0) {
-      setSendMsgError("Select an assessment with a Metsights record ID.");
+    const needsAssessment = svc.require_blood_report_url || svc.require_bio_ai_report_url;
+    if (needsAssessment && !selectedSendMsgInstance && sendMsgInstances.length > 0) {
+      setSendMsgError("Select an assessment.");
       return;
     }
-    if (svc.require_record_id && !recordId && sendMsgInstances.length === 0) {
-      setSendMsgError("No assessment with a Metsights record ID found for this user.");
+    if (needsAssessment && sendMsgInstances.length === 0) {
+      setSendMsgError("No assessment found for this user.");
       return;
     }
 
@@ -356,7 +356,6 @@ export function Users() {
         service_key: sendMsgKey,
         user_ids: [sendMsgUser.user_id],
         engagement_id: selectedSendMsgInstance?.engagement_id ?? null,
-        record_id: recordId || null,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1111,7 +1110,7 @@ export function Users() {
                             setSendMsgSearch(s.display_name);
                             setSendMsgDropdownOpen(false);
                             if (
-                              s.require_record_id &&
+                              (s.require_blood_report_url || s.require_bio_ai_report_url) &&
                               sendMsgInstanceId === "" &&
                               sendMsgInstances.length === 1
                             ) {
@@ -1144,7 +1143,7 @@ export function Users() {
               </div>
             </div>
 
-            {selectedSendMsgService?.require_record_id && sendMsgInstances.length > 0 && (
+            {(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) && sendMsgInstances.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Assessment (Metsights record)
@@ -1177,7 +1176,7 @@ export function Users() {
                   sendMsgSubmitting ||
                   !sendMsgKey ||
                   !!sendMsgSuccess ||
-                  (Boolean(selectedSendMsgService?.require_record_id) &&
+                  (Boolean(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) &&
                     sendMsgInstances.length > 0 &&
                     sendMsgInstanceId === "")
                 }

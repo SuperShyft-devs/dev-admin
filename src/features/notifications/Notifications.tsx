@@ -590,7 +590,8 @@ interface ServiceFormData {
   channel: string;
   webhook_path: string;
   is_active: boolean;
-  require_record_id: boolean;
+  require_blood_report_url: boolean;
+  require_bio_ai_report_url: boolean;
   require_participant_detail: boolean;
   require_otp: boolean;
 }
@@ -601,7 +602,8 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   channel: "email",
   webhook_path: "",
   is_active: true,
-  require_record_id: true,
+  require_blood_report_url: false,
+  require_bio_ai_report_url: false,
   require_participant_detail: false,
   require_otp: false,
 };
@@ -649,7 +651,8 @@ function ServicesTab() {
       channel: row.channel,
       webhook_path: row.webhook_path,
       is_active: row.is_active,
-      require_record_id: row.require_record_id,
+      require_blood_report_url: row.require_blood_report_url,
+      require_bio_ai_report_url: row.require_bio_ai_report_url,
       require_participant_detail: row.require_participant_detail,
       require_otp: row.require_otp,
     });
@@ -687,7 +690,8 @@ function ServicesTab() {
           channel: formData.channel,
           webhook_path: formData.webhook_path,
           is_active: formData.is_active,
-          require_record_id: formData.require_record_id,
+          require_blood_report_url: formData.require_blood_report_url,
+          require_bio_ai_report_url: formData.require_bio_ai_report_url,
           require_participant_detail: formData.require_participant_detail,
           require_otp: formData.require_otp,
         });
@@ -725,11 +729,18 @@ function ServicesTab() {
       render: (r) => <ActiveBadge active={r.is_active} />,
     },
     {
-      key: "require_record_id",
-      label: "Requires Record",
+      key: "require_blood_report_url",
+      label: "Blood Report",
       sortable: false,
       hideOnTablet: true,
-      render: (r) => (r.require_record_id ? "Yes" : "No"),
+      render: (r) => (r.require_blood_report_url ? "Yes" : "No"),
+    },
+    {
+      key: "require_bio_ai_report_url",
+      label: "BioAI Report",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (r.require_bio_ai_report_url ? "Yes" : "No"),
     },
     {
       key: "require_participant_detail",
@@ -866,11 +877,20 @@ function ServicesTab() {
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={formData.require_record_id}
-                onChange={(e) => setFormData({ ...formData, require_record_id: e.target.checked })}
+                checked={formData.require_blood_report_url}
+                onChange={(e) => setFormData({ ...formData, require_blood_report_url: e.target.checked })}
                 className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
-              <span className="text-sm text-zinc-700">Require Record ID</span>
+              <span className="text-sm text-zinc-700">Require Blood Report URL</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.require_bio_ai_report_url}
+                onChange={(e) => setFormData({ ...formData, require_bio_ai_report_url: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              />
+              <span className="text-sm text-zinc-700">Require BioAI Report URL</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input

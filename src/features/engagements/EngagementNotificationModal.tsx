@@ -216,7 +216,6 @@ export function EngagementNotificationModal({
             service_key: serviceKey,
             user_ids: [userId],
             engagement_id: engagement.engagement_id,
-            record_id: null,
             participant_details:
               svc.require_participant_detail && participant
                 ? participantDetailsFromRow(participant)
