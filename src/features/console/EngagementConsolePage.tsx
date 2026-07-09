@@ -9,9 +9,11 @@ import {
   CheckCircle2,
   ClipboardList,
   AlertTriangle,
+  Camera,
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
+import { BarcodeScannerModal } from "./BarcodeScannerModal";
 import { ParticipantQuestionnaireModal } from "./ParticipantQuestionnaireModal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -89,6 +91,7 @@ export function EngagementConsolePage() {
   const [cancelRemarks, setCancelRemarks] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!engId || isNaN(engId)) return;
@@ -187,6 +190,7 @@ export function EngagementConsolePage() {
     setBookingError(null);
     setCancelRemarks("");
     setCancelError(null);
+    setBarcodeScannerOpen(false);
   };
 
   const openCancelConfirm = () => {
@@ -682,13 +686,24 @@ export function EngagementConsolePage() {
             </p>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Barcode</label>
-              <input
-                type="text"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder="Enter barcode"
-                className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="Enter barcode"
+                  className="w-full border border-zinc-300 rounded-lg pl-3 pr-11 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBarcodeScannerOpen(true)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  aria-label="Scan barcode with camera"
+                  title="Scan barcode"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             {bookingError && <p className="text-sm text-red-600">{bookingError}</p>}
             <div className="flex justify-end gap-2 pt-2">
@@ -712,6 +727,15 @@ export function EngagementConsolePage() {
           </div>
         )}
       </Modal>
+
+      <BarcodeScannerModal
+        open={barcodeScannerOpen}
+        onClose={() => setBarcodeScannerOpen(false)}
+        onScan={(value) => {
+          setBarcode(value);
+          setBookingError(null);
+        }}
+      />
 
       {selectedParticipant && (
         <ParticipantQuestionnaireModal
