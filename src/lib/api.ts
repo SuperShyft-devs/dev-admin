@@ -458,6 +458,8 @@ export interface ParticipantJourneyInstanceSummary {
   engagement_id: number;
   engagement_name?: string | null;
   engagement_code?: string | null;
+  has_blood_report_url?: boolean;
+  has_bio_ai_report_url?: boolean;
   category_progress: ParticipantJourneyCategoryProgress[];
   questionnaire: ParticipantJourneyQuestionnaireRollup;
 }
@@ -2763,6 +2765,7 @@ export const notificationsApi = {
     service_key: string;
     user_ids: number[];
     engagement_id: number | null;
+    assessment_instance_id?: number | null;
     participant_details?: Record<string, string> | null;
     otp?: string | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),

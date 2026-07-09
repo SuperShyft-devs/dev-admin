@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, ListTree, Info, AlertTriangle } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -25,6 +25,31 @@ const STATUS_OPTIONS = ["active", "inactive"];
 const GENDER_OPTIONS = ["male", "female", "other"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 const SEARCH_DEBOUNCE_MS = 300;
+
+function filterInstancesForService(
+  instances: ParticipantJourneyInstanceSummary[],
+  svc: NotificationServiceItem | undefined
+): ParticipantJourneyInstanceSummary[] {
+  if (!svc) return instances;
+  const needsBlood = svc.require_blood_report_url;
+  const needsBio = svc.require_bio_ai_report_url;
+  if (!needsBlood && !needsBio) return instances;
+  return instances.filter((i) => {
+    if (needsBlood && needsBio) {
+      return Boolean(i.has_blood_report_url) && Boolean(i.has_bio_ai_report_url);
+    }
+    if (needsBlood) return Boolean(i.has_blood_report_url);
+    if (needsBio) return Boolean(i.has_bio_ai_report_url);
+    return true;
+  });
+}
+
+function formatAssessmentReportBadges(inst: ParticipantJourneyInstanceSummary): string {
+  const badges: string[] = [];
+  if (inst.has_blood_report_url) badges.push("Blood");
+  if (inst.has_bio_ai_report_url) badges.push("BioAI");
+  return badges.length > 0 ? ` · ${badges.join(", ")}` : "";
+}
 
 type ModalMode = "view" | "add" | "edit";
 
@@ -314,13 +339,7 @@ export function Users() {
         participantJourneyApi.summary(row.user_id, { page: 1, limit: 100 }),
       ]);
       setSendMsgServices(servicesRes.data.data.filter((s) => s.is_active));
-      const withRecord = (journeyRes.data.data.instances ?? []).filter(
-        (i) => (i.metsights_record_id ?? "").trim().length > 0
-      );
-      setSendMsgInstances(withRecord);
-      if (withRecord.length === 1) {
-        setSendMsgInstanceId(withRecord[0].assessment_instance_id);
-      }
+      setSendMsgInstances(journeyRes.data.data.instances ?? []);
     } catch {
       setSendMsgServices([]);
       setSendMsgInstances([]);
@@ -328,10 +347,30 @@ export function Users() {
   };
 
   const selectedSendMsgService = sendMsgServices.find((s) => s.service_key === sendMsgKey);
+  const sendMsgEligibleInstances = useMemo(
+    () => filterInstancesForService(sendMsgInstances, selectedSendMsgService),
+    [sendMsgInstances, selectedSendMsgService]
+  );
   const selectedSendMsgInstance =
     sendMsgInstanceId === ""
       ? null
-      : sendMsgInstances.find((i) => i.assessment_instance_id === sendMsgInstanceId) ?? null;
+      : sendMsgEligibleInstances.find((i) => i.assessment_instance_id === sendMsgInstanceId) ?? null;
+
+  useEffect(() => {
+    if (!sendMsgUser || !selectedSendMsgService) return;
+    const needsAssessment =
+      selectedSendMsgService.require_blood_report_url ||
+      selectedSendMsgService.require_bio_ai_report_url;
+    if (!needsAssessment) return;
+    setSendMsgInstanceId((prev) => {
+      if (sendMsgEligibleInstances.some((i) => i.assessment_instance_id === prev)) {
+        return prev;
+      }
+      return sendMsgEligibleInstances.length === 1
+        ? sendMsgEligibleInstances[0].assessment_instance_id
+        : "";
+    });
+  }, [sendMsgKey, sendMsgEligibleInstances, sendMsgUser, selectedSendMsgService]);
 
   const handleSendMessage = async () => {
     if (!sendMsgUser || !sendMsgKey) return;
@@ -339,12 +378,12 @@ export function Users() {
     if (!svc) return;
 
     const needsAssessment = svc.require_blood_report_url || svc.require_bio_ai_report_url;
-    if (needsAssessment && !selectedSendMsgInstance && sendMsgInstances.length > 0) {
+    if (needsAssessment && !selectedSendMsgInstance && sendMsgEligibleInstances.length > 0) {
       setSendMsgError("Select an assessment.");
       return;
     }
-    if (needsAssessment && sendMsgInstances.length === 0) {
-      setSendMsgError("No assessment found for this user.");
+    if (needsAssessment && sendMsgEligibleInstances.length === 0) {
+      setSendMsgError("No assessment with the required report found for this user.");
       return;
     }
 
@@ -356,6 +395,7 @@ export function Users() {
         service_key: sendMsgKey,
         user_ids: [sendMsgUser.user_id],
         engagement_id: selectedSendMsgInstance?.engagement_id ?? null,
+        assessment_instance_id: selectedSendMsgInstance?.assessment_instance_id ?? null,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1111,10 +1151,12 @@ export function Users() {
                             setSendMsgDropdownOpen(false);
                             if (
                               (s.require_blood_report_url || s.require_bio_ai_report_url) &&
-                              sendMsgInstanceId === "" &&
-                              sendMsgInstances.length === 1
+                              sendMsgInstanceId === ""
                             ) {
-                              setSendMsgInstanceId(sendMsgInstances[0].assessment_instance_id);
+                              const eligible = filterInstancesForService(sendMsgInstances, s);
+                              if (eligible.length === 1) {
+                                setSendMsgInstanceId(eligible[0].assessment_instance_id);
+                              }
                             }
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 flex items-center justify-between ${
@@ -1143,10 +1185,10 @@ export function Users() {
               </div>
             </div>
 
-            {(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) && sendMsgInstances.length > 0 && (
+            {(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) && sendMsgEligibleInstances.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
-                  Assessment (Metsights record)
+                  Assessment
                 </label>
                 <select
                   value={sendMsgInstanceId}
@@ -1156,12 +1198,12 @@ export function Users() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 >
                   <option value="">Select assessment</option>
-                  {sendMsgInstances.map((inst) => (
+                  {sendMsgEligibleInstances.map((inst) => (
                     <option key={inst.assessment_instance_id} value={inst.assessment_instance_id}>
                       {inst.package_display_name || inst.package_code || `Package #${inst.package_id}`}
                       {" · "}
                       {inst.engagement_name || inst.engagement_code || `Engagement #${inst.engagement_id}`}
-                      {inst.metsights_record_id ? ` · ${inst.metsights_record_id}` : ""}
+                      {formatAssessmentReportBadges(inst)}
                     </option>
                   ))}
                 </select>
@@ -1177,7 +1219,7 @@ export function Users() {
                   !sendMsgKey ||
                   !!sendMsgSuccess ||
                   (Boolean(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) &&
-                    sendMsgInstances.length > 0 &&
+                    sendMsgEligibleInstances.length > 0 &&
                     sendMsgInstanceId === "")
                 }
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
