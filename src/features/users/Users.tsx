@@ -51,6 +51,41 @@ function formatAssessmentReportBadges(inst: ParticipantJourneyInstanceSummary): 
   return badges.length > 0 ? ` · ${badges.join(", ")}` : "";
 }
 
+function reportAssessmentEmptyMessage(svc: NotificationServiceItem): string {
+  if (svc.require_blood_report_url && svc.require_bio_ai_report_url) {
+    return "No assessment with both blood and BioAI reports is available for this user.";
+  }
+  if (svc.require_blood_report_url) {
+    return "No assessment with a blood report is available for this user.";
+  }
+  if (svc.require_bio_ai_report_url) {
+    return "No assessment with a BioAI report is available for this user.";
+  }
+  return "No assessment is available for this user.";
+}
+
+type SendMsgEngagementOption = {
+  engagement_id: number;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+};
+
+function uniqueEngagementsFromInstances(
+  instances: ParticipantJourneyInstanceSummary[]
+): SendMsgEngagementOption[] {
+  const map = new Map<number, SendMsgEngagementOption>();
+  for (const inst of instances) {
+    if (!map.has(inst.engagement_id)) {
+      map.set(inst.engagement_id, {
+        engagement_id: inst.engagement_id,
+        engagement_name: inst.engagement_name,
+        engagement_code: inst.engagement_code,
+      });
+    }
+  }
+  return [...map.values()];
+}
+
 type ModalMode = "view" | "add" | "edit";
 
 const EMPTY_FORM: UserCreate = {
@@ -107,6 +142,8 @@ export function Users() {
   const [sendMsgServices, setSendMsgServices] = useState<NotificationServiceItem[]>([]);
   const [sendMsgInstances, setSendMsgInstances] = useState<ParticipantJourneyInstanceSummary[]>([]);
   const [sendMsgInstanceId, setSendMsgInstanceId] = useState<number | "">("");
+  const [sendMsgEngagementId, setSendMsgEngagementId] = useState<number | "">("");
+  const [sendMsgScopeEngagement, setSendMsgScopeEngagement] = useState(false);
   const [sendMsgKey, setSendMsgKey] = useState("");
   const [sendMsgSearch, setSendMsgSearch] = useState("");
   const [sendMsgDropdownOpen, setSendMsgDropdownOpen] = useState(false);
@@ -333,6 +370,8 @@ export function Users() {
     setSendMsgSuccess(null);
     setSendMsgInstances([]);
     setSendMsgInstanceId("");
+    setSendMsgEngagementId("");
+    setSendMsgScopeEngagement(false);
     try {
       const [servicesRes, journeyRes] = await Promise.all([
         notificationsApi.listServices(),
@@ -347,6 +386,10 @@ export function Users() {
   };
 
   const selectedSendMsgService = sendMsgServices.find((s) => s.service_key === sendMsgKey);
+  const sendMsgEngagements = useMemo(
+    () => uniqueEngagementsFromInstances(sendMsgInstances),
+    [sendMsgInstances]
+  );
   const sendMsgEligibleInstances = useMemo(
     () => filterInstancesForService(sendMsgInstances, selectedSendMsgService),
     [sendMsgInstances, selectedSendMsgService]
@@ -355,22 +398,9 @@ export function Users() {
     sendMsgInstanceId === ""
       ? null
       : sendMsgEligibleInstances.find((i) => i.assessment_instance_id === sendMsgInstanceId) ?? null;
-
-  useEffect(() => {
-    if (!sendMsgUser || !selectedSendMsgService) return;
-    const needsAssessment =
-      selectedSendMsgService.require_blood_report_url ||
-      selectedSendMsgService.require_bio_ai_report_url;
-    if (!needsAssessment) return;
-    setSendMsgInstanceId((prev) => {
-      if (sendMsgEligibleInstances.some((i) => i.assessment_instance_id === prev)) {
-        return prev;
-      }
-      return sendMsgEligibleInstances.length === 1
-        ? sendMsgEligibleInstances[0].assessment_instance_id
-        : "";
-    });
-  }, [sendMsgKey, sendMsgEligibleInstances, sendMsgUser, selectedSendMsgService]);
+  const needsSendMsgAssessment = Boolean(
+    selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url
+  );
 
   const handleSendMessage = async () => {
     if (!sendMsgUser || !sendMsgKey) return;
@@ -378,14 +408,9 @@ export function Users() {
     if (!svc) return;
 
     const needsAssessment = svc.require_blood_report_url || svc.require_bio_ai_report_url;
-    if (needsAssessment && !selectedSendMsgInstance && sendMsgEligibleInstances.length > 0) {
-      setSendMsgError("Select an assessment.");
-      return;
-    }
-    if (needsAssessment && sendMsgEligibleInstances.length === 0) {
-      setSendMsgError("No assessment with the required report found for this user.");
-      return;
-    }
+    if (needsAssessment && sendMsgEligibleInstances.length === 0) return;
+    if (needsAssessment && !selectedSendMsgInstance) return;
+    if (!needsAssessment && sendMsgScopeEngagement && sendMsgEngagementId === "") return;
 
     setSendMsgSubmitting(true);
     setSendMsgError(null);
@@ -394,8 +419,14 @@ export function Users() {
       await notificationsApi.dispatch({
         service_key: sendMsgKey,
         user_ids: [sendMsgUser.user_id],
-        engagement_id: selectedSendMsgInstance?.engagement_id ?? null,
-        assessment_instance_id: selectedSendMsgInstance?.assessment_instance_id ?? null,
+        engagement_id: needsAssessment
+          ? selectedSendMsgInstance?.engagement_id ?? null
+          : sendMsgScopeEngagement
+            ? sendMsgEngagementId || null
+            : null,
+        assessment_instance_id: needsAssessment
+          ? selectedSendMsgInstance?.assessment_instance_id ?? null
+          : null,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1149,15 +1180,9 @@ export function Users() {
                             setSendMsgKey(s.service_key);
                             setSendMsgSearch(s.display_name);
                             setSendMsgDropdownOpen(false);
-                            if (
-                              (s.require_blood_report_url || s.require_bio_ai_report_url) &&
-                              sendMsgInstanceId === ""
-                            ) {
-                              const eligible = filterInstancesForService(sendMsgInstances, s);
-                              if (eligible.length === 1) {
-                                setSendMsgInstanceId(eligible[0].assessment_instance_id);
-                              }
-                            }
+                            setSendMsgInstanceId("");
+                            setSendMsgEngagementId("");
+                            setSendMsgScopeEngagement(false);
                           }}
                           className={`w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 flex items-center justify-between ${
                             sendMsgKey === s.service_key ? "bg-zinc-50 font-medium" : "text-zinc-700"
@@ -1185,28 +1210,73 @@ export function Users() {
               </div>
             </div>
 
-            {(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) && sendMsgEligibleInstances.length > 0 && (
+            {needsSendMsgAssessment && selectedSendMsgService && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Assessment
                 </label>
-                <select
-                  value={sendMsgInstanceId}
-                  onChange={(e) =>
-                    setSendMsgInstanceId(e.target.value ? Number(e.target.value) : "")
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                >
-                  <option value="">Select assessment</option>
-                  {sendMsgEligibleInstances.map((inst) => (
-                    <option key={inst.assessment_instance_id} value={inst.assessment_instance_id}>
-                      {inst.package_display_name || inst.package_code || `Package #${inst.package_id}`}
-                      {" · "}
-                      {inst.engagement_name || inst.engagement_code || `Engagement #${inst.engagement_id}`}
-                      {formatAssessmentReportBadges(inst)}
-                    </option>
-                  ))}
-                </select>
+                {sendMsgEligibleInstances.length === 0 ? (
+                  <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-100">
+                    {reportAssessmentEmptyMessage(selectedSendMsgService)}
+                  </div>
+                ) : (
+                  <select
+                    value={sendMsgInstanceId}
+                    onChange={(e) =>
+                      setSendMsgInstanceId(e.target.value ? Number(e.target.value) : "")
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  >
+                    <option value="">Select assessment</option>
+                    {sendMsgEligibleInstances.map((inst) => (
+                      <option key={inst.assessment_instance_id} value={inst.assessment_instance_id}>
+                        {inst.package_display_name || inst.package_code || `Package #${inst.package_id}`}
+                        {" · "}
+                        {inst.engagement_name || inst.engagement_code || `Engagement #${inst.engagement_id}`}
+                        {formatAssessmentReportBadges(inst)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {!needsSendMsgAssessment && selectedSendMsgService && (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendMsgScopeEngagement}
+                    onChange={(e) => {
+                      setSendMsgScopeEngagement(e.target.checked);
+                      if (!e.target.checked) setSendMsgEngagementId("");
+                    }}
+                    className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="text-sm text-zinc-700">Limit to engagement</span>
+                </label>
+                {sendMsgScopeEngagement && (
+                  sendMsgEngagements.length === 0 ? (
+                    <div className="p-3 rounded-lg bg-zinc-50 text-zinc-600 text-sm border border-zinc-100">
+                      No engagements found for this user.
+                    </div>
+                  ) : (
+                    <select
+                      value={sendMsgEngagementId}
+                      onChange={(e) =>
+                        setSendMsgEngagementId(e.target.value ? Number(e.target.value) : "")
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    >
+                      <option value="">Select engagement</option>
+                      {sendMsgEngagements.map((eng) => (
+                        <option key={eng.engagement_id} value={eng.engagement_id}>
+                          {eng.engagement_name || eng.engagement_code || `Engagement #${eng.engagement_id}`}
+                        </option>
+                      ))}
+                    </select>
+                  )
+                )}
               </div>
             )}
 
@@ -1218,9 +1288,12 @@ export function Users() {
                   sendMsgSubmitting ||
                   !sendMsgKey ||
                   !!sendMsgSuccess ||
-                  (Boolean(selectedSendMsgService?.require_blood_report_url || selectedSendMsgService?.require_bio_ai_report_url) &&
-                    sendMsgEligibleInstances.length > 0 &&
-                    sendMsgInstanceId === "")
+                  (needsSendMsgAssessment &&
+                    (sendMsgEligibleInstances.length === 0 || sendMsgInstanceId === "")) ||
+                  (!needsSendMsgAssessment &&
+                    sendMsgScopeEngagement &&
+                    sendMsgEngagements.length > 0 &&
+                    sendMsgEngagementId === "")
                 }
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
               >
