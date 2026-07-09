@@ -1,13 +1,21 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Copy, Loader2 } from "lucide-react";
+import { ChevronDown, Copy, Loader2, RefreshCw, Search } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "../../lib/api";
 
 type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
-type SyncLogsVariant = "metsights" | "n8n" | "nutrition_api" | "healthians";
+type SyncLogsVariant = "all" | "metsights" | "n8n" | "nutrition_api" | "healthians";
 
 const STATUS_OPTIONS = ["pending", "success", "failed", "skipped"] as const;
+const PROVIDER_OPTIONS = [
+  { value: "", label: "All providers" },
+  { value: "metsights", label: "Metsights" },
+  { value: "healthians", label: "Healthians" },
+  { value: "n8n", label: "n8n" },
+  { value: "nutrition_api", label: "Nutrition API" },
+] as const;
+
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
   { key: "1h", label: "Last 1h" },
   { key: "24h", label: "24h" },
@@ -32,6 +40,15 @@ function StatusBadge({ status }: { status?: string | null }) {
   if (status === "pending") return <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>pending</span>;
   if (status === "skipped") return <span className={`${base} bg-zinc-100 text-zinc-600 border-zinc-300`}>skipped</span>;
   return <span className={`${base} bg-zinc-50 text-zinc-600 border-zinc-200`}>{status ?? "—"}</span>;
+}
+
+function ProviderBadge({ provider }: { provider: string }) {
+  const base = "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border";
+  if (provider === "metsights") return <span className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>metsights</span>;
+  if (provider === "healthians") return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>healthians</span>;
+  if (provider === "n8n") return <span className={`${base} bg-violet-50 text-violet-700 border-violet-200`}>n8n</span>;
+  if (provider === "nutrition_api") return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>nutrition_api</span>;
+  return <span className={`${base} bg-zinc-50 text-zinc-600 border-zinc-200`}>{provider}</span>;
 }
 
 function inferOperation(log: IntegrationSyncLog): "push" | "pull" | "unknown" {
@@ -79,6 +96,35 @@ function parseNutritionScore(log: IntegrationSyncLog): string {
     return score == null ? "—" : String(score);
   }
   return "—";
+}
+
+function summarizeEndpoint(log: IntegrationSyncLog): string {
+  const url = log.api_endpoint_url;
+  if (log.provider === "n8n") return parseWebhookFromUrl(url);
+  if (log.provider === "nutrition_api") {
+    const score = parseNutritionScore(log);
+    return score !== "—" ? `score ${score}` : "nutrition API";
+  }
+  if (log.provider === "healthians") {
+    try {
+      const pathname = new URL(url).pathname;
+      const tail = pathname.split("/").filter(Boolean).pop();
+      return tail ?? url;
+    } catch {
+      return parseWebhookFromUrl(url);
+    }
+  }
+  const category = parseCategoryFromUrl(url);
+  if (category !== "—") return category;
+  if (url.includes("/reports/fitness-reports/")) return "fitness report";
+  if (url.includes("/reports/")) return "report";
+  if (url.includes("/profiles/")) return "profile";
+  return parseWebhookFromUrl(url);
+}
+
+function truncateUrl(url: string, max = 56): string {
+  if (url.length <= max) return url;
+  return `${url.slice(0, max - 1)}…`;
 }
 
 function getTimeRange(preset: TimePreset): { from?: string; to?: string } {
@@ -171,26 +217,36 @@ export function IntegrationSyncLogsModal({
   variant?: SyncLogsVariant;
   initialEngagementId?: number;
 }) {
+  const isAll = variant === "all";
   const isN8n = variant === "n8n";
   const isNutritionApi = variant === "nutrition_api";
   const isHealthians = variant === "healthians";
   const isMetsights = variant === "metsights";
-  const showUserEngagementFilters = isMetsights || isNutritionApi || isHealthians;
-  const defaultProvider = isN8n
-    ? "n8n"
-    : isNutritionApi
-      ? "nutrition_api"
-      : isHealthians
-        ? "healthians"
-        : "metsights";
-  const modalTitle = isN8n
-    ? "Notification Sync Logs"
-    : isNutritionApi
-      ? "Nutrition API Sync Logs"
-      : isHealthians
-        ? "Healthians Sync Logs"
-        : "Integration Sync Logs";
-  const columnCount = isN8n ? 5 : isNutritionApi ? 6 : 7;
+  const showUserEngagementFilters = isAll || isMetsights || isNutritionApi || isHealthians;
+  const showProviderFilter = isAll || isMetsights;
+  const showEndpointSearch = isAll || isMetsights || isHealthians;
+
+  const defaultProvider = isAll
+    ? ""
+    : isN8n
+      ? "n8n"
+      : isNutritionApi
+        ? "nutrition_api"
+        : isHealthians
+          ? "healthians"
+          : "metsights";
+
+  const modalTitle = isAll
+    ? "Integration Logs"
+    : isN8n
+      ? "Notification Sync Logs"
+      : isNutritionApi
+        ? "Nutrition API Sync Logs"
+        : isHealthians
+          ? "Healthians Sync Logs"
+          : "Integration Sync Logs";
+
+  const columnCount = isAll ? 8 : isN8n ? 5 : isNutritionApi ? 6 : 7;
 
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -204,6 +260,8 @@ export function IntegrationSyncLogsModal({
   const [provider, setProvider] = useState(defaultProvider);
   const [userIdFilter, setUserIdFilter] = useState("");
   const [engagementIdFilter, setEngagementIdFilter] = useState("");
+  const [endpointSearch, setEndpointSearch] = useState("");
+  const [endpointSearchDebounced, setEndpointSearchDebounced] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payloadTab, setPayloadTab] = useState<PayloadTab>("request");
 
@@ -215,29 +273,41 @@ export function IntegrationSyncLogsModal({
       setTimePreset(initialEngagementId ? "" : "1h");
       setUserIdFilter("");
       setEngagementIdFilter(initialEngagementId ? String(initialEngagementId) : "");
+      setEndpointSearch("");
+      setEndpointSearchDebounced("");
       setExpandedId(null);
     }
   }, [open, defaultProvider, initialEngagementId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setEndpointSearchDebounced(endpointSearch.trim());
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [endpointSearch]);
 
   const listParams = useMemo(() => {
     const range = getTimeRange(timePreset);
     const userId = userIdFilter.trim() ? Number(userIdFilter) : undefined;
     const engagementId = engagementIdFilter.trim() ? Number(engagementIdFilter) : undefined;
+    const resolvedProvider = isN8n
+      ? "n8n"
+      : isNutritionApi
+        ? "nutrition_api"
+        : isHealthians
+          ? "healthians"
+          : provider || undefined;
+
     return {
       page,
       limit,
-      provider:
-        isN8n
-          ? "n8n"
-          : isNutritionApi
-            ? "nutrition_api"
-            : isHealthians
-              ? "healthians"
-              : provider || undefined,
+      provider: resolvedProvider,
       status: statusFilters.length ? statusFilters.join(",") : undefined,
       user_id: showUserEngagementFilters && Number.isFinite(userId) && userId! > 0 ? userId : undefined,
       engagement_id:
         showUserEngagementFilters && Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
+      search: showEndpointSearch && endpointSearchDebounced ? endpointSearchDebounced : undefined,
       ...range,
     };
   }, [
@@ -248,10 +318,12 @@ export function IntegrationSyncLogsModal({
     timePreset,
     userIdFilter,
     engagementIdFilter,
+    endpointSearchDebounced,
     isN8n,
     isNutritionApi,
     isHealthians,
     showUserEngagementFilters,
+    showEndpointSearch,
   ]);
 
   const fetchLogs = useCallback(async () => {
@@ -286,85 +358,130 @@ export function IntegrationSyncLogsModal({
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <Modal open={open} onClose={onClose} title={modalTitle} maxWidthClassName="max-w-5xl">
-      <div className="space-y-4 max-h-[75vh] flex flex-col">
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-zinc-500 mr-1">Status</span>
-          {STATUS_OPTIONS.map((status) => (
-            <button
-              key={status}
-              type="button"
-              onClick={() => toggleStatus(status)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                statusFilters.includes(status)
-                  ? "bg-zinc-900 text-white border-zinc-900"
-                  : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
-              }`}
-            >
-              {status}
-            </button>
-          ))}
-          {statusFilters.length > 0 && (
-            <button
-              type="button"
-              onClick={() => { setStatusFilters([]); setPage(1); }}
-              className="text-xs text-zinc-500 hover:text-zinc-700"
-            >
-              Clear
-            </button>
+    <Modal open={open} onClose={onClose} title={modalTitle} maxWidthClassName="max-w-6xl">
+      <div className="space-y-4 max-h-[78vh] flex flex-col">
+        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 space-y-3">
+          {showEndpointSearch ? (
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <input
+                  type="search"
+                  placeholder="Search endpoint URL…"
+                  value={endpointSearch}
+                  onChange={(e) => setEndpointSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => void fetchLogs()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => void fetchLogs()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </button>
+            </div>
           )}
-        </div>
 
-        <div className="flex flex-wrap gap-2 items-center">
-          {TIME_PRESETS.map((preset) => (
-            <button
-              key={preset.key || "all"}
-              type="button"
-              onClick={() => { setTimePreset(preset.key); setPage(1); }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                timePreset === preset.key
-                  ? "bg-zinc-900 text-white border-zinc-900"
-                  : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-          {isMetsights && (
-            <select
-              value={provider}
-              onChange={(e) => { setProvider(e.target.value); setPage(1); }}
-              className="px-2 py-1 rounded-lg border border-zinc-300 text-xs bg-white"
-            >
-              <option value="metsights">metsights</option>
-              <option value="">All providers</option>
-            </select>
-          )}
-          {showUserEngagementFilters && (
-            <>
-              <input
-                type="number"
-                placeholder="User ID"
-                value={userIdFilter}
-                onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-                className="w-24 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
-              />
-              <input
-                type="number"
-                placeholder="Engagement ID"
-                value={engagementIdFilter}
-                onChange={(e) => { setEngagementIdFilter(e.target.value); setPage(1); }}
-                className="w-32 px-2 py-1 rounded-lg border border-zinc-300 text-xs"
-              />
-            </>
-          )}
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-medium text-zinc-500 mr-1">Status</span>
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => toggleStatus(status)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  statusFilters.includes(status)
+                    ? "bg-zinc-900 text-white border-zinc-900"
+                    : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+            {statusFilters.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setStatusFilters([]); setPage(1); }}
+                className="text-xs text-zinc-500 hover:text-zinc-700"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-medium text-zinc-500 mr-1">Time</span>
+            {TIME_PRESETS.map((preset) => (
+              <button
+                key={preset.key || "all"}
+                type="button"
+                onClick={() => { setTimePreset(preset.key); setPage(1); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                  timePreset === preset.key
+                    ? "bg-zinc-900 text-white border-zinc-900"
+                    : "bg-white text-zinc-600 border-zinc-300 hover:bg-zinc-50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center">
+            {showProviderFilter && (
+              <select
+                value={provider}
+                onChange={(e) => { setProvider(e.target.value); setPage(1); }}
+                className="px-2.5 py-2 rounded-lg border border-zinc-300 text-sm bg-white min-w-[150px]"
+              >
+                {PROVIDER_OPTIONS.map((opt) => (
+                  <option key={opt.value || "all"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            {showUserEngagementFilters && (
+              <>
+                <input
+                  type="number"
+                  placeholder="User ID"
+                  value={userIdFilter}
+                  onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
+                  className="w-28 px-2.5 py-2 rounded-lg border border-zinc-300 text-sm bg-white"
+                />
+                <input
+                  type="number"
+                  placeholder="Engagement ID"
+                  value={engagementIdFilter}
+                  onChange={(e) => { setEngagementIdFilter(e.target.value); setPage(1); }}
+                  className="w-36 px-2.5 py-2 rounded-lg border border-zinc-300 text-sm bg-white"
+                />
+              </>
+            )}
+          </div>
         </div>
 
         {error && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>
         )}
 
-        <div className="flex-1 min-h-0 overflow-auto border border-zinc-200 rounded-lg">
+        <div className="flex-1 min-h-0 overflow-auto border border-zinc-200 rounded-xl bg-white">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-zinc-500">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading logs...
@@ -373,12 +490,20 @@ export function IntegrationSyncLogsModal({
             <p className="text-sm text-zinc-500 text-center py-12">No sync logs found.</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-zinc-50 sticky top-0">
+              <thead className="bg-zinc-50 sticky top-0 z-10">
                 <tr className="text-left text-xs text-zinc-500">
                   <th className="px-3 py-2 w-8" />
                   <th className="px-3 py-2">Time</th>
                   <th className="px-3 py-2">Status</th>
-                  {isN8n ? (
+                  {isAll ? (
+                    <>
+                      <th className="px-3 py-2">Provider</th>
+                      <th className="px-3 py-2">Summary</th>
+                      <th className="px-3 py-2">Endpoint</th>
+                      <th className="px-3 py-2">User</th>
+                      <th className="px-3 py-2">Engagement</th>
+                    </>
+                  ) : isN8n ? (
                     <>
                       <th className="px-3 py-2">Webhook</th>
                       <th className="px-3 py-2">Notification ID</th>
@@ -417,7 +542,17 @@ export function IntegrationSyncLogsModal({
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</td>
                         <td className="px-3 py-2"><StatusBadge status={log.status} /></td>
-                        {isN8n ? (
+                        {isAll ? (
+                          <>
+                            <td className="px-3 py-2"><ProviderBadge provider={log.provider} /></td>
+                            <td className="px-3 py-2 text-xs font-medium text-zinc-700">{summarizeEndpoint(log)}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-zinc-500 max-w-[220px] truncate" title={log.api_endpoint_url}>
+                              {truncateUrl(log.api_endpoint_url)}
+                            </td>
+                            <td className="px-3 py-2 text-xs">{log.user_id ?? "—"}</td>
+                            <td className="px-3 py-2 text-xs">{log.engagement_id ?? "—"}</td>
+                          </>
+                        ) : isN8n ? (
                           <>
                             <td className="px-3 py-2 font-mono text-xs">{parseWebhookFromUrl(log.api_endpoint_url)}</td>
                             <td className="px-3 py-2 text-xs">{parseNotificationId(log)}</td>
@@ -444,7 +579,8 @@ export function IntegrationSyncLogsModal({
                       {expanded && (
                         <tr>
                           <td colSpan={columnCount} className="px-3 py-3 bg-zinc-50">
-                            <div className="flex gap-2 mb-2">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              <span className="text-xs text-zinc-500">Log #{log.sync_log_id}</span>
                               {(["request", "response", "error"] as PayloadTab[]).map((tab) => (
                                 <button
                                   key={tab}
@@ -474,13 +610,13 @@ export function IntegrationSyncLogsModal({
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <span className="text-xs text-zinc-500">{total} log{total !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-zinc-500">{total.toLocaleString()} log{total !== 1 ? "s" : ""}</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={page <= 1 || loading}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50 hover:bg-zinc-50"
             >
               Prev
             </button>
@@ -489,7 +625,7 @@ export function IntegrationSyncLogsModal({
               type="button"
               disabled={page >= totalPages || loading}
               onClick={() => setPage((p) => p + 1)}
-              className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50"
+              className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50 hover:bg-zinc-50"
             >
               Next
             </button>

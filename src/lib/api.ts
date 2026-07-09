@@ -1901,6 +1901,7 @@ export const integrationSyncLogsApi = {
     status?: string;
     user_id?: number;
     engagement_id?: number;
+    search?: string;
     from?: string;
     to?: string;
   }) =>

@@ -104,7 +104,7 @@ export function Settings() {
   const [activityLog, setActivityLog] = useState<PageLogEntry[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [duplicatesModalOpen, setDuplicatesModalOpen] = useState(false);
-  const [nutritionSyncLogsOpen, setNutritionSyncLogsOpen] = useState(false);
+  const [integrationLogsOpen, setIntegrationLogsOpen] = useState(false);
 
   const pauseRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -348,11 +348,21 @@ export function Settings() {
 
   return (
     <div className="max-w-3xl space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900 tracking-tight">Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Platform defaults and Metsights profile synchronization.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900 tracking-tight">Settings</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Platform defaults and Metsights profile synchronization.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIntegrationLogsOpen(true)}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-300 text-zinc-700 hover:bg-zinc-50 shrink-0"
+        >
+          <ScrollText className="w-4 h-4" />
+          Integration logs
+        </button>
       </div>
 
       {loading ? (
@@ -728,26 +738,11 @@ export function Settings() {
         </button>
       </section>
 
-      <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-zinc-900">Nutrition API</h2>
-        <p className="text-xs text-zinc-500 mt-1 max-w-lg">
-          View audit logs for calls to the nutrition scoring service (health span index and camp reports).
-        </p>
-        <button
-          type="button"
-          onClick={() => setNutritionSyncLogsOpen(true)}
-          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50"
-        >
-          <ScrollText className="w-4 h-4" />
-          Nutrition API sync logs
-        </button>
-      </section>
-
       <DuplicatedUsersModal open={duplicatesModalOpen} onClose={() => setDuplicatesModalOpen(false)} />
       <IntegrationSyncLogsModal
-        open={nutritionSyncLogsOpen}
-        onClose={() => setNutritionSyncLogsOpen(false)}
-        variant="nutrition_api"
+        open={integrationLogsOpen}
+        onClose={() => setIntegrationLogsOpen(false)}
+        variant="all"
       />
     </div>
   );
