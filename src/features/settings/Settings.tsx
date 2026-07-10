@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, ScrollText, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, ScrollText, Search, Users } from "lucide-react";
 import { DuplicatedUsersModal } from "./DuplicatedUsersModal";
 import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
 import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
+  employeesApi,
   notificationsApi,
   platformSettingsApi,
   type AssessmentPackage,
+  type DefaultOnboardingAssistantItem,
   type DiagnosticPackageListItem,
+  type EmployeeListItem,
   type EngagementNotificationDefaults,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
@@ -61,6 +64,15 @@ function labelDiagnostic(p: DiagnosticPackageListItem) {
   return `${name} (#${p.diagnostic_package_id})`;
 }
 
+function labelEmployee(emp: EmployeeListItem | DefaultOnboardingAssistantItem) {
+  const first = emp.first_name?.trim() ?? "";
+  const last = emp.last_name?.trim() ?? "";
+  const full = `${first} ${last}`.trim();
+  return full || `Employee #${emp.employee_id}`;
+}
+
+const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager"]);
+
 function formatCount(n: number | undefined) {
   if (n === undefined) return "—";
   return n.toLocaleString();
@@ -89,6 +101,13 @@ export function Settings() {
   const [notificationError, setNotificationError] = useState<string | null>(null);
   const [notificationSaveOk, setNotificationSaveOk] = useState<string | null>(null);
 
+  const [defaultAssistantEmployees, setDefaultAssistantEmployees] = useState<EmployeeListItem[]>([]);
+  const [selectedDefaultAssistantIds, setSelectedDefaultAssistantIds] = useState<Set<number>>(new Set());
+  const [defaultAssistantSearch, setDefaultAssistantSearch] = useState("");
+  const [savingDefaultAssistants, setSavingDefaultAssistants] = useState(false);
+  const [defaultAssistantsError, setDefaultAssistantsError] = useState<string | null>(null);
+  const [defaultAssistantsSaveOk, setDefaultAssistantsSaveOk] = useState<string | null>(null);
+
   const [msStats, setMsStats] = useState<MetsightsProfilesStats | null>(null);
   const [msStatsLoading, setMsStatsLoading] = useState(false);
   const [msStatsError, setMsStatsError] = useState<string | null>(null);
@@ -115,25 +134,33 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, notifDefaultsRes, notifServicesRes, aPkgs, dRes] = await Promise.all([
+      const [defaultsRes, notifDefaultsRes, assistantDefaultsRes, notifServicesRes, aPkgs, dRes, employeesRes] =
+        await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
         platformSettingsApi.getEngagementNotificationDefaults(),
+        platformSettingsApi.getDefaultOnboardingAssistants(),
         notificationsApi.listServices(),
         fetchAllPages<AssessmentPackage>((page, limit) =>
           assessmentPackagesApi.list({ page, limit, status: "active" })
         ),
         diagnosticPackagesApi.list(),
+        employeesApi.list({ status: "active", limit: 100 }),
       ]);
 
       const d = defaultsRes.data.data;
       setAssessmentId(d.b2c_default_assessment_package_id);
       setDiagnosticId(d.b2c_default_diagnostic_package_id);
       setNotificationDefaults(notifDefaultsRes.data.data ?? {});
+      setSelectedDefaultAssistantIds(new Set(assistantDefaultsRes.data.data.employee_ids ?? []));
       setNotificationServices(
         (notifServicesRes.data.data ?? []).filter((s) => s.is_active !== false)
       );
 
       setAssessmentPackages(aPkgs);
+      const assignableEmployees = (employeesRes.data.data ?? []).filter((e) =>
+        ASSIGNABLE_ASSISTANT_ROLES.has((e.role ?? "").toLowerCase())
+      );
+      setDefaultAssistantEmployees(assignableEmployees);
       const dPkgs = (dRes.data.data ?? []).filter(
         (p) => (p.status ?? "active").toLowerCase() === "active"
       );
@@ -206,6 +233,47 @@ export function Settings() {
       setSaving(false);
     }
   }
+
+  async function handleSaveDefaultAssistants(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingDefaultAssistants(true);
+    setDefaultAssistantsError(null);
+    setDefaultAssistantsSaveOk(null);
+    try {
+      await platformSettingsApi.patchDefaultOnboardingAssistants({
+        employee_ids: Array.from(selectedDefaultAssistantIds),
+      });
+      setDefaultAssistantsSaveOk(
+        "Saved. New B2B and B2C engagements will auto-assign these assistants."
+      );
+    } catch (err) {
+      setDefaultAssistantsError(getApiError(err));
+    } finally {
+      setSavingDefaultAssistants(false);
+    }
+  }
+
+  function toggleDefaultAssistantSelection(id: number) {
+    setSelectedDefaultAssistantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const filteredDefaultAssistantEmployees = useMemo(() => {
+    const q = defaultAssistantSearch.trim().toLowerCase();
+    if (!q) return defaultAssistantEmployees;
+    return defaultAssistantEmployees.filter((e) => {
+      const name = labelEmployee(e).toLowerCase();
+      return (
+        String(e.employee_id).includes(q) ||
+        (e.role ?? "").toLowerCase().includes(q) ||
+        name.includes(q)
+      );
+    });
+  }, [defaultAssistantEmployees, defaultAssistantSearch]);
 
   async function handleSaveNotificationDefaults(e: React.FormEvent) {
     e.preventDefault();
@@ -428,6 +496,92 @@ export function Settings() {
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save defaults
+          </button>
+        </form>
+      )}
+
+      {!loading ? (
+        <form
+          onSubmit={(e) => void handleSaveDefaultAssistants(e)}
+          className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm"
+        >
+          <h2 className="text-sm font-semibold text-zinc-900">Default onboarding assistants</h2>
+          <p className="text-xs text-zinc-500 -mt-2">
+            Auto-assigned when new B2B or B2C engagements are created.{" "}
+            <code className="bg-zinc-100 px-1 rounded">organization_manager</code> employees only
+            apply to B2B engagements for organizations they manage.
+          </p>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="search"
+              placeholder="Search by name, role, or ID…"
+              value={defaultAssistantSearch}
+              onChange={(ev) => setDefaultAssistantSearch(ev.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
+            />
+          </div>
+
+          {defaultAssistantEmployees.length === 0 ? (
+            <p className="text-sm text-zinc-500">No active assignable employees found.</p>
+          ) : filteredDefaultAssistantEmployees.length === 0 ? (
+            <p className="text-sm text-zinc-500">No employees match your search.</p>
+          ) : (
+            <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+              {filteredDefaultAssistantEmployees.map((e) => {
+                const checked = selectedDefaultAssistantIds.has(e.employee_id);
+                return (
+                  <li
+                    key={e.employee_id}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
+                      checked ? "bg-zinc-50" : "bg-white"
+                    }`}
+                    onClick={() => toggleDefaultAssistantSelection(e.employee_id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleDefaultAssistantSelection(e.employee_id)}
+                      onClick={(ev) => ev.stopPropagation()}
+                      className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-zinc-900 truncate">{labelEmployee(e)}</p>
+                      <p className="text-xs text-zinc-500 truncate">
+                        {e.role ? `Role: ${e.role}` : "No role"}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <p className="text-xs text-zinc-500">
+            Selected: {selectedDefaultAssistantIds.size}
+          </p>
+
+          {defaultAssistantsError ? (
+            <p className="text-sm text-red-600" role="alert">
+              {defaultAssistantsError}
+            </p>
+          ) : null}
+          {defaultAssistantsSaveOk ? (
+            <p className="text-sm text-emerald-700">{defaultAssistantsSaveOk}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={savingDefaultAssistants}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {savingDefaultAssistants ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save assistants
           </button>
         </form>
       )}

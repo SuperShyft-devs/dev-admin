@@ -250,6 +250,20 @@ export interface EngagementNotificationDefaults {
   default_bioai_report_notification?: string | null;
 }
 
+export interface DefaultOnboardingAssistantItem {
+  employee_id: number;
+  user_id: number;
+  role: string;
+  status: string;
+  first_name?: string | null;
+  last_name?: string | null;
+}
+
+export interface DefaultOnboardingAssistants {
+  employee_ids: number[];
+  assistants: DefaultOnboardingAssistantItem[];
+}
+
 export interface MetsightsProfilesStats {
   local_total_users: number;
   local_with_metsights_profile_id: number;
@@ -287,6 +301,15 @@ export const platformSettingsApi = {
   patchEngagementNotificationDefaults: (payload: EngagementNotificationDefaults) =>
     api.patch<{ data: EngagementNotificationDefaults; meta: Record<string, unknown> }>(
       "/platform-settings/engagement-notification-defaults",
+      payload
+    ),
+  getDefaultOnboardingAssistants: () =>
+    api.get<{ data: DefaultOnboardingAssistants; meta: Record<string, unknown> }>(
+      "/platform-settings/default-onboarding-assistants"
+    ),
+  patchDefaultOnboardingAssistants: (payload: { employee_ids: number[] }) =>
+    api.patch<{ data: DefaultOnboardingAssistants; meta: Record<string, unknown> }>(
+      "/platform-settings/default-onboarding-assistants",
       payload
     ),
   getMetsightsProfileStats: () =>
