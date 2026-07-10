@@ -584,7 +584,7 @@ export function Settings() {
             Save assistants
           </button>
         </form>
-      )}
+      ) : null}
 
       {!loading ? (
         <form
