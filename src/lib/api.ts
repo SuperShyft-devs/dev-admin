@@ -2957,18 +2957,24 @@ export const notificationsApi = {
 // Booking flow APIs
 export const bookingApi = {
   getMyDrafts: () =>
-    api.get<{ data: { engagement_ids: number[] } }>("/book/me/drafts"),
+    api.get<{
+      data: {
+        engagements: Array<{
+          engagement_id: number;
+          status: string;
+          resume_step: "address" | "booking_date";
+          address: string | null;
+        }>;
+      };
+    }>("/book/me/drafts"),
   checkServiceAvailability: (payload: {
     members: Array<{
       user_id: number;
-      address?: string;
-      sub_locality?: string;
+      house_flat_no: string;
+      building_area: string;
       landmark?: string;
-      city?: string;
-      state?: string;
-      country?: string;
-      latitude: number;
-      longitude: number;
+      city: string;
+      pincode: string;
       diagnostic_package_id: number;
     }>;
   }) =>
@@ -2979,12 +2985,30 @@ export const bookingApi = {
   getAvailableSlots: (payload: {
     members: Array<{ user_id: number; engagement_id: number; blood_collection_date: string }>;
   }) =>
-    api.post<{ data: { members: Array<{ user_id: number; engagement_id: number; status: string; slots?: unknown[]; message?: string }> } }>(
-      "/book/available-slots",
-      payload
-    ),
+    api.post<{
+      data: {
+        members: Array<{
+          user_id: number;
+          engagement_id: number;
+          status: string;
+          slots?: Array<{
+            end_time: string;
+            slot_date: string;
+            slot_time: string;
+            stm_id: string;
+          }>;
+          message?: string;
+        }>;
+      };
+    }>("/book/available-slots", payload),
   lockSlot: (payload: {
-    members: Array<{ user_id: number; engagement_id: number; blood_collection_date: string; blood_collection_time_slot_id: string }>;
+    members: Array<{
+      user_id: number;
+      engagement_id: number;
+      blood_collection_date: string;
+      blood_collection_time_slot_id: string;
+      blood_collection_time_slot: string;
+    }>;
   }) =>
     api.post<{ data: { members: Array<{ user_id: number; engagement_id: number; status: string; message?: string }> } }>(
       "/book/lock",
