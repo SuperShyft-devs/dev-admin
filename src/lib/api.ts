@@ -3014,4 +3014,59 @@ export const bookingApi = {
       "/book/lock",
       payload
     ),
+  pay: (payload: {
+    members: Array<{ user_id: number; engagement_id: number }>;
+  }) =>
+    api.post<{
+      data: {
+        razorpay_order_id: string;
+        amount_paise: number;
+        amount_rupees: number;
+        currency: string;
+        key_id: string;
+        booking_ids: number[];
+        booking_id: number;
+        members: Array<{ user_id: number; engagement_id: number; status: string }>;
+      };
+    }>("/book/pay", payload),
+  bookBioAi: (payload: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) =>
+    api.post<{
+      data: {
+        payment_verified: boolean;
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        booking_ids: number[];
+        members: Array<{
+          user_id: number;
+          engagement_id: number;
+          status: string;
+          message?: string;
+          booking_id?: string;
+        }>;
+      };
+    }>("/book/bio-ai", payload),
+  bookBloodTest: (payload: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) =>
+    api.post<{
+      data: {
+        payment_verified: boolean;
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        booking_ids: number[];
+        members: Array<{
+          user_id: number;
+          engagement_id: number;
+          status: string;
+          message?: string;
+          booking_id?: string;
+        }>;
+      };
+    }>("/book/blood-test", payload),
 };
