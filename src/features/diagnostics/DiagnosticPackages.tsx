@@ -5,6 +5,7 @@ import { Modal } from "../../shared/ui/Modal";
 import {
   diagnosticPackagesApi,
   getApiError,
+  uploadsApi,
   type DiagnosticPackageCreate,
   type DiagnosticPackageListItem,
 } from "../../lib/api";
@@ -18,6 +19,7 @@ type ModalMode = "add" | "edit";
 
 const EMPTY_FORM: DiagnosticPackageCreate = {
   package_name: "",
+  package_image: null,
   diagnostic_provider: "",
   external_package_id: null,
   collection_type: "",
@@ -66,6 +68,7 @@ export function DiagnosticPackages() {
   const [form, setForm] = useState<DiagnosticPackageCreate>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerPackageId, setDrawerPackageId] = useState<number | null>(null);
@@ -129,8 +132,10 @@ export function DiagnosticPackages() {
         if (!cancelled) {
           setForm((f) => ({
             ...f,
+            package_image: detail.package_image ?? f.package_image ?? null,
             health_areas_covered: detail.health_areas_covered ?? "",
             about_text: detail.about_text ?? "",
+            bookings_count: detail.bookings_count ?? f.bookings_count ?? null,
           }));
         }
       } catch {
@@ -211,6 +216,7 @@ export function DiagnosticPackages() {
     setEditing(row);
     setForm({
       package_name: row.package_name,
+      package_image: row.package_image ?? null,
       diagnostic_provider: row.diagnostic_provider ?? "",
       external_package_id: row.external_package_id ?? null,
       collection_type: row.collection_type ?? "",
@@ -283,6 +289,20 @@ export function DiagnosticPackages() {
     }
   };
 
+  const handleImageUpload = async (file?: File) => {
+    if (!file) return;
+    setImageUploading(true);
+    setFormError(null);
+    try {
+      const res = await uploadsApi.uploadPackageImage(file);
+      setForm((prev) => ({ ...prev, package_image: res.data.data.url }));
+    } catch (err) {
+      setFormError(getApiError(err));
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!form.package_name.trim()) {
       setFormError("Package name is required.");
@@ -293,6 +313,7 @@ export function DiagnosticPackages() {
     try {
       const payload: DiagnosticPackageCreate = {
         package_name: form.package_name.trim(),
+        package_image: form.package_image?.trim() || null,
         diagnostic_provider: form.diagnostic_provider?.trim() || null,
         external_package_id: form.external_package_id ?? null,
         collection_type: form.collection_type?.trim() || null,
@@ -602,6 +623,36 @@ export function DiagnosticPackages() {
                 required
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Package image URL</label>
+              <input
+                type="url"
+                value={form.package_image ?? ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, package_image: e.target.value }))}
+                className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Upload package image</label>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => void handleImageUpload(e.target.files?.[0])}
+                className="w-full text-sm"
+                disabled={imageUploading}
+              />
+              {imageUploading && <p className="mt-1 text-xs text-zinc-500">Uploading image...</p>}
+            </div>
+            {form.package_image ? (
+              <div className="sm:col-span-2">
+                <img
+                  src={form.package_image}
+                  alt="Package preview"
+                  className="h-20 w-20 rounded-lg object-cover border border-zinc-200"
+                />
+              </div>
+            ) : null}
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Provider</label>
               <select

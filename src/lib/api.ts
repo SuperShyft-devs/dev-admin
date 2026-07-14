@@ -646,6 +646,11 @@ export const uploadsApi = {
     formData.append("file", file);
     return api.post<{ data: { url: string } }>("/uploads/experts/profile-photo", formData);
   },
+  uploadPackageImage: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<{ data: { url: string } }>("/uploads/packages/image", formData);
+  },
 };
 
 // Employees
@@ -2181,6 +2186,7 @@ export type DiagnosticFilterChipFor = "public_package" | "custom_package";
 export interface DiagnosticPackageListItem {
   diagnostic_package_id: number;
   package_name: string;
+  package_image?: string | null;
   diagnostic_provider?: string | null;
   external_package_id?: number | null;
   created_by_user_id?: number | null;
@@ -2212,6 +2218,7 @@ export interface DiagnosticPackageDetail extends DiagnosticPackageListItem {
 
 export interface DiagnosticPackageCreate {
   package_name: string;
+  package_image?: string | null;
   diagnostic_provider?: string | null;
   external_package_id?: number | null;
   /** Public (false) vs custom/owned (true). Non-staff must use true; staff may use either. */
