@@ -250,6 +250,10 @@ export interface EngagementNotificationDefaults {
   default_bioai_report_notification?: string | null;
 }
 
+export interface SupportQueryNotification {
+  default_support_query_notification?: string | null;
+}
+
 export interface DefaultOnboardingAssistantItem {
   employee_id: number;
   user_id: number;
@@ -310,6 +314,15 @@ export const platformSettingsApi = {
   patchDefaultOnboardingAssistants: (payload: { employee_ids: number[] }) =>
     api.patch<{ data: DefaultOnboardingAssistants; meta: Record<string, unknown> }>(
       "/platform-settings/default-onboarding-assistants",
+      payload
+    ),
+  getSupportQueryNotification: () =>
+    api.get<{ data: SupportQueryNotification; meta: Record<string, unknown> }>(
+      "/platform-settings/support-query-notification"
+    ),
+  patchSupportQueryNotification: (payload: SupportQueryNotification) =>
+    api.patch<{ data: SupportQueryNotification; meta: Record<string, unknown> }>(
+      "/platform-settings/support-query-notification",
       payload
     ),
   getMetsightsProfileStats: () =>

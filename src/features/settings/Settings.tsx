@@ -16,6 +16,7 @@ import {
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
   type NotificationServiceItem,
+  type SupportQueryNotification,
   getApiError,
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
@@ -108,6 +109,11 @@ export function Settings() {
   const [defaultAssistantsError, setDefaultAssistantsError] = useState<string | null>(null);
   const [defaultAssistantsSaveOk, setDefaultAssistantsSaveOk] = useState<string | null>(null);
 
+  const [supportQueryNotification, setSupportQueryNotification] = useState<string | null>(null);
+  const [savingSupportQueryNotification, setSavingSupportQueryNotification] = useState(false);
+  const [supportQueryNotificationError, setSupportQueryNotificationError] = useState<string | null>(null);
+  const [supportQueryNotificationSaveOk, setSupportQueryNotificationSaveOk] = useState<string | null>(null);
+
   const [msStats, setMsStats] = useState<MetsightsProfilesStats | null>(null);
   const [msStatsLoading, setMsStatsLoading] = useState(false);
   const [msStatsError, setMsStatsError] = useState<string | null>(null);
@@ -134,11 +140,12 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, notifDefaultsRes, assistantDefaultsRes, notifServicesRes, aPkgs, dRes, employeesRes] =
+      const [defaultsRes, notifDefaultsRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
         await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
         platformSettingsApi.getEngagementNotificationDefaults(),
         platformSettingsApi.getDefaultOnboardingAssistants(),
+        platformSettingsApi.getSupportQueryNotification(),
         notificationsApi.listServices(),
         fetchAllPages<AssessmentPackage>((page, limit) =>
           assessmentPackagesApi.list({ page, limit, status: "active" })
@@ -152,6 +159,9 @@ export function Settings() {
       setDiagnosticId(d.b2c_default_diagnostic_package_id);
       setNotificationDefaults(notifDefaultsRes.data.data ?? {});
       setSelectedDefaultAssistantIds(new Set(assistantDefaultsRes.data.data.employee_ids ?? []));
+      setSupportQueryNotification(
+        supportQueryRes.data.data?.default_support_query_notification ?? null
+      );
       setNotificationServices(
         (notifServicesRes.data.data ?? []).filter((s) => s.is_active !== false)
       );
@@ -250,6 +260,27 @@ export function Settings() {
       setDefaultAssistantsError(getApiError(err));
     } finally {
       setSavingDefaultAssistants(false);
+    }
+  }
+
+  async function handleSaveSupportQueryNotification(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingSupportQueryNotification(true);
+    setSupportQueryNotificationError(null);
+    setSupportQueryNotificationSaveOk(null);
+    try {
+      const payload: SupportQueryNotification = {
+        default_support_query_notification: supportQueryNotification,
+      };
+      const res = await platformSettingsApi.patchSupportQueryNotification(payload);
+      setSupportQueryNotification(res.data.data?.default_support_query_notification ?? null);
+      setSupportQueryNotificationSaveOk(
+        "Saved. Default onboarding assistants will be notified with these services when a support query is submitted."
+      );
+    } catch (err) {
+      setSupportQueryNotificationError(getApiError(err));
+    } finally {
+      setSavingSupportQueryNotification(false);
     }
   }
 
@@ -582,6 +613,50 @@ export function Settings() {
               <Save className="w-4 h-4" />
             )}
             Save assistants
+          </button>
+        </form>
+      ) : null}
+
+      {!loading ? (
+        <form
+          onSubmit={(e) => void handleSaveSupportQueryNotification(e)}
+          className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm"
+        >
+          <h2 className="text-sm font-semibold text-zinc-900">
+            Support notification for default onboarding assistants
+          </h2>
+          <p className="text-xs text-zinc-500 -mt-2">
+            Notification services used to alert default onboarding assistants when a support
+            query is submitted.
+          </p>
+
+          <NotificationServiceChipInput
+            label="Support query notification"
+            value={supportQueryNotification}
+            onChange={setSupportQueryNotification}
+            services={notificationServices}
+          />
+
+          {supportQueryNotificationError ? (
+            <p className="text-sm text-red-600" role="alert">
+              {supportQueryNotificationError}
+            </p>
+          ) : null}
+          {supportQueryNotificationSaveOk ? (
+            <p className="text-sm text-emerald-700">{supportQueryNotificationSaveOk}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={savingSupportQueryNotification}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {savingSupportQueryNotification ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save support notification
           </button>
         </form>
       ) : null}
