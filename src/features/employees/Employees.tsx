@@ -14,6 +14,7 @@ import {
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
+const SEARCH_DEBOUNCE_MS = 300;
 
 type ModalMode = "add" | "edit";
 
@@ -23,6 +24,7 @@ export function Employees() {
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [sortKey, setSortKey] = useState<string>("employee_id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -68,6 +70,11 @@ export function Employees() {
     }
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -78,7 +85,7 @@ export function Employees() {
         page,
         limit,
         status: statusFilter || undefined,
-        search: search.trim() || undefined,
+        search: debouncedSearch || undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
       });
@@ -89,7 +96,7 @@ export function Employees() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, sortKey, sortDir]);
+  }, [page, limit, statusFilter, debouncedSearch, sortKey, sortDir]);
 
   useEffect(() => {
     fetchList();
@@ -97,7 +104,7 @@ export function Employees() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter]);
+  }, [debouncedSearch, statusFilter]);
 
   const openAdd = () => {
     setSelected(null);
@@ -337,6 +344,8 @@ export function Employees() {
             >
               <option value="admin">Admin</option>
               <option value="onboarding_assistant">Onboarding Assistant</option>
+              <option value="organization_manager">Organization Manager</option>
+              <option value="expert">Expert</option>
             </select>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
