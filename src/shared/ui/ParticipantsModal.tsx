@@ -812,26 +812,29 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 ))}
               </select>
             </div>
-            <div className="flex flex-col gap-0.5 min-w-[120px]">
-              {expertTypes.map((et) => (
-              <div key={et.type_key}>
-              <label className="text-xs font-medium text-zinc-500">{et.type} consultation</label>
-              <select
-                value={columnFilters.consultationFilters[et.type_key] ?? "all"}
-                onChange={(e) =>
-                  setColumnFilters((f) => ({
-                    ...f,
-                    consultationFilters: { ...f.consultationFilters, [et.type_key]: e.target.value as BoolFilter },
-                  }))
-                }
-                className={filterSelectClass}
-              >
-                <option value="all">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-            </div>
+            {expertTypes.map((et) => (
+              <div key={et.type_key} className="flex flex-col gap-0.5 min-w-[120px]">
+                <label className="text-xs font-medium text-zinc-500">
+                  {et.type} consultation
+                </label>
+                <select
+                  value={columnFilters.consultationFilters[et.type_key] ?? "all"}
+                  onChange={(e) =>
+                    setColumnFilters((f) => ({
+                      ...f,
+                      consultationFilters: {
+                        ...f.consultationFilters,
+                        [et.type_key]: e.target.value as BoolFilter,
+                      },
+                    }))
+                  }
+                  className={filterSelectClass}
+                >
+                  <option value="all">All</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
             ))}
             {hasActiveColumnFilters && (
               <button

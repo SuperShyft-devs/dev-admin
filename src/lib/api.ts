@@ -1120,6 +1120,7 @@ export interface Engagement {
   camp_no?: number | null;
   engagement_code?: string | null;
   engagement_type?: EngagementKind | string | null;
+  consultations?: Record<string, boolean> | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
