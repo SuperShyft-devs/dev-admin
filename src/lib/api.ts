@@ -1088,8 +1088,58 @@ export const expertsApi = {
     ),
 };
 
+export type OverrideStatus = "available" | "unavailable" | "booked";
+
+export interface ConsultationPreference {
+  want: boolean;
+  date?: string | null;
+  slot?: string | null;
+  expert_id?: number | null;
+}
+
+export interface ConsultationRequestItem {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  engagement_id: number;
+  engagement_code?: string | null;
+  expert_type: string;
+  date?: string | null;
+  slot?: string | null;
+  engagement_participant_id?: number;
+}
+
 export const expertsPortalApi = {
   me: () => api.get<{ data: ExpertDetail }>("/experts/portal/me"),
+  listRequests: () =>
+    api.get<{ data: ConsultationRequestItem[] }>("/experts/portal/requests"),
+  confirmRequest: (payload: {
+    user_id: number;
+    engagement_id: number;
+    expert_type: string;
+    date: string;
+    slot: string;
+    expert_id?: number;
+  }) => api.post<{ data: { message: string } }>("/experts/portal/confirm", payload),
+};
+
+export const expertsConsultationsApi = {
+  slots: (params?: { expert_type?: string; expert_id?: number }) =>
+    api.get<{
+      data: Record<
+        string,
+        Record<string, Array<{ start_time: string; duration: number; available_slot: number }>>
+      >;
+    }>("/experts/consultations/slots", { params }),
+  book: (payload: {
+    engagement_id: number;
+    expert_type: string;
+    expert_id?: number;
+    date: string;
+    slot: string;
+  }) => api.post<{ data: { message: string } }>("/experts/consultations/book", payload),
 };
 
 export interface AvailabilityBlock {
@@ -1106,7 +1156,7 @@ export interface AvailabilityOverride {
   id: number;
   expert_id: number;
   override_date: string;
-  availability: boolean;
+  status: OverrideStatus;
   start_time?: string | null;
   end_time?: string | null;
   buffer_time?: number | null;
@@ -1122,7 +1172,7 @@ export interface AvailabilityBlockPayload {
 
 export interface AvailabilityOverridePayload {
   override_date: string;
-  availability: boolean;
+  status: OverrideStatus;
   start_time?: string | null;
   end_time?: string | null;
   buffer_time?: number | null;
@@ -1710,7 +1760,7 @@ export interface Participant {
   participants_employee_id?: string | null;
   participant_department?: string | null;
   participant_blood_group?: string | null;
-  consultations?: Record<string, boolean | null> | null;
+  consultations?: Record<string, ConsultationPreference | boolean | null> | null;
   is_profile_created_on_metsights?: boolean | null;
   is_primary_record_id_synced?: boolean | null;
   is_fitprint_record_id_synced?: boolean | null;
@@ -1729,14 +1779,14 @@ export interface Participant {
 
 export interface EngagementParticipantUpdatePayload {
   participant_department?: string | null;
-  consultations?: Record<string, boolean | null> | null;
+  consultations?: Record<string, ConsultationPreference | boolean | null> | null;
 }
 
 export interface EngagementParticipantUpdateResponse {
   engagement_id: number;
   user_id: number;
   participant_department?: string | null;
-  consultations?: Record<string, boolean | null> | null;
+  consultations?: Record<string, ConsultationPreference | boolean | null> | null;
 }
 
 export const participantsApi = {

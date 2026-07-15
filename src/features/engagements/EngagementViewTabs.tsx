@@ -100,6 +100,30 @@ export function EngagementOverviewTab({
           <ConsoleUrlActions engagementId={engagement.engagement_id} />
         </div>
 
+        <div>
+          <div className="text-xs font-medium text-zinc-500 mb-1.5">Offered consultations</div>
+          {engagement.consultations &&
+          Object.entries(engagement.consultations).some(([, v]) => v === true) ? (
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(engagement.consultations)
+                .filter(([, enabled]) => enabled === true)
+                .map(([key]) => (
+                  <span
+                    key={key}
+                    className="inline-flex px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-medium capitalize"
+                  >
+                    {key.replace(/_/g, " ")}
+                  </span>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-500">None configured for this engagement.</p>
+          )}
+          <p className="text-xs text-zinc-400 mt-1.5">
+            Participant slot requests and expert assignment are managed in Participants.
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-2 pt-1">
           <button
             type="button"

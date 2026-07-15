@@ -22,6 +22,7 @@ import { Experts } from "./features/experts/Experts";
 import { ExpertPortalPage } from "./features/experts/ExpertPortalPage";
 import { ExpertMePage } from "./features/experts/ExpertMePage";
 import { ExpertAvailabilityPage } from "./features/experts/ExpertAvailabilityPage";
+import { ExpertRequestsPage } from "./features/experts/ExpertRequestsPage";
 import { Notifications } from "./features/notifications/Notifications";
 import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
 import { ConsoleEngagementsPage } from "./features/console/ConsoleEngagementsPage";
@@ -243,6 +244,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <ExpertPortalRoute>
               <ExpertAvailabilityPage />
+            </ExpertPortalRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/experts/requests"
+        element={
+          <ProtectedRoute>
+            <ExpertPortalRoute>
+              <ExpertRequestsPage />
             </ExpertPortalRoute>
           </ProtectedRoute>
         }

@@ -10,6 +10,7 @@ import {
   type Engagement,
   type OrganizationDepartment,
   type ExpertTypeItem,
+  type ConsultationPreference,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
@@ -145,6 +146,36 @@ function matchesBoolFilter(value: boolean | null | undefined, filter: BoolFilter
   return value === false;
 }
 
+function normalizeConsultationPref(
+  value: ConsultationPreference | boolean | null | undefined
+): ConsultationPreference {
+  if (value == null) return { want: false, date: null, slot: null, expert_id: null };
+  if (typeof value === "boolean") return { want: value, date: null, slot: null, expert_id: null };
+  return {
+    want: Boolean(value.want),
+    date: value.date ?? null,
+    slot: value.slot ?? null,
+    expert_id: value.expert_id ?? null,
+  };
+}
+
+function consultationWant(value: ConsultationPreference | boolean | null | undefined): boolean | null {
+  if (value == null) return null;
+  if (typeof value === "boolean") return value;
+  return Boolean(value.want);
+}
+
+function formatConsultationCell(value: ConsultationPreference | boolean | null | undefined): string {
+  const pref = normalizeConsultationPref(value);
+  if (!pref.want) return "No";
+  if (pref.expert_id != null) {
+    const when = pref.date && pref.slot ? ` · ${pref.date} ${pref.slot}` : "";
+    return `Assigned (#${pref.expert_id})${when}`;
+  }
+  if (pref.date && pref.slot) return `Slot held · ${pref.date} ${pref.slot}`;
+  return "Requested";
+}
+
 function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Participant[] {
   return rows.filter((p) => {
     if (filters.engagementDate && (p.engagement_date ?? "") !== filters.engagementDate) {
@@ -155,7 +186,7 @@ function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Partic
     }
     for (const [key, filter] of Object.entries(filters.consultationFilters)) {
       if (filter !== "all") {
-        const val = p.consultations?.[key] ?? null;
+        const val = consultationWant(p.consultations?.[key] ?? null);
         if (!matchesBoolFilter(val, filter)) return false;
       }
     }
@@ -531,12 +562,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     try {
       setConsultationUpdateLoading(loadingKey);
       setConsultationUpdateError(null);
-      const updatedConsultations = { ...(participant.consultations ?? {}), [field]: value };
+      const prev = normalizeConsultationPref(participant.consultations?.[field]);
+      const nextPref: ConsultationPreference = {
+        ...prev,
+        want: value === true,
+        ...(value !== true ? { date: null, slot: null, expert_id: null } : {}),
+      };
+      const updatedConsultations = { ...(participant.consultations ?? {}), [field]: nextPref };
       await participantsApi.updateParticipant(engagementIdForDepartment, participant.user_id, {
         consultations: updatedConsultations,
       });
-      setParticipants((prev) =>
-        prev.map((row) =>
+      setParticipants((prevRows) =>
+        prevRows.map((row) =>
           row.user_id === participant.user_id
             ? { ...row, consultations: updatedConsultations }
             : row
@@ -552,6 +589,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const renderConsultationCell = (p: Participant, field: ConsultationField) => {
     const isEditing = consultationEditMode.has(field);
     const cellValue = p.consultations?.[field] ?? null;
+    const want = consultationWant(cellValue);
 
     if (isEditing && canEditConsultation) {
       const loadingKey = `${p.user_id}:${field}`;
@@ -559,14 +597,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
       return (
         <select
-          value={boolToSelectValue(cellValue)}
+          value={boolToSelectValue(want)}
           disabled={isLoading}
           onChange={(e) => {
             const nextValue = selectValueToBool(e.target.value);
-            if (normalizeBool(cellValue) === nextValue) return;
+            if (normalizeBool(want) === nextValue) return;
             void handleConsultationUpdate(p, field, nextValue);
           }}
-          className="max-w-[100px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+          className="max-w-[140px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
         >
           {BOOL_SELECT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -577,7 +615,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       );
     }
 
-    return formatBool(cellValue);
+    return (
+      <span className="text-sm text-zinc-700 whitespace-nowrap" title={formatConsultationCell(cellValue)}>
+        {formatConsultationCell(cellValue)}
+      </span>
+    );
   };
 
   const engagementIdForDelete =

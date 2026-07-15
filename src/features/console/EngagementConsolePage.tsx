@@ -773,9 +773,20 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
       {field("Department", p.participant_department)}
       {field("Employee ID", p.participants_employee_id)}
       {field("Blood Group", p.participant_blood_group)}
-      {p.consultations && Object.entries(p.consultations).map(([key, val]) => (
-        field(`${key.charAt(0).toUpperCase() + key.slice(1)} Consultation`, formatBool(val))
-      ))}
+      {p.consultations &&
+        Object.entries(p.consultations).map(([key, val]) => {
+          const label = `${key.charAt(0).toUpperCase() + key.slice(1)} Consultation`;
+          if (val == null) return field(label, "—");
+          if (typeof val === "boolean") return field(label, formatBool(val));
+          const want = formatBool(val.want);
+          const bits = [
+            `Want: ${want}`,
+            val.date ? `Date: ${val.date}` : null,
+            val.slot ? `Slot: ${val.slot}` : null,
+            val.expert_id != null ? `Expert: #${val.expert_id}` : null,
+          ].filter(Boolean);
+          return field(label, bits.join(" · "));
+        })}
       {field("Barcode", p.barcode)}
       {field("Booking ID", p.booking_id)}
       {field("Booked by user ID", p.booked_by_user_id)}

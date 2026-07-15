@@ -9,6 +9,7 @@ import {
   type AvailabilityBlockPayload,
   type AvailabilityOverride,
   type ExpertDetail,
+  type OverrideStatus,
 } from "../../lib/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -136,7 +137,7 @@ function fromServerBlocks(data: AvailabilityBlock[]): LocalBlock[] {
 type OverridePopoverState = {
   open: boolean;
   date: string;
-  available: boolean;
+  status: Exclude<OverrideStatus, "booked">;
   startTime: string;
   endTime: string;
   bufferTime: number;
@@ -145,7 +146,7 @@ type OverridePopoverState = {
 const INITIAL_OVERRIDE_POPOVER: OverridePopoverState = {
   open: false,
   date: "",
-  available: false,
+  status: "unavailable",
   startTime: "09:00",
   endTime: "17:00",
   bufferTime: DEFAULT_BUFFER,
@@ -308,10 +309,10 @@ export function ExpertAvailabilityPage() {
     try {
       const payload = {
         override_date: overridePopover.date,
-        availability: overridePopover.available,
-        start_time: overridePopover.available ? overridePopover.startTime : undefined,
-        end_time: overridePopover.available ? overridePopover.endTime : undefined,
-        buffer_time: overridePopover.available ? overridePopover.bufferTime : undefined,
+        status: overridePopover.status,
+        start_time: overridePopover.startTime,
+        end_time: overridePopover.endTime,
+        buffer_time: overridePopover.status === "available" ? overridePopover.bufferTime : undefined,
       };
       await expertAvailabilityPortalApi.createOverride(payload);
       const res = await expertAvailabilityPortalApi.listOverrides();
@@ -571,9 +572,9 @@ export function ExpertAvailabilityPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setOverridePopover((p) => ({ ...p, available: false }))}
+                        onClick={() => setOverridePopover((p) => ({ ...p, status: "unavailable" }))}
                         className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                          !overridePopover.available
+                          overridePopover.status === "unavailable"
                             ? "bg-zinc-900 text-white border-zinc-900"
                             : "bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50"
                         }`}
@@ -582,9 +583,9 @@ export function ExpertAvailabilityPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setOverridePopover((p) => ({ ...p, available: true }))}
+                        onClick={() => setOverridePopover((p) => ({ ...p, status: "available" }))}
                         className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                          overridePopover.available
+                          overridePopover.status === "available"
                             ? "bg-zinc-900 text-white border-zinc-900"
                             : "bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50"
                         }`}
@@ -592,57 +593,58 @@ export function ExpertAvailabilityPage() {
                         Available
                       </button>
                     </div>
+                    <p className="mt-1.5 text-xs text-zinc-500">
+                      Set hours for this date. Unavailable blocks those hours; available replaces the weekly schedule.
+                    </p>
                   </div>
-                  {overridePopover.available && (
-                    <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs text-zinc-500 mb-1">Start time</label>
-                          <select
-                            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                            value={overridePopover.startTime}
-                            onChange={(e) =>
-                              setOverridePopover((p) => ({ ...p, startTime: e.target.value }))
-                            }
-                          >
-                            {timeOptions.map((t) => (
-                              <option key={t} value={t}>{formatTimeDisplay(t)}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-zinc-500 mb-1">End time</label>
-                          <select
-                            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                            value={overridePopover.endTime}
-                            onChange={(e) =>
-                              setOverridePopover((p) => ({ ...p, endTime: e.target.value }))
-                            }
-                          >
-                            {timeOptions.map((t) => (
-                              <option key={t} value={t}>{formatTimeDisplay(t)}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-zinc-500 mb-1">Buffer (min)</label>
-                        <select
-                          className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                          value={overridePopover.bufferTime}
-                          onChange={(e) =>
-                            setOverridePopover((p) => ({
-                              ...p,
-                              bufferTime: Number(e.target.value),
-                            }))
-                          }
-                        >
-                          {[0, 5, 10, 15, 20, 30].map((v) => (
-                            <option key={v} value={v}>{v} min</option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-zinc-500 mb-1">Start time</label>
+                      <select
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
+                        value={overridePopover.startTime}
+                        onChange={(e) =>
+                          setOverridePopover((p) => ({ ...p, startTime: e.target.value }))
+                        }
+                      >
+                        {timeOptions.map((t) => (
+                          <option key={t} value={t}>{formatTimeDisplay(t)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-zinc-500 mb-1">End time</label>
+                      <select
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
+                        value={overridePopover.endTime}
+                        onChange={(e) =>
+                          setOverridePopover((p) => ({ ...p, endTime: e.target.value }))
+                        }
+                      >
+                        {timeOptions.map((t) => (
+                          <option key={t} value={t}>{formatTimeDisplay(t)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {overridePopover.status === "available" && (
+                    <div>
+                      <label className="block text-xs text-zinc-500 mb-1">Buffer (min)</label>
+                      <select
+                        className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
+                        value={overridePopover.bufferTime}
+                        onChange={(e) =>
+                          setOverridePopover((p) => ({
+                            ...p,
+                            bufferTime: Number(e.target.value),
+                          }))
+                        }
+                      >
+                        {[0, 5, 10, 15, 20, 30].map((v) => (
+                          <option key={v} value={v}>{v} min</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
 
@@ -686,16 +688,29 @@ export function ExpertAvailabilityPage() {
                         day: "numeric",
                       })}
                     </span>
-                    {o.availability ? (
-                      <span className="text-zinc-600 truncate">
-                        {o.start_time && o.end_time
+                    <span
+                      className={`inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                        o.status === "booked"
+                          ? "bg-amber-100 text-amber-800"
+                          : o.status === "available"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-zinc-100 text-zinc-600"
+                      }`}
+                    >
+                      {o.status}
+                    </span>
+                    <span className="text-zinc-600 truncate">
+                      {o.status === "booked"
+                        ? o.start_time
+                          ? formatTimeDisplay(o.start_time)
+                          : "Booked slot"
+                        : o.start_time && o.end_time
                           ? `${formatTimeDisplay(o.start_time)} – ${formatTimeDisplay(o.end_time)}`
-                          : "Available"}
-                        {o.buffer_time != null ? ` · ${o.buffer_time} min buffer` : ""}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-500">Unavailable</span>
-                    )}
+                          : "—"}
+                      {o.status === "available" && o.buffer_time != null
+                        ? ` · ${o.buffer_time} min buffer`
+                        : ""}
+                    </span>
                   </div>
                   <button
                     type="button"
