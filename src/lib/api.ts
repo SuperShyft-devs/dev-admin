@@ -968,8 +968,26 @@ export interface CampReportRefreshResult {
   section: CampReportSectionPayload;
 }
 
+// Expert Types (dynamic catalog)
+export interface ExpertTypeItem {
+  id: number;
+  type_key: string;
+  type: string;
+}
+
+export const expertTypesApi = {
+  list: () =>
+    api.get<{ data: ExpertTypeItem[] }>("/expert-types"),
+  create: (payload: { type_key: string; type: string }) =>
+    api.post<{ data: ExpertTypeItem }>("/expert-types", payload),
+  update: (id: number, payload: { type_key?: string; type?: string }) =>
+    api.put<{ data: ExpertTypeItem }>(`/expert-types/${id}`, payload),
+  delete: (id: number) =>
+    api.delete<{ data: { id: number } }>(`/expert-types/${id}`),
+};
+
 // Experts (doctors & nutritionists)
-export type ExpertType = "doctor" | "nutritionist";
+export type ExpertType = string;
 export type ConsultationMode = "video" | "voice" | "chat";
 
 export interface ExpertTag {
@@ -1007,7 +1025,7 @@ export interface ExpertDetail extends ExpertListItem {
 
 export interface ExpertPayload {
   user_id: number;
-  expert_type: ExpertType;
+  expert_type: string;
   specialization: string;
   profile_photo?: string | null;
   experience_years?: number | null;
@@ -1070,7 +1088,7 @@ export interface ChecklistReadiness {
 }
 
 // Engagements
-export type EngagementKind = "bio_ai" | "diagnostic" | "doctor" | "nutritionist";
+export type EngagementKind = "bio_ai" | "blood_test" | "consultation" | "blood_test_with_consultation" | "bio_ai_with_consultation";
 export type EngagementStatus = "draft" | "scheduled" | "running" | "completed" | "cancelled";
 export type BloodCollectionType = "home_collection" | "camp_collection";
 
@@ -1131,6 +1149,7 @@ export interface EngagementListItem {
   camp_no?: number | null;
   engagement_code?: string | null;
   engagement_type?: EngagementKind | string | null;
+  consultations?: Record<string, boolean> | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
@@ -1168,6 +1187,7 @@ export interface EngagementCreate {
   organization_id?: number | null;
   camp_no?: number | null;
   engagement_type: EngagementKind;
+  consultations?: Record<string, boolean> | null;
   engagement_code?: string | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
@@ -1609,9 +1629,7 @@ export interface Participant {
   participants_employee_id?: string | null;
   participant_department?: string | null;
   participant_blood_group?: string | null;
-  want_doctor_consultation?: boolean | null;
-  want_nutritionist_consultation?: boolean | null;
-  want_doctor_and_nutritionist_consultation?: boolean | null;
+  consultations?: Record<string, boolean | null> | null;
   is_profile_created_on_metsights?: boolean | null;
   is_primary_record_id_synced?: boolean | null;
   is_fitprint_record_id_synced?: boolean | null;
@@ -1630,18 +1648,14 @@ export interface Participant {
 
 export interface EngagementParticipantUpdatePayload {
   participant_department?: string | null;
-  want_doctor_consultation?: boolean | null;
-  want_nutritionist_consultation?: boolean | null;
-  want_doctor_and_nutritionist_consultation?: boolean | null;
+  consultations?: Record<string, boolean | null> | null;
 }
 
 export interface EngagementParticipantUpdateResponse {
   engagement_id: number;
   user_id: number;
   participant_department?: string | null;
-  want_doctor_consultation?: boolean | null;
-  want_nutritionist_consultation?: boolean | null;
-  want_doctor_and_nutritionist_consultation?: boolean | null;
+  consultations?: Record<string, boolean | null> | null;
 }
 
 export const participantsApi = {
@@ -2197,8 +2211,7 @@ export interface DiagnosticPackageListItem {
   original_price?: number | null;
   discount_percent?: number | null;
   is_most_popular?: boolean | null;
-  complementary_nutritionist?: boolean | null;
-  complementary_doctor?: boolean | null;
+  complementary_consultation?: Record<string, boolean> | null;
   gender_suitability?: string | null;
   package_for?: "public" | "camp" | null;
   status?: string | null;
@@ -2231,8 +2244,7 @@ export interface DiagnosticPackageCreate {
   price?: number | null;
   original_price?: number | null;
   is_most_popular?: boolean | null;
-  complementary_nutritionist?: boolean | null;
-  complementary_doctor?: boolean | null;
+  complementary_consultation?: Record<string, boolean> | null;
   gender_suitability?: string | null;
   package_for?: "public" | "camp" | null;
 }

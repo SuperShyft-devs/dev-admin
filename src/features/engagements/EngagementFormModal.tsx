@@ -5,10 +5,12 @@ import {
   type DiagnosticPackageListItem,
   type EngagementCreate,
   type EngagementKind,
+  type ExpertTypeItem,
   type GeocodeSuggestion,
   type NotificationServiceItem,
   type OrganizationListItem,
   engagementsApi,
+  expertTypesApi,
   getApiError,
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
@@ -20,11 +22,17 @@ const BLOOD_COLLECTION_TYPE_OPTIONS = [
   { value: "camp_collection", label: "Camp Collection" },
 ] as const;
 
-const ENGAGEMENT_KIND_OPTIONS: EngagementKind[] = ["bio_ai", "diagnostic", "doctor", "nutritionist"];
+const ENGAGEMENT_KIND_OPTIONS: { value: EngagementKind; label: string }[] = [
+  { value: "bio_ai", label: "BioAi" },
+  { value: "blood_test", label: "BloodTest" },
+  { value: "consultation", label: "Consultation" },
+  { value: "blood_test_with_consultation", label: "BloodTest with Consultation" },
+  { value: "bio_ai_with_consultation", label: "BioAi with Consultation" },
+];
 
 const STEPS = [
   { id: 1, label: "Basics & location" },
-  { id: 2, label: "Packages & flags" },
+  { id: 2, label: "Type, packages & flags" },
   { id: 3, label: "Notifications" },
 ] as const;
 
@@ -35,6 +43,18 @@ function toNumberOrNull(value: string): number | null {
   if (!value.trim()) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function needsAssessment(kind: EngagementKind): boolean {
+  return kind === "bio_ai" || kind === "bio_ai_with_consultation";
+}
+
+function needsDiagnostic(kind: EngagementKind): boolean {
+  return kind === "blood_test" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation";
+}
+
+function needsConsultation(kind: EngagementKind): boolean {
+  return kind === "consultation" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation";
 }
 
 type Props = {
@@ -65,6 +85,7 @@ export function EngagementFormModal({
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<EngagementCreate>(initialData);
   const [stepError, setStepError] = useState<string | null>(null);
+  const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
 
   const [zoneLoading, setZoneLoading] = useState(false);
   const [zoneMessage, setZoneMessage] = useState<string | null>(null);
@@ -77,9 +98,12 @@ export function EngagementFormModal({
     setStepError(null);
     setZoneMessage(null);
     setZoneMessageTone("info");
-    // Only hydrate when the modal opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
+  }, []);
 
   const checkZoneId = useCallback(
     async (
@@ -160,10 +184,8 @@ export function EngagementFormModal({
       initialData.longitude,
       initialData.pincode
     );
-    // Resolve zone once when editing an engagement that is missing zone ID.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
 
   const applySuggestion = (suggestion: GeocodeSuggestion) => {
     setFormData((prev) => {
@@ -205,6 +227,20 @@ export function EngagementFormModal({
     return true;
   };
 
+  const applyDiagPkgConsultationDefaults = useCallback(
+    (pkgId: number | undefined) => {
+      if (!pkgId || pkgId <= 0) return;
+      const pkg = diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
+      if (pkg?.complementary_consultation) {
+        setFormData((prev) => ({
+          ...prev,
+          consultations: { ...(prev.consultations ?? {}), ...pkg.complementary_consultation },
+        }));
+      }
+    },
+    [diagnosticPackages]
+  );
+
   const goNext = () => {
     if (step === 1 && !validateStep1()) return;
     const nextStep = Math.min(3, step + 1);
@@ -244,6 +280,10 @@ export function EngagementFormModal({
     if (formData.start_date && formData.start_date > today) return "Schedule";
     return "Start";
   })();
+
+  const showAssessment = needsAssessment(formData.engagement_type);
+  const showDiagnostic = needsDiagnostic(formData.engagement_type);
+  const showConsultation = needsConsultation(formData.engagement_type);
 
   return (
     <Modal
@@ -304,23 +344,6 @@ export function EngagementFormModal({
                 onChange={(e) => setFormData({ ...formData, engagement_code: e.target.value })}
                 className={inputClass}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Type *</label>
-              <select
-                value={formData.engagement_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, engagement_type: e.target.value as EngagementKind })
-                }
-                className={inputClass}
-                required
-              >
-                {ENGAGEMENT_KIND_OPTIONS.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">
@@ -464,53 +487,107 @@ export function EngagementFormModal({
         {step === 2 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Type *</label>
               <select
-                value={formData.assessment_package_id ?? 0}
+                value={formData.engagement_type}
                 onChange={(e) =>
-                  setFormData({ ...formData, assessment_package_id: Number(e.target.value) })
+                  setFormData({ ...formData, engagement_type: e.target.value as EngagementKind })
                 }
                 className={inputClass}
+                required
               >
-                <option value={0}>None</option>
-                {assessmentPackages.map((p) => (
-                  <option key={p.package_id} value={p.package_id}>
-                    {p.display_name ?? p.package_code ?? p.package_id}
+                {ENGAGEMENT_KIND_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic package</label>
-              <select
-                value={formData.diagnostic_package_id ?? 0}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  const pkg =
-                    next > 0 ? diagnosticPackages.find((p) => p.diagnostic_package_id === next) : undefined;
-                  const isHealthians = (pkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
-                  setFormData({
-                    ...formData,
-                    diagnostic_package_id: next > 0 ? next : undefined,
-                    external_camp_id: isHealthians ? formData.external_camp_id : undefined,
-                  });
-                  void checkZoneId(
-                    next > 0 ? next : undefined,
-                    formData.latitude,
-                    formData.longitude,
-                    formData.pincode
-                  );
-                }}
-                className={inputClass}
-              >
-                <option value={0}>None</option>
-                {diagnosticPackages.map((p) => (
-                  <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
-                    {p.package_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+
+            {showAssessment && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
+                <select
+                  value={formData.assessment_package_id ?? 0}
+                  onChange={(e) =>
+                    setFormData({ ...formData, assessment_package_id: Number(e.target.value) })
+                  }
+                  className={inputClass}
+                >
+                  <option value={0}>None</option>
+                  {assessmentPackages.map((p) => (
+                    <option key={p.package_id} value={p.package_id}>
+                      {p.display_name ?? p.package_code ?? p.package_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {showDiagnostic && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic package</label>
+                <select
+                  value={formData.diagnostic_package_id ?? 0}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    const pkg =
+                      next > 0 ? diagnosticPackages.find((p) => p.diagnostic_package_id === next) : undefined;
+                    const isHealthians = (pkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
+                    setFormData({
+                      ...formData,
+                      diagnostic_package_id: next > 0 ? next : undefined,
+                      external_camp_id: isHealthians ? formData.external_camp_id : undefined,
+                    });
+                    void checkZoneId(
+                      next > 0 ? next : undefined,
+                      formData.latitude,
+                      formData.longitude,
+                      formData.pincode
+                    );
+                    if (next > 0) {
+                      applyDiagPkgConsultationDefaults(next);
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  <option value={0}>None</option>
+                  {diagnosticPackages.map((p) => (
+                    <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
+                      {p.package_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {showConsultation && expertTypes.length > 0 && (
+              <div className="md:col-span-2 space-y-2">
+                <label className="block text-sm font-medium text-zinc-700">Consultations</label>
+                <div className="flex flex-wrap gap-3">
+                  {expertTypes.map((et) => (
+                    <label key={et.type_key} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 bg-zinc-50 text-sm cursor-pointer hover:bg-zinc-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={!!(formData.consultations ?? {})[et.type_key]}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            consultations: {
+                              ...(prev.consultations ?? {}),
+                              [et.type_key]: e.target.checked,
+                            },
+                          }))
+                        }
+                        className="w-4 h-4"
+                      />
+                      {et.type}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {isHealthiansDiagnosticPkg && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Camp ID</label>

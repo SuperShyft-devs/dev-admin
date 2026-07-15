@@ -5,9 +5,11 @@ import {
   participantsApi,
   engagementsApi,
   organizationsApi,
+  expertTypesApi,
   type Participant,
   type Engagement,
   type OrganizationDepartment,
+  type ExpertTypeItem,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
@@ -32,17 +34,13 @@ type BoolFilter = "all" | "yes" | "no";
 interface ColumnFilters {
   engagementDate: string;
   department: string;
-  doctorConsultation: BoolFilter;
-  nutritionistConsultation: BoolFilter;
-  doctorAndNutritionist: BoolFilter;
+  consultationFilters: Record<string, BoolFilter>;
 }
 
 const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
   engagementDate: "",
   department: "",
-  doctorConsultation: "all",
-  nutritionistConsultation: "all",
-  doctorAndNutritionist: "all",
+  consultationFilters: {},
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,10 +70,7 @@ function formatBool(value: boolean | null | undefined): string {
   return "—";
 }
 
-type ConsultationField =
-  | "want_doctor_consultation"
-  | "want_nutritionist_consultation"
-  | "want_doctor_and_nutritionist_consultation";
+type ConsultationField = string;
 
 const BOOL_SELECT_OPTIONS: { value: string; label: string; bool: boolean | null }[] = [
   { value: "yes", label: "Yes", bool: true },
@@ -158,19 +153,11 @@ function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Partic
     if (filters.department && (p.participant_department ?? "") !== filters.department) {
       return false;
     }
-    if (!matchesBoolFilter(p.want_doctor_consultation, filters.doctorConsultation)) {
-      return false;
-    }
-    if (!matchesBoolFilter(p.want_nutritionist_consultation, filters.nutritionistConsultation)) {
-      return false;
-    }
-    if (
-      !matchesBoolFilter(
-        p.want_doctor_and_nutritionist_consultation,
-        filters.doctorAndNutritionist
-      )
-    ) {
-      return false;
+    for (const [key, filter] of Object.entries(filters.consultationFilters)) {
+      if (filter !== "all") {
+        const val = p.consultations?.[key] ?? null;
+        if (!matchesBoolFilter(val, filter)) return false;
+      }
     }
     return true;
   });
@@ -234,9 +221,7 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "participants_employee_id",
     "participant_department",
     "participant_blood_group",
-    "want_doctor_consultation",
-    "want_nutritionist_consultation",
-    "want_doctor_and_nutritionist_consultation",
+    "consultations",
     "is_profile_created_on_metsights",
     "is_primary_record_id_synced",
     "is_fitprint_record_id_synced",
@@ -311,6 +296,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [consultationEditMode, setConsultationEditMode] = useState<Set<ConsultationField>>(
     () => new Set()
   );
+  const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
   const [consultationUpdateLoading, setConsultationUpdateLoading] = useState<string | null>(null);
   const [consultationUpdateError, setConsultationUpdateError] = useState<string | null>(null);
 
@@ -401,6 +387,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [source]);
 
   useEffect(() => {
+    expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (open) {
       setSearch("");
       setColumnFilters(DEFAULT_COLUMN_FILTERS);
@@ -429,7 +419,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         (p) =>
           p.engagement_date != null ||
           p.participant_department != null ||
-          p.want_doctor_consultation != null
+          p.consultations != null
       ),
     [participants]
   );
@@ -541,11 +531,16 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     try {
       setConsultationUpdateLoading(loadingKey);
       setConsultationUpdateError(null);
+      const updatedConsultations = { ...(participant.consultations ?? {}), [field]: value };
       await participantsApi.updateParticipant(engagementIdForDepartment, participant.user_id, {
-        [field]: value,
+        consultations: updatedConsultations,
       });
       setParticipants((prev) =>
-        prev.map((row) => (row.user_id === participant.user_id ? { ...row, [field]: value } : row))
+        prev.map((row) =>
+          row.user_id === participant.user_id
+            ? { ...row, consultations: updatedConsultations }
+            : row
+        )
       );
     } catch (err) {
       setConsultationUpdateError(getApiError(err));
@@ -556,6 +551,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const renderConsultationCell = (p: Participant, field: ConsultationField) => {
     const isEditing = consultationEditMode.has(field);
+    const cellValue = p.consultations?.[field] ?? null;
 
     if (isEditing && canEditConsultation) {
       const loadingKey = `${p.user_id}:${field}`;
@@ -563,11 +559,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
       return (
         <select
-          value={boolToSelectValue(p[field])}
+          value={boolToSelectValue(cellValue)}
           disabled={isLoading}
           onChange={(e) => {
             const nextValue = selectValueToBool(e.target.value);
-            if (normalizeBool(p[field]) === nextValue) return;
+            if (normalizeBool(cellValue) === nextValue) return;
             void handleConsultationUpdate(p, field, nextValue);
           }}
           className="max-w-[100px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
@@ -581,7 +577,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       );
     }
 
-    return formatBool(p[field]);
+    return formatBool(cellValue);
   };
 
   const engagementIdForDelete =
@@ -602,9 +598,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const hasActiveColumnFilters =
     columnFilters.engagementDate !== "" ||
     columnFilters.department !== "" ||
-    columnFilters.doctorConsultation !== "all" ||
-    columnFilters.nutritionistConsultation !== "all" ||
-    columnFilters.doctorAndNutritionist !== "all";
+    Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
 
   const toggleRowSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
@@ -819,13 +813,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               </select>
             </div>
             <div className="flex flex-col gap-0.5 min-w-[120px]">
-              <label className="text-xs font-medium text-zinc-500">Doctor consultation</label>
+              {expertTypes.map((et) => (
+              <div key={et.type_key}>
+              <label className="text-xs font-medium text-zinc-500">{et.type} consultation</label>
               <select
-                value={columnFilters.doctorConsultation}
+                value={columnFilters.consultationFilters[et.type_key] ?? "all"}
                 onChange={(e) =>
                   setColumnFilters((f) => ({
                     ...f,
-                    doctorConsultation: e.target.value as BoolFilter,
+                    consultationFilters: { ...f.consultationFilters, [et.type_key]: e.target.value as BoolFilter },
                   }))
                 }
                 className={filterSelectClass}
@@ -835,40 +831,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 <option value="no">No</option>
               </select>
             </div>
-            <div className="flex flex-col gap-0.5 min-w-[120px]">
-              <label className="text-xs font-medium text-zinc-500">Nutritionist</label>
-              <select
-                value={columnFilters.nutritionistConsultation}
-                onChange={(e) =>
-                  setColumnFilters((f) => ({
-                    ...f,
-                    nutritionistConsultation: e.target.value as BoolFilter,
-                  }))
-                }
-                className={filterSelectClass}
-              >
-                <option value="all">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
             </div>
-            <div className="flex flex-col gap-0.5 min-w-[120px]">
-              <label className="text-xs font-medium text-zinc-500">Doctor + Nutritionist</label>
-              <select
-                value={columnFilters.doctorAndNutritionist}
-                onChange={(e) =>
-                  setColumnFilters((f) => ({
-                    ...f,
-                    doctorAndNutritionist: e.target.value as BoolFilter,
-                  }))
-                }
-                className={filterSelectClass}
-              >
-                <option value="all">All</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </div>
+            ))}
             {hasActiveColumnFilters && (
               <button
                 type="button"
@@ -1005,37 +969,17 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Blood Group
                     </th>
-                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                    {expertTypes.map((et) => (
+                    <th key={et.type_key} className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       <EditableColumnHeader
-                        label="Doctor Consultation"
+                        label={`${et.type} Consultation`}
                         editable={canEditConsultation}
-                        isEditing={consultationEditMode.has("want_doctor_consultation")}
-                        onToggleEdit={() => toggleConsultationEditMode("want_doctor_consultation")}
-                        editTitle="doctor consultation"
+                        isEditing={consultationEditMode.has(et.type_key)}
+                        onToggleEdit={() => toggleConsultationEditMode(et.type_key)}
+                        editTitle={`${et.type.toLowerCase()} consultation`}
                       />
                     </th>
-                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      <EditableColumnHeader
-                        label="Nutritionist Consultation"
-                        editable={canEditConsultation}
-                        isEditing={consultationEditMode.has("want_nutritionist_consultation")}
-                        onToggleEdit={() => toggleConsultationEditMode("want_nutritionist_consultation")}
-                        editTitle="nutritionist consultation"
-                      />
-                    </th>
-                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      <EditableColumnHeader
-                        label="Doctor + Nutritionist"
-                        editable={canEditConsultation}
-                        isEditing={consultationEditMode.has(
-                          "want_doctor_and_nutritionist_consultation"
-                        )}
-                        onToggleEdit={() =>
-                          toggleConsultationEditMode("want_doctor_and_nutritionist_consultation")
-                        }
-                        editTitle="doctor + nutritionist consultation"
-                      />
-                    </th>
+                    ))}
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Profile Created On Metsights
                     </th>
@@ -1141,47 +1085,22 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.participant_blood_group || "—"}
                         </td>
+                        {expertTypes.map((et) => (
                         <td
+                          key={et.type_key}
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
                           onClick={(ev) => {
                             if (
-                              consultationEditMode.has("want_doctor_consultation") &&
+                              consultationEditMode.has(et.type_key) &&
                               canEditConsultation
                             ) {
                               ev.stopPropagation();
                             }
                           }}
                         >
-                          {renderConsultationCell(p, "want_doctor_consultation")}
+                          {renderConsultationCell(p, et.type_key)}
                         </td>
-                        <td
-                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
-                          onClick={(ev) => {
-                            if (
-                              consultationEditMode.has("want_nutritionist_consultation") &&
-                              canEditConsultation
-                            ) {
-                              ev.stopPropagation();
-                            }
-                          }}
-                        >
-                          {renderConsultationCell(p, "want_nutritionist_consultation")}
-                        </td>
-                        <td
-                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
-                          onClick={(ev) => {
-                            if (
-                              consultationEditMode.has(
-                                "want_doctor_and_nutritionist_consultation"
-                              ) &&
-                              canEditConsultation
-                            ) {
-                              ev.stopPropagation();
-                            }
-                          }}
-                        >
-                          {renderConsultationCell(p, "want_doctor_and_nutritionist_consultation")}
-                        </td>
+                        ))}
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {formatBool(p.is_profile_created_on_metsights)}
                         </td>

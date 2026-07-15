@@ -4,10 +4,12 @@ import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
   diagnosticPackagesApi,
+  expertTypesApi,
   getApiError,
   uploadsApi,
   type DiagnosticPackageCreate,
   type DiagnosticPackageListItem,
+  type ExpertTypeItem,
 } from "../../lib/api";
 import { DiagnosticFilterChips } from "./DiagnosticFilterChips";
 import { DiagnosticPackageDrawer } from "./DiagnosticPackageDrawer";
@@ -29,8 +31,7 @@ const EMPTY_FORM: DiagnosticPackageCreate = {
   price: null,
   original_price: null,
   is_most_popular: false,
-  complementary_nutritionist: true,
-  complementary_doctor: false,
+  complementary_consultation: {},
   health_areas_covered: "",
   about_text: "",
   bookings_count: null,
@@ -76,6 +77,11 @@ export function DiagnosticPackages() {
   const [reorderingPackages, setReorderingPackages] = useState(false);
   const [openCreateTestGroup, setOpenCreateTestGroup] = useState<(() => void) | null>(null);
   const [openCreateTest, setOpenCreateTest] = useState<(() => void) | null>(null);
+  const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
+
+  useEffect(() => {
+    expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
+  }, []);
 
   const fetchPackages = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -206,7 +212,7 @@ export function DiagnosticPackages() {
   const openCreate = () => {
     setModalMode("add");
     setEditing(null);
-    setForm({ ...EMPTY_FORM, complementary_doctor: false });
+    setForm({ ...EMPTY_FORM });
     setFormError(null);
     setModalOpen(true);
   };
@@ -226,8 +232,7 @@ export function DiagnosticPackages() {
       price: row.price ?? null,
       original_price: row.original_price ?? null,
       is_most_popular: !!row.is_most_popular,
-      complementary_nutritionist: !!row.complementary_nutritionist,
-      complementary_doctor: !!row.complementary_doctor,
+      complementary_consultation: row.complementary_consultation ?? {},
       health_areas_covered: "",
       about_text: "",
       bookings_count: null,
@@ -323,8 +328,7 @@ export function DiagnosticPackages() {
         price: form.price ?? null,
         original_price: form.original_price ?? null,
         is_most_popular: !!form.is_most_popular,
-        complementary_nutritionist: !!form.complementary_nutritionist,
-        complementary_doctor: !!form.complementary_doctor,
+        complementary_consultation: form.complementary_consultation ?? {},
         health_areas_covered: form.health_areas_covered?.trim() || null,
         about_text: form.about_text?.trim() || null,
         bookings_count: form.bookings_count ?? null,
@@ -763,28 +767,27 @@ export function DiagnosticPackages() {
                 Most popular
               </label>
             </div>
-            <div className="sm:col-span-2">
-              <label className="flex items-center gap-2 px-3 py-4 rounded-lg border border-zinc-300 bg-zinc-50 text-sm font-medium text-zinc-900 cursor-pointer hover:bg-zinc-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={form.complementary_nutritionist !== false}
-                  onChange={(e) => setForm((prev) => ({ ...prev, complementary_nutritionist: e.target.checked }))}
-                  className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
-                />
-                Nutritionist consultation
-              </label>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="flex items-center gap-2 px-3 py-4 rounded-lg border border-zinc-300 bg-zinc-50 text-sm font-medium text-zinc-900 cursor-pointer hover:bg-zinc-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={form.complementary_doctor === true}
-                  onChange={(e) => setForm((prev) => ({ ...prev, complementary_doctor: e.target.checked }))}
-                  className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
-                />
-                Doctor consultation
-              </label>
-            </div>
+            {expertTypes.map((et) => (
+              <div key={et.type_key} className="sm:col-span-2">
+                <label className="flex items-center gap-2 px-3 py-4 rounded-lg border border-zinc-300 bg-zinc-50 text-sm font-medium text-zinc-900 cursor-pointer hover:bg-zinc-100 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={!!(form.complementary_consultation ?? {})[et.type_key]}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        complementary_consultation: {
+                          ...(prev.complementary_consultation ?? {}),
+                          [et.type_key]: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="w-4 h-4 text-zinc-900 bg-white border-zinc-300 rounded focus:ring-zinc-900 focus:ring-2"
+                  />
+                  {et.type} consultation
+                </label>
+              </div>
+            ))}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">Health areas covered</label>
               <textarea

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
   expertsApi,
+  expertTypesApi,
   getApiError,
   uploadsApi,
   usersApi,
@@ -13,7 +14,7 @@ import {
   type ExpertListItem,
   type ExpertPayload,
   type ExpertTag,
-  type ExpertType,
+  type ExpertTypeItem,
   type UserListItem,
 } from "../../lib/api";
 
@@ -33,7 +34,7 @@ function formatViewUserId(userId: number | null | undefined, user: UserListItem 
 
 const emptyPayload = (): ExpertPayload => ({
   user_id: 0,
-  expert_type: "doctor",
+  expert_type: "",
   specialization: "",
   profile_photo: "",
   experience_years: undefined,
@@ -47,7 +48,196 @@ const emptyPayload = (): ExpertPayload => ({
   patient_count: 0,
 });
 
-export function Experts() {
+// ─── Expert Types Tab ──────────────────────────────────────────────────────────
+
+function ExpertTypesTab() {
+  const [items, setItems] = useState<ExpertTypeItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editItem, setEditItem] = useState<ExpertTypeItem | null>(null);
+  const [formTypeKey, setFormTypeKey] = useState("");
+  const [formType, setFormType] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await expertTypesApi.list();
+      setItems(res.data.data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
+
+  const openAdd = () => {
+    setEditItem(null);
+    setFormTypeKey("");
+    setFormType("");
+    setModalMode("add");
+    setModalOpen(true);
+    setError(null);
+  };
+
+  const openEdit = (item: ExpertTypeItem) => {
+    setEditItem(item);
+    setFormTypeKey(item.type_key);
+    setFormType(item.type);
+    setModalMode("edit");
+    setModalOpen(true);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!formTypeKey.trim() || !formType.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (modalMode === "add") {
+        await expertTypesApi.create({ type_key: formTypeKey.trim().toLowerCase(), type: formType.trim() });
+      } else if (editItem) {
+        await expertTypesApi.update(editItem.id, { type_key: formTypeKey.trim().toLowerCase(), type: formType.trim() });
+      }
+      setModalOpen(false);
+      fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (item: ExpertTypeItem) => {
+    if (!confirm(`Delete expert type "${item.type}"?`)) return;
+    setError(null);
+    try {
+      await expertTypesApi.delete(item.id);
+      fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <h2 className="text-base font-semibold text-zinc-900">Expert Types</h2>
+        <button
+          type="button"
+          onClick={openAdd}
+          className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+        >
+          <Plus className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline">Add type</span>
+        </button>
+      </div>
+
+      {error && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
+
+      {loading ? (
+        <div className="py-12 flex justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-12 text-center text-zinc-500 text-sm">No expert types configured yet.</div>
+      ) : (
+        <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-100 bg-zinc-50/60">
+                <th className="px-4 py-3 text-left font-medium text-zinc-600">ID</th>
+                <th className="px-4 py-3 text-left font-medium text-zinc-600">Key</th>
+                <th className="px-4 py-3 text-left font-medium text-zinc-600">Display Name</th>
+                <th className="px-4 py-3 text-right font-medium text-zinc-600">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-b border-zinc-50 hover:bg-zinc-50/50">
+                  <td className="px-4 py-3 text-zinc-700">{item.id}</td>
+                  <td className="px-4 py-3 text-zinc-700 font-mono text-xs">{item.type_key}</td>
+                  <td className="px-4 py-3 text-zinc-900">{item.type}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(item)}
+                      className="px-2 py-1 rounded text-xs text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 mr-1"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(item)}
+                      className="px-2 py-1 rounded text-xs text-red-600 hover:text-red-800 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 inline" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalMode === "add" ? "Add Expert Type" : "Edit Expert Type"}
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-4 text-sm">
+          <label className="block">
+            <span className="text-zinc-600 text-xs">Type Key *</span>
+            <input
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
+              value={formTypeKey}
+              onChange={(e) => setFormTypeKey(e.target.value)}
+              placeholder="e.g. doctor"
+            />
+            <p className="text-xs text-zinc-400 mt-1">Lowercase slug, used as identifier</p>
+          </label>
+          <label className="block">
+            <span className="text-zinc-600 text-xs">Display Name *</span>
+            <input
+              className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
+              value={formType}
+              onChange={(e) => setFormType(e.target.value)}
+              placeholder="e.g. Doctor"
+            />
+          </label>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg border border-zinc-300 text-sm">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {submitting ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ─── Experts List Tab ──────────────────────────────────────────────────────────
+
+function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
   const [data, setData] = useState<ExpertListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -175,7 +365,9 @@ export function Experts() {
   const openAdd = () => {
     setError(null);
     setSelected(null);
-    setFormData(emptyPayload());
+    const payload = emptyPayload();
+    payload.expert_type = expertTypes[0]?.type_key ?? "";
+    setFormData(payload);
     setLanguagesText("");
     syncModesFromPayload([]);
     setTags([]);
@@ -193,7 +385,7 @@ export function Experts() {
         setSelected(e);
         setFormData({
           user_id: e.user_id && e.user_id > 0 ? e.user_id : 0,
-          expert_type: (e.expert_type as ExpertType) || "doctor",
+          expert_type: e.expert_type || expertTypes[0]?.type_key || "",
           specialization: e.specialization ?? "",
           profile_photo: e.profile_photo ?? "",
           experience_years: e.experience_years ?? undefined,
@@ -339,7 +531,7 @@ export function Experts() {
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Experts</h1>
+        <h2 className="text-base font-semibold text-zinc-900">Experts</h2>
         <button
           type="button"
           onClick={openAdd}
@@ -372,8 +564,9 @@ export function Experts() {
             className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
           >
             <option value="">All types</option>
-            <option value="doctor">Doctor</option>
-            <option value="nutritionist">Nutritionist</option>
+            {expertTypes.map((et) => (
+              <option key={et.type_key} value={et.type_key}>{et.type}</option>
+            ))}
           </select>
           <select
             value={statusFilter}
@@ -482,11 +675,13 @@ export function Experts() {
                   className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
                   value={formData.expert_type}
                   onChange={(e) =>
-                    setFormData((p) => ({ ...p, expert_type: e.target.value as ExpertType }))
+                    setFormData((p) => ({ ...p, expert_type: e.target.value }))
                   }
                 >
-                  <option value="doctor">Doctor</option>
-                  <option value="nutritionist">Nutritionist</option>
+                  {expertTypes.length === 0 && <option value="">No types available</option>}
+                  {expertTypes.map((et) => (
+                    <option key={et.type_key} value={et.type_key}>{et.type}</option>
+                  ))}
                 </select>
               </label>
               <label className="block">
@@ -693,6 +888,67 @@ export function Experts() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+// ─── Main Experts Page ─────────────────────────────────────────────────────────
+
+type TabId = "experts" | "expert-types";
+
+export function Experts() {
+  const [activeTab, setActiveTab] = useState<TabId>("experts");
+  const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
+
+  const fetchExpertTypes = useCallback(async () => {
+    try {
+      const res = await expertTypesApi.list();
+      setExpertTypes(res.data.data);
+    } catch {
+      /* ignore — tab will show its own errors */
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchExpertTypes();
+  }, [fetchExpertTypes]);
+
+  useEffect(() => {
+    if (activeTab === "experts") {
+      fetchExpertTypes();
+    }
+  }, [activeTab, fetchExpertTypes]);
+
+  const tabs: { id: TabId; label: string }[] = [
+    { id: "experts", label: "Experts" },
+    { id: "expert-types", label: "Expert Types" },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Experts</h1>
+      </div>
+
+      <div className="flex gap-1 mb-6 border-b border-zinc-200">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.id
+                ? "border-zinc-900 text-zinc-900"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "experts" && <ExpertsListTab expertTypes={expertTypes} />}
+      {activeTab === "expert-types" && <ExpertTypesTab />}
     </div>
   );
 }

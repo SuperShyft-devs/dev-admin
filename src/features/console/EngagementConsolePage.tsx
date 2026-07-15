@@ -773,15 +773,9 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
       {field("Department", p.participant_department)}
       {field("Employee ID", p.participants_employee_id)}
       {field("Blood Group", p.participant_blood_group)}
-      {field("Doctor Consultation", formatBool(p.want_doctor_consultation))}
-      {field(
-        "Nutritionist Consultation",
-        formatBool(p.want_nutritionist_consultation)
-      )}
-      {field(
-        "Doctor + Nutritionist",
-        formatBool(p.want_doctor_and_nutritionist_consultation)
-      )}
+      {p.consultations && Object.entries(p.consultations).map(([key, val]) => (
+        field(`${key.charAt(0).toUpperCase() + key.slice(1)} Consultation`, formatBool(val))
+      ))}
       {field("Barcode", p.barcode)}
       {field("Booking ID", p.booking_id)}
       {field("Booked by user ID", p.booked_by_user_id)}
