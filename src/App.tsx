@@ -19,6 +19,8 @@ import { HealthMetrics } from "./features/health-metrics/HealthMetrics";
 import { MyTasks } from "./features/checklists/MyTasks";
 import { Settings } from "./features/settings/Settings";
 import { Experts } from "./features/experts/Experts";
+import { ExpertPortalPage } from "./features/experts/ExpertPortalPage";
+import { ExpertMePage } from "./features/experts/ExpertMePage";
 import { Notifications } from "./features/notifications/Notifications";
 import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
 import { ConsoleEngagementsPage } from "./features/console/ConsoleEngagementsPage";
@@ -55,6 +57,9 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+  if (employeeRole === "expert") {
+    return <Navigate to="/experts/portal" replace />;
+  }
   if (employeeRole === "onboarding_assistant") {
     return <Navigate to="/engagements/console" replace />;
   }
@@ -72,6 +77,33 @@ function EmployeeRequiredRoute({ children }: { children: React.ReactNode }) {
   }
   if (!employeeRole) {
     return <Navigate to="/login" replace />;
+  }
+  if (employeeRole === "expert") {
+    return <Navigate to="/experts/portal" replace />;
+  }
+  return <>{children}</>;
+}
+
+function ExpertPortalRoute({ children }: { children: React.ReactNode }) {
+  const { employeeRole, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <div className="animate-pulse text-zinc-500">Loading...</div>
+      </div>
+    );
+  }
+  if (employeeRole !== "expert" && employeeRole !== "admin") {
+    if (!employeeRole) {
+      return <Navigate to="/login" replace />;
+    }
+    if (employeeRole === "onboarding_assistant") {
+      return <Navigate to="/engagements/console" replace />;
+    }
+    if (employeeRole === "organization_manager") {
+      return <Navigate to="/organisations" replace />;
+    }
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
@@ -191,6 +223,26 @@ function AppRoutes() {
             <EmployeeRequiredRoute>
               <EngagementConsolePage />
             </EmployeeRequiredRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/experts/portal"
+        element={
+          <ProtectedRoute>
+            <ExpertPortalRoute>
+              <ExpertPortalPage />
+            </ExpertPortalRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/experts/me"
+        element={
+          <ProtectedRoute>
+            <ExpertPortalRoute>
+              <ExpertMePage />
+            </ExpertPortalRoute>
           </ProtectedRoute>
         }
       />

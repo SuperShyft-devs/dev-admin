@@ -128,7 +128,7 @@ export interface UserProfile {
   profile_photo?: string | null;
   employee?: {
     employee_id: number;
-    role: "admin" | "onboarding_assistant" | "organization_manager";
+    role: "admin" | "onboarding_assistant" | "organization_manager" | "expert";
   } | null;
 }
 
@@ -654,7 +654,11 @@ export const uploadsApi = {
 };
 
 // Employees
-export type EmployeeRoleValue = "admin" | "onboarding_assistant" | "organization_manager";
+export type EmployeeRoleValue =
+  | "admin"
+  | "onboarding_assistant"
+  | "organization_manager"
+  | "expert";
 
 export interface EmployeeListItem {
   employee_id: number;
@@ -1078,6 +1082,10 @@ export const expertsApi = {
       `/experts/${expertId}/reviews`,
       { params }
     ),
+};
+
+export const expertsPortalApi = {
+  me: () => api.get<{ data: ExpertDetail }>("/experts/portal/me"),
 };
 
 // Checklists (readiness on engagement list + checklist APIs)

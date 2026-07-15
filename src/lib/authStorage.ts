@@ -55,11 +55,14 @@ export function loginPathWithRedirect(pathname: string, search = ""): string {
 }
 
 export function resolvePostLoginPath(
-  role: "admin" | "onboarding_assistant" | "organization_manager" | null,
+  role: "admin" | "onboarding_assistant" | "organization_manager" | "expert" | null,
   redirect?: string | null
 ): string {
   if (redirect && redirect.startsWith("/") && !redirect.startsWith("/login")) {
     return redirect;
+  }
+  if (role === "expert") {
+    return "/experts/portal";
   }
   if (role === "onboarding_assistant") {
     return "/engagements/console";

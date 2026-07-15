@@ -14,12 +14,15 @@ interface AuthState {
   userId: number | null;
   userProfile: UserProfile | null;
   employeeId: number | null;
-  employeeRole: "admin" | "onboarding_assistant" | "organization_manager" | null;
+  employeeRole: "admin" | "onboarding_assistant" | "organization_manager" | "expert" | null;
   isLoading: boolean;
 }
 
 interface AuthContextValue extends AuthState {
-  login: (phone: string, otp: string) => Promise<"admin" | "onboarding_assistant" | "organization_manager" | null>;
+  login: (
+    phone: string,
+    otp: string
+  ) => Promise<"admin" | "onboarding_assistant" | "organization_manager" | "expert" | null>;
   logout: () => Promise<void>;
   sendOtp: (phone: string) => Promise<{ session_id: number }>;
   error: string | null;
