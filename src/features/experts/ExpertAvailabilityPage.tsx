@@ -37,6 +37,7 @@ function generateTimeOptions(stepMinutes: number = 15): string[] {
   return opts;
 }
 
+/** Grid rows step by session duration (clickable session start times). */
 function generateSlotStarts(slotDuration: number): number[] {
   const step = Math.max(5, slotDuration);
   const slots: number[] = [];
@@ -44,6 +45,24 @@ function generateSlotStarts(slotDuration: number): number[] {
     slots.push(m);
   }
   return slots;
+}
+
+/**
+ * Bookable start times inside an availability window:
+ * starts every (slot_duration + buffer_time) minutes.
+ */
+function bookableStartsInWindow(
+  windowStart: number,
+  windowEnd: number,
+  slotDuration: number,
+  bufferTime: number
+): number[] {
+  const stride = Math.max(5, slotDuration + Math.max(0, bufferTime));
+  const starts: number[] = [];
+  for (let m = windowStart; m + slotDuration <= windowEnd; m += stride) {
+    starts.push(m);
+  }
+  return starts;
 }
 
 function formatTimeDisplay(t: string): string {
@@ -61,6 +80,59 @@ function formatMinutesDisplay(mins: number): string {
 
 type LocalBlock = AvailabilityBlockPayload & { _tempId: string; id?: number };
 
+/** Merge overlapping / touching windows on the same day into continuous ranges. */
+function mergeDayBlocks(blocks: LocalBlock[]): LocalBlock[] {
+  const byDay = new Map<number, LocalBlock[]>();
+  for (const b of blocks) {
+    const list = byDay.get(b.day_of_week) ?? [];
+    list.push({ ...b });
+    byDay.set(b.day_of_week, list);
+  }
+
+  const result: LocalBlock[] = [];
+  for (const [, list] of byDay) {
+    list.sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+    const merged: LocalBlock[] = [];
+    for (const b of list) {
+      if (merged.length === 0) {
+        merged.push(b);
+        continue;
+      }
+      const last = merged[merged.length - 1];
+      const lastEnd = timeToMinutes(last.end_time);
+      const bStart = timeToMinutes(b.start_time);
+      if (bStart <= lastEnd) {
+        last.end_time = minutesToTime(Math.max(lastEnd, timeToMinutes(b.end_time)));
+        last.slot_duration = b.slot_duration || last.slot_duration;
+        last.buffer_time = Math.max(last.buffer_time ?? 0, b.buffer_time ?? 0);
+      } else {
+        merged.push(b);
+      }
+    }
+    result.push(...merged);
+  }
+  return result;
+}
+
+function toPayload(blocks: LocalBlock[]): AvailabilityBlockPayload[] {
+  return blocks.map((b) => ({
+    day_of_week: b.day_of_week,
+    start_time: b.start_time,
+    end_time: b.end_time,
+    slot_duration: b.slot_duration,
+    buffer_time: b.buffer_time,
+  }));
+}
+
+function fromServerBlocks(data: AvailabilityBlock[]): LocalBlock[] {
+  return mergeDayBlocks(
+    data.map((b) => ({
+      ...b,
+      _tempId: `srv-${b.id}`,
+    }))
+  );
+}
+
 type OverridePopoverState = {
   open: boolean;
   date: string;
@@ -76,7 +148,7 @@ const INITIAL_OVERRIDE_POPOVER: OverridePopoverState = {
   available: false,
   startTime: "09:00",
   endTime: "17:00",
-  bufferTime: 5,
+  bufferTime: DEFAULT_BUFFER,
 };
 
 export function ExpertAvailabilityPage() {
@@ -86,13 +158,32 @@ export function ExpertAvailabilityPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
   const [overridePopover, setOverridePopover] = useState<OverridePopoverState>(INITIAL_OVERRIDE_POPOVER);
   const overridePopoverRef = useRef<HTMLDivElement>(null);
+  const saveSeq = useRef(0);
 
   const slotDuration = expert?.session_duration_mins ?? 30;
+  const bufferTime = DEFAULT_BUFFER;
   const slotStarts = useMemo(() => generateSlotStarts(slotDuration), [slotDuration]);
   const timeOptions = generateTimeOptions(15);
+
+  const persistBlocks = useCallback(async (nextBlocks: LocalBlock[]) => {
+    const merged = mergeDayBlocks(nextBlocks);
+    setBlocks(merged);
+    const seq = ++saveSeq.current;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await expertAvailabilityPortalApi.bulkSave(toPayload(merged));
+      if (seq !== saveSeq.current) return;
+      setBlocks(fromServerBlocks(res.data.data));
+    } catch (err) {
+      if (seq !== saveSeq.current) return;
+      setError(getApiError(err));
+    } finally {
+      if (seq === saveSeq.current) setSaving(false);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -104,14 +195,15 @@ export function ExpertAvailabilityPage() {
         expertAvailabilityPortalApi.listOverrides(),
       ]);
       setExpert(expertRes.data.data);
-      setBlocks(
-        blocksRes.data.data.map((b: AvailabilityBlock) => ({
-          ...b,
-          _tempId: `srv-${b.id}`,
-        }))
-      );
+      const loaded = fromServerBlocks(blocksRes.data.data);
+      setBlocks(loaded);
       setOverrides(overridesRes.data.data);
-      setDirty(false);
+
+      // If legacy fragmented rows can merge, persist cleaned windows once.
+      if (loaded.length !== blocksRes.data.data.length) {
+        const res = await expertAvailabilityPortalApi.bulkSave(toPayload(loaded));
+        setBlocks(fromServerBlocks(res.data.data));
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -133,7 +225,8 @@ export function ExpertAvailabilityPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const isSlotOccupied = (day: number, slotStartMins: number) => {
+  /** Grid cell is covered by an availability window (continuous fill). */
+  const isSlotInWindow = (day: number, slotStartMins: number) => {
     const slotEnd = slotStartMins + slotDuration;
     return blocks.some((b) => {
       if (b.day_of_week !== day) return false;
@@ -143,29 +236,50 @@ export function ExpertAvailabilityPage() {
     });
   };
 
+  /**
+   * Find the session that starts at this grid cell if it is a bookable start
+   * inside a window (respects slot_duration + buffer_time stride).
+   */
+  const bookableSessionAt = (day: number, slotStartMins: number): { start: number; end: number } | null => {
+    for (const b of blocks) {
+      if (b.day_of_week !== day) continue;
+      const wStart = timeToMinutes(b.start_time);
+      const wEnd = timeToMinutes(b.end_time);
+      const buffer = b.buffer_time ?? bufferTime;
+      const duration = b.slot_duration || slotDuration;
+      const starts = bookableStartsInWindow(wStart, wEnd, duration, buffer);
+      if (starts.includes(slotStartMins)) {
+        return { start: slotStartMins, end: slotStartMins + duration };
+      }
+    }
+    return null;
+  };
+
   const addSlot = (dayOfWeek: number, startMins: number) => {
     const endMins = Math.min(startMins + slotDuration, DAY_END_MINS);
     if (endMins <= startMins) return;
-    if (isSlotOccupied(dayOfWeek, startMins)) return;
-    setError(null);
-    setBlocks((prev) => [
-      ...prev,
+    if (isSlotInWindow(dayOfWeek, startMins)) return;
+
+    // New session cannot start inside another window's buffer after its last session.
+    // Treat click as extending / creating an availability window of one session length,
+    // then merge with any touching / overlapping windows on that day.
+    const next: LocalBlock[] = [
+      ...blocks,
       {
         _tempId: `tmp-${Date.now()}-${Math.random()}`,
         day_of_week: dayOfWeek,
         start_time: minutesToTime(startMins),
         end_time: minutesToTime(endMins),
         slot_duration: slotDuration,
-        buffer_time: DEFAULT_BUFFER,
+        buffer_time: bufferTime,
       },
-    ]);
-    setDirty(true);
+    ];
+    void persistBlocks(next);
   };
 
   const removeBlock = (index: number) => {
-    setError(null);
-    setBlocks((prev) => prev.filter((_, i) => i !== index));
-    setDirty(true);
+    if (index < 0) return;
+    void persistBlocks(blocks.filter((_, i) => i !== index));
   };
 
   const handleCopyMondayToWeekdays = () => {
@@ -181,39 +295,11 @@ export function ExpertAvailabilityPage() {
         id: undefined,
       }))
     );
-    setBlocks([...filtered, ...copies]);
-    setDirty(true);
+    void persistBlocks([...filtered, ...copies]);
   };
 
   const handleClearWeek = () => {
-    setBlocks([]);
-    setDirty(true);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const payload: AvailabilityBlockPayload[] = blocks.map((b) => ({
-        day_of_week: b.day_of_week,
-        start_time: b.start_time,
-        end_time: b.end_time,
-        slot_duration: b.slot_duration,
-        buffer_time: b.buffer_time,
-      }));
-      const res = await expertAvailabilityPortalApi.bulkSave(payload);
-      setBlocks(
-        res.data.data.map((b: AvailabilityBlock) => ({
-          ...b,
-          _tempId: `srv-${b.id}`,
-        }))
-      );
-      setDirty(false);
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setSaving(false);
-    }
+    void persistBlocks([]);
   };
 
   const handleAddOverride = async () => {
@@ -300,18 +386,20 @@ export function ExpertAvailabilityPage() {
               <dd className="text-zinc-900">{slotDuration} min</dd>
             </div>
             <div>
+              <dt className="text-xs text-zinc-500 mb-0.5">Buffer between sessions</dt>
+              <dd className="text-zinc-900">{bufferTime} min</dd>
+            </div>
+            <div>
               <dt className="text-xs text-zinc-500 mb-0.5">Timezone</dt>
               <dd className="text-zinc-900">{Intl.DateTimeFormat().resolvedOptions().timeZone}</dd>
             </div>
           </dl>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !dirty}
-            className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
+          {saving && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500 shrink-0">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Saving…
+            </span>
+          )}
         </div>
 
         <div className="mb-4 bg-white border border-zinc-200 rounded-xl overflow-hidden">
@@ -351,27 +439,44 @@ export function ExpertAvailabilityPage() {
                 {DAYS.map((_, dayIndex) => (
                   <div key={dayIndex} className="relative border-l border-zinc-200">
                     {slotStarts.map((mins) => {
-                      const occupied = isSlotOccupied(dayIndex, mins);
+                      const occupied = isSlotInWindow(dayIndex, mins);
+                      const session = bookableSessionAt(dayIndex, mins);
                       return (
                         <div
                           key={mins}
-                          className={`h-8 border-b border-zinc-100 ${
+                          className={`h-8 border-b border-zinc-100 relative ${
                             !occupied ? "cursor-pointer hover:bg-zinc-50" : ""
                           }`}
                           onClick={() => {
                             if (!occupied) addSlot(dayIndex, mins);
                           }}
-                        />
+                        >
+                          {/* Subtle marker for bookable session starts (session + buffer stride) */}
+                          {session && (
+                            <div
+                              className="absolute inset-x-1 top-0 bottom-0 pointer-events-none border-t border-white/30"
+                              title={`Session ${formatMinutesDisplay(session.start)}–${formatMinutesDisplay(session.end)}`}
+                            />
+                          )}
+                        </div>
                       );
                     })}
 
                     {blocksForDay(dayIndex).map((block) => {
                       const style = getBlockStyle(block);
                       const blockIndex = blocks.findIndex((b) => b._tempId === block._tempId);
+                      const duration = block.slot_duration || slotDuration;
+                      const buffer = block.buffer_time ?? bufferTime;
+                      const sessions = bookableStartsInWindow(
+                        timeToMinutes(block.start_time),
+                        timeToMinutes(block.end_time),
+                        duration,
+                        buffer
+                      );
                       return (
                         <div
                           key={block._tempId}
-                          title="Click to remove"
+                          title="Click to remove this availability window"
                           className="absolute left-0.5 right-0.5 bg-zinc-900 text-white rounded-sm px-1 py-0.5 text-[10px] cursor-pointer hover:bg-zinc-700 transition-colors duration-150 overflow-hidden z-10"
                           style={style}
                           onClick={(e) => {
@@ -382,6 +487,12 @@ export function ExpertAvailabilityPage() {
                           <div className="font-medium leading-tight truncate">
                             {formatTimeDisplay(block.start_time)}–{formatTimeDisplay(block.end_time)}
                           </div>
+                          {sessions.length > 0 &&
+                            timeToMinutes(block.end_time) - timeToMinutes(block.start_time) >= duration * 2 && (
+                              <div className="text-zinc-400 text-[9px] mt-0.5 truncate">
+                                {sessions.length} sessions · {duration}m + {buffer}m buffer
+                              </div>
+                            )}
                         </div>
                       );
                     })}
