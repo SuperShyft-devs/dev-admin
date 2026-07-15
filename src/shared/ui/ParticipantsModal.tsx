@@ -149,13 +149,18 @@ function matchesBoolFilter(value: boolean | null | undefined, filter: BoolFilter
 function normalizeConsultationPref(
   value: ConsultationPreference | boolean | null | undefined
 ): ConsultationPreference {
-  if (value == null) return { want: false, date: null, slot: null, expert_id: null };
-  if (typeof value === "boolean") return { want: value, date: null, slot: null, expert_id: null };
+  if (value == null) {
+    return { want: false, date: null, slot: null, expert_id: null, done: false };
+  }
+  if (typeof value === "boolean") {
+    return { want: value, date: null, slot: null, expert_id: null, done: false };
+  }
   return {
     want: Boolean(value.want),
     date: value.date ?? null,
     slot: value.slot ?? null,
     expert_id: value.expert_id ?? null,
+    done: Boolean(value.done),
   };
 }
 
@@ -168,6 +173,10 @@ function consultationWant(value: ConsultationPreference | boolean | null | undef
 function formatConsultationCell(value: ConsultationPreference | boolean | null | undefined): string {
   const pref = normalizeConsultationPref(value);
   if (!pref.want) return "No";
+  if (pref.done) {
+    const when = pref.date && pref.slot ? ` · ${pref.date} ${pref.slot}` : "";
+    return `Done${when}`;
+  }
   if (pref.expert_id != null) {
     const when = pref.date && pref.slot ? ` · ${pref.date} ${pref.slot}` : "";
     return `Assigned (#${pref.expert_id})${when}`;
@@ -566,7 +575,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       const nextPref: ConsultationPreference = {
         ...prev,
         want: value === true,
-        ...(value !== true ? { date: null, slot: null, expert_id: null } : {}),
+        done: value === true ? Boolean(prev.done) : false,
+        ...(value !== true ? { date: null, slot: null, expert_id: null, done: false } : {}),
       };
       const updatedConsultations = { ...(participant.consultations ?? {}), [field]: nextPref };
       await participantsApi.updateParticipant(engagementIdForDepartment, participant.user_id, {

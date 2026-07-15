@@ -1095,6 +1095,7 @@ export interface ConsultationPreference {
   date?: string | null;
   slot?: string | null;
   expert_id?: number | null;
+  done?: boolean;
 }
 
 export interface ConsultationRequestItem {
@@ -1109,6 +1110,7 @@ export interface ConsultationRequestItem {
   date?: string | null;
   slot?: string | null;
   engagement_participant_id?: number;
+  expert_id?: number | null;
 }
 
 export const expertsPortalApi = {
@@ -1123,6 +1125,15 @@ export const expertsPortalApi = {
     slot: string;
     expert_id?: number;
   }) => api.post<{ data: { message: string } }>("/experts/portal/confirm", payload),
+  listUpcoming: () =>
+    api.get<{ data: ConsultationRequestItem[] }>("/experts/portal/upcoming"),
+  markConsultationDone: (payload: {
+    user_id: number;
+    engagement_id: number;
+    expert_type: string;
+    expert_id?: number;
+  }) =>
+    api.post<{ data: { message: string } }>("/experts/portal/consultations/done", payload),
 };
 
 export const expertsConsultationsApi = {

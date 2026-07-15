@@ -784,6 +784,7 @@ function ParticipantDetail({ participant: p }: { participant: Participant }) {
             val.date ? `Date: ${val.date}` : null,
             val.slot ? `Slot: ${val.slot}` : null,
             val.expert_id != null ? `Expert: #${val.expert_id}` : null,
+            `Done: ${formatBool(Boolean(val.done))}`,
           ].filter(Boolean);
           return field(label, bits.join(" · "));
         })}

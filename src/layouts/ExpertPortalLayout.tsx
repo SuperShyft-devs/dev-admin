@@ -1,12 +1,22 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { LogOut, UserRound, LayoutDashboard, CalendarClock, Inbox, Menu, X } from "lucide-react";
+import {
+  LogOut,
+  UserRound,
+  LayoutDashboard,
+  CalendarClock,
+  CalendarDays,
+  Inbox,
+  Menu,
+  X,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 const portalNavItems = [
   { to: "/experts/portal", icon: LayoutDashboard, label: "Dashboard", end: true },
   { to: "/experts/portal/availability", icon: CalendarClock, label: "Availability", end: false },
   { to: "/experts/requests", icon: Inbox, label: "Requests", end: false },
+  { to: "/experts/upcoming", icon: CalendarDays, label: "Upcoming", end: false },
 ];
 
 interface ExpertPortalLayoutProps {
