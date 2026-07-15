@@ -1018,6 +1018,8 @@ export interface ExpertListItem {
   session_duration_mins?: number | null;
   appointment_fee_paise?: number | null;
   original_fee_paise?: number | null;
+  effective_from?: string | null;
+  effective_until?: string | null;
   status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1041,6 +1043,8 @@ export interface ExpertPayload {
   appointment_fee_paise?: number | null;
   original_fee_paise?: number | null;
   patient_count?: number | null;
+  effective_from?: string | null;
+  effective_until?: string | null;
 }
 
 export interface ExpertReview {
@@ -1086,6 +1090,74 @@ export const expertsApi = {
 
 export const expertsPortalApi = {
   me: () => api.get<{ data: ExpertDetail }>("/experts/portal/me"),
+};
+
+export interface AvailabilityBlock {
+  id: number;
+  expert_id: number;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration: number;
+  buffer_time: number;
+}
+
+export interface AvailabilityOverride {
+  id: number;
+  expert_id: number;
+  override_date: string;
+  availability: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  buffer_time?: number | null;
+}
+
+export interface AvailabilityBlockPayload {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration: number;
+  buffer_time: number;
+}
+
+export interface AvailabilityOverridePayload {
+  override_date: string;
+  availability: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  buffer_time?: number | null;
+}
+
+export const expertAvailabilityPortalApi = {
+  listBlocks: () =>
+    api.get<{ data: AvailabilityBlock[] }>("/experts/portal/availability"),
+  createBlock: (payload: AvailabilityBlockPayload) =>
+    api.post<{ data: AvailabilityBlock }>("/experts/portal/availability", payload),
+  updateBlock: (blockId: number, payload: AvailabilityBlockPayload) =>
+    api.put<{ data: AvailabilityBlock }>(`/experts/portal/availability/${blockId}`, payload),
+  deleteBlock: (blockId: number) =>
+    api.delete<{ data: { id: number } }>(`/experts/portal/availability/${blockId}`),
+  bulkSave: (blocks: AvailabilityBlockPayload[]) =>
+    api.put<{ data: AvailabilityBlock[] }>("/experts/portal/availability", { blocks }),
+  listOverrides: () =>
+    api.get<{ data: AvailabilityOverride[] }>("/experts/portal/overrides"),
+  createOverride: (payload: AvailabilityOverridePayload) =>
+    api.post<{ data: AvailabilityOverride }>("/experts/portal/overrides", payload),
+  deleteOverride: (overrideId: number) =>
+    api.delete<{ data: { id: number } }>(`/experts/portal/overrides/${overrideId}`),
+};
+
+export const expertAvailabilityAdminApi = {
+  listBlocks: (expertId: number) =>
+    api.get<{ data: AvailabilityBlock[] }>(`/experts/${expertId}/availability`),
+  bulkSave: (expertId: number, blocks: AvailabilityBlockPayload[]) =>
+    api.put<{ data: AvailabilityBlock[] }>(`/experts/${expertId}/availability`, { blocks }),
+  listOverrides: (expertId: number) =>
+    api.get<{ data: AvailabilityOverride[] }>(`/experts/${expertId}/overrides`),
+  createOverride: (expertId: number, payload: AvailabilityOverridePayload) =>
+    api.post<{ data: AvailabilityOverride }>(`/experts/${expertId}/overrides`, payload),
+  deleteOverride: (expertId: number, overrideId: number) =>
+    api.delete<{ data: { id: number } }>(`/experts/${expertId}/overrides/${overrideId}`),
 };
 
 // Checklists (readiness on engagement list + checklist APIs)

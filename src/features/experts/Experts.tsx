@@ -46,6 +46,8 @@ const emptyPayload = (): ExpertPayload => ({
   appointment_fee_paise: undefined,
   original_fee_paise: undefined,
   patient_count: 0,
+  effective_from: undefined,
+  effective_until: undefined,
 });
 
 // ─── Expert Types Tab ──────────────────────────────────────────────────────────
@@ -397,6 +399,8 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
           appointment_fee_paise: e.appointment_fee_paise ?? undefined,
           original_fee_paise: e.original_fee_paise ?? undefined,
           patient_count: e.patient_count ?? 0,
+          effective_from: e.effective_from ?? undefined,
+          effective_until: e.effective_until ?? undefined,
         });
         setLanguagesText((e.languages as string[] | undefined)?.join(", ") ?? "");
         syncModesFromPayload(e.consultation_modes as ConsultationMode[] | null);
@@ -631,6 +635,14 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
               {selected.rating != null ? Number(selected.rating).toFixed(2) : "—"} (
               {selected.review_count ?? 0} reviews)
             </div>
+            <div className="text-zinc-600">
+              <span className="text-zinc-500">Effective from:</span>{" "}
+              {selected.effective_from ?? "—"}
+            </div>
+            <div className="text-zinc-600">
+              <span className="text-zinc-500">Effective until:</span>{" "}
+              {selected.effective_until ?? "No end date"}
+            </div>
             {selected.about_text ? (
               <div className="text-zinc-700 whitespace-pre-wrap">{selected.about_text}</div>
             ) : null}
@@ -807,6 +819,35 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
                     }))
                   }
                 />
+              </label>
+              <label className="block">
+                <span className="text-zinc-600 text-xs">Effective from</span>
+                <input
+                  type="date"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
+                  value={formData.effective_from ?? ""}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      effective_from: e.target.value || undefined,
+                    }))
+                  }
+                />
+              </label>
+              <label className="block">
+                <span className="text-zinc-600 text-xs">Effective until</span>
+                <input
+                  type="date"
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
+                  value={formData.effective_until ?? ""}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      effective_until: e.target.value || undefined,
+                    }))
+                  }
+                />
+                <p className="text-xs text-zinc-400 mt-1">Leave empty for no end date (permanent)</p>
               </label>
             </div>
 
