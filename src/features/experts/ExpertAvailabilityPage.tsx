@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Trash2, X, Copy, Eraser } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Plus, X, Copy, Eraser } from "lucide-react";
 import { ExpertPortalLayout } from "../../layouts/ExpertPortalLayout";
 import {
   expertAvailabilityPortalApi,
@@ -12,15 +12,9 @@ import {
 } from "../../lib/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const HOUR_START = 6;
-const HOUR_END = 22;
-const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
-
-function formatHour(h: number): string {
-  if (h === 0 || h === 24) return "12 AM";
-  if (h === 12) return "12 PM";
-  return h < 12 ? `${h} AM` : `${h - 12} PM`;
-}
+const DAY_START_MINS = 6 * 60;
+const DAY_END_MINS = 22 * 60;
+const DEFAULT_BUFFER = 5;
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
@@ -43,6 +37,15 @@ function generateTimeOptions(stepMinutes: number = 15): string[] {
   return opts;
 }
 
+function generateSlotStarts(slotDuration: number): number[] {
+  const step = Math.max(5, slotDuration);
+  const slots: number[] = [];
+  for (let m = DAY_START_MINS; m < DAY_END_MINS; m += step) {
+    slots.push(m);
+  }
+  return slots;
+}
+
 function formatTimeDisplay(t: string): string {
   const mins = timeToMinutes(t);
   const h = Math.floor(mins / 60);
@@ -52,26 +55,11 @@ function formatTimeDisplay(t: string): string {
   return m === 0 ? `${h12} ${ampm}` : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-type LocalBlock = AvailabilityBlockPayload & { _tempId: string; id?: number };
-type PopoverState = {
-  open: boolean;
-  dayOfWeek: number;
-  editIndex: number | null;
-  startTime: string;
-  endTime: string;
-  slotDuration: number;
-  bufferTime: number;
-};
+function formatMinutesDisplay(mins: number): string {
+  return formatTimeDisplay(minutesToTime(mins));
+}
 
-const INITIAL_POPOVER: PopoverState = {
-  open: false,
-  dayOfWeek: 0,
-  editIndex: null,
-  startTime: "09:00",
-  endTime: "10:00",
-  slotDuration: 30,
-  bufferTime: 5,
-};
+type LocalBlock = AvailabilityBlockPayload & { _tempId: string; id?: number };
 
 type OverridePopoverState = {
   open: boolean;
@@ -99,12 +87,11 @@ export function ExpertAvailabilityPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [popover, setPopover] = useState<PopoverState>(INITIAL_POPOVER);
   const [overridePopover, setOverridePopover] = useState<OverridePopoverState>(INITIAL_OVERRIDE_POPOVER);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const overridePopoverRef = useRef<HTMLDivElement>(null);
 
   const slotDuration = expert?.session_duration_mins ?? 30;
+  const slotStarts = useMemo(() => generateSlotStarts(slotDuration), [slotDuration]);
   const timeOptions = generateTimeOptions(15);
 
   const fetchData = useCallback(async () => {
@@ -138,9 +125,6 @@ export function ExpertAvailabilityPage() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setPopover(INITIAL_POPOVER);
-      }
       if (overridePopoverRef.current && !overridePopoverRef.current.contains(e.target as Node)) {
         setOverridePopover(INITIAL_OVERRIDE_POPOVER);
       }
@@ -149,60 +133,39 @@ export function ExpertAvailabilityPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const openAddBlock = (dayOfWeek: number, hourClicked: number) => {
-    const startTime = minutesToTime(hourClicked * 60);
-    const endMins = Math.min(hourClicked * 60 + slotDuration, HOUR_END * 60);
-    setPopover({
-      open: true,
-      dayOfWeek,
-      editIndex: null,
-      startTime,
-      endTime: minutesToTime(endMins),
-      slotDuration,
-      bufferTime: 5,
+  const isSlotOccupied = (day: number, slotStartMins: number) => {
+    const slotEnd = slotStartMins + slotDuration;
+    return blocks.some((b) => {
+      if (b.day_of_week !== day) return false;
+      const bStart = timeToMinutes(b.start_time);
+      const bEnd = timeToMinutes(b.end_time);
+      return bStart < slotEnd && bEnd > slotStartMins;
     });
   };
 
-  const openEditBlock = (index: number) => {
-    const b = blocks[index];
-    setPopover({
-      open: true,
-      dayOfWeek: b.day_of_week,
-      editIndex: index,
-      startTime: b.start_time,
-      endTime: b.end_time,
-      slotDuration: b.slot_duration,
-      bufferTime: b.buffer_time,
-    });
-  };
-
-  const handlePopoverSave = () => {
-    if (timeToMinutes(popover.endTime) <= timeToMinutes(popover.startTime)) {
-      setError("End time must be after start time");
-      return;
-    }
+  const addSlot = (dayOfWeek: number, startMins: number) => {
+    const endMins = Math.min(startMins + slotDuration, DAY_END_MINS);
+    if (endMins <= startMins) return;
+    if (isSlotOccupied(dayOfWeek, startMins)) return;
     setError(null);
-    const newBlock: LocalBlock = {
-      _tempId: `tmp-${Date.now()}-${Math.random()}`,
-      day_of_week: popover.dayOfWeek,
-      start_time: popover.startTime,
-      end_time: popover.endTime,
-      slot_duration: popover.slotDuration,
-      buffer_time: popover.bufferTime,
-    };
-    if (popover.editIndex !== null) {
-      setBlocks((prev) => prev.map((b, i) => (i === popover.editIndex ? { ...newBlock, _tempId: b._tempId, id: b.id } : b)));
-    } else {
-      setBlocks((prev) => [...prev, newBlock]);
-    }
+    setBlocks((prev) => [
+      ...prev,
+      {
+        _tempId: `tmp-${Date.now()}-${Math.random()}`,
+        day_of_week: dayOfWeek,
+        start_time: minutesToTime(startMins),
+        end_time: minutesToTime(endMins),
+        slot_duration: slotDuration,
+        buffer_time: DEFAULT_BUFFER,
+      },
+    ]);
     setDirty(true);
-    setPopover(INITIAL_POPOVER);
   };
 
-  const handleDeleteBlock = (index: number) => {
+  const removeBlock = (index: number) => {
+    setError(null);
     setBlocks((prev) => prev.filter((_, i) => i !== index));
     setDirty(true);
-    setPopover(INITIAL_POPOVER);
   };
 
   const handleCopyMondayToWeekdays = () => {
@@ -223,7 +186,6 @@ export function ExpertAvailabilityPage() {
   };
 
   const handleClearWeek = () => {
-    if (!confirm("Clear all availability blocks for the entire week?")) return;
     setBlocks([]);
     setDirty(true);
   };
@@ -289,22 +251,10 @@ export function ExpertAvailabilityPage() {
   const getBlockStyle = (block: LocalBlock) => {
     const startMins = timeToMinutes(block.start_time);
     const endMins = timeToMinutes(block.end_time);
-    const gridStartMins = HOUR_START * 60;
-    const totalMins = (HOUR_END - HOUR_START) * 60;
-    const top = ((startMins - gridStartMins) / totalMins) * 100;
+    const totalMins = DAY_END_MINS - DAY_START_MINS;
+    const top = ((startMins - DAY_START_MINS) / totalMins) * 100;
     const height = ((endMins - startMins) / totalMins) * 100;
     return { top: `${top}%`, height: `${height}%` };
-  };
-
-  const isCellOccupied = (day: number, hour: number) => {
-    const hourStart = hour * 60;
-    const hourEnd = (hour + 1) * 60;
-    return blocks.some((b) => {
-      if (b.day_of_week !== day) return false;
-      const bStart = timeToMinutes(b.start_time);
-      const bEnd = timeToMinutes(b.end_time);
-      return bStart < hourEnd && bEnd > hourStart;
-    });
   };
 
   if (loading) {
@@ -320,7 +270,6 @@ export function ExpertAvailabilityPage() {
   return (
     <ExpertPortalLayout>
       <div className="max-w-[1100px] mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-400 mb-1">Availability</p>
           <h1 className="text-2xl font-semibold text-zinc-900 tracking-tight">Set your consultation hours</h1>
@@ -333,45 +282,42 @@ export function ExpertAvailabilityPage() {
           <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
         )}
 
-        {/* Toolbar */}
-        <div className="mb-6 bg-white border border-zinc-200 rounded-xl p-4 sm:p-5">
-          <div className="flex flex-wrap items-end gap-4 sm:gap-6">
-            <div className="min-w-0">
-              <label className="block text-xs text-zinc-500 mb-1">Effective from</label>
-              <span className="text-sm text-zinc-900">{expert?.effective_from ?? "—"}</span>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <dl className="flex flex-wrap items-end gap-x-6 gap-y-3 text-sm">
+            <div>
+              <dt className="text-xs text-zinc-500 mb-0.5">Effective from</dt>
+              <dd className="text-zinc-900">{expert?.effective_from ?? "—"}</dd>
             </div>
-            <div className="text-zinc-300 hidden sm:block">→</div>
-            <div className="min-w-0">
-              <label className="block text-xs text-zinc-500 mb-1">Effective until</label>
-              <span className="text-sm text-zinc-900">{expert?.effective_until ?? "No end date"}</span>
+            <div className="text-zinc-300 hidden sm:block pb-0.5" aria-hidden>
+              →
             </div>
-            <div className="min-w-0">
-              <label className="block text-xs text-zinc-500 mb-1">Session duration</label>
-              <span className="text-sm text-zinc-900">{slotDuration} min</span>
+            <div>
+              <dt className="text-xs text-zinc-500 mb-0.5">Effective until</dt>
+              <dd className="text-zinc-900">{expert?.effective_until ?? "No end date"}</dd>
             </div>
-            <div className="min-w-0">
-              <label className="block text-xs text-zinc-500 mb-1">Timezone</label>
-              <span className="text-sm text-zinc-900">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+            <div>
+              <dt className="text-xs text-zinc-500 mb-0.5">Session duration</dt>
+              <dd className="text-zinc-900">{slotDuration} min</dd>
             </div>
-            <div className="ml-auto">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || !dirty}
-                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </button>
+            <div>
+              <dt className="text-xs text-zinc-500 mb-0.5">Timezone</dt>
+              <dd className="text-zinc-900">{Intl.DateTimeFormat().resolvedOptions().timeZone}</dd>
             </div>
-          </div>
+          </dl>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
         </div>
 
-        {/* Week Grid */}
         <div className="mb-4 bg-white border border-zinc-200 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
-              {/* Day headers */}
-              <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-zinc-200">
+              <div className="grid grid-cols-[64px_repeat(7,1fr)] border-b border-zinc-200">
                 <div className="p-2" />
                 {DAYS.map((day, i) => {
                   const today = new Date().getDay();
@@ -391,64 +337,51 @@ export function ExpertAvailabilityPage() {
                 })}
               </div>
 
-              {/* Grid body */}
-              <div className="grid grid-cols-[60px_repeat(7,1fr)] relative">
-                {/* Hour labels */}
+              <div className="grid grid-cols-[64px_repeat(7,1fr)] relative">
                 <div className="relative">
-                  {HOURS.map((h) => (
-                    <div
-                      key={h}
-                      className="h-12 flex items-start justify-end pr-2 pt-0.5"
-                    >
-                      <span className="text-[11px] uppercase tracking-wider text-zinc-400 leading-none">
-                        {formatHour(h)}
+                  {slotStarts.map((mins) => (
+                    <div key={mins} className="h-8 flex items-start justify-end pr-2 pt-0.5">
+                      <span className="text-[10px] uppercase tracking-wider text-zinc-400 leading-none">
+                        {formatMinutesDisplay(mins)}
                       </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Day columns */}
                 {DAYS.map((_, dayIndex) => (
                   <div key={dayIndex} className="relative border-l border-zinc-200">
-                    {/* Hour cells */}
-                    {HOURS.map((h) => (
-                      <div
-                        key={h}
-                        className={`h-12 border-b border-zinc-100 ${
-                          !isCellOccupied(dayIndex, h)
-                            ? "cursor-pointer hover:bg-zinc-50"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          if (!isCellOccupied(dayIndex, h)) {
-                            openAddBlock(dayIndex, h);
-                          }
-                        }}
-                      />
-                    ))}
+                    {slotStarts.map((mins) => {
+                      const occupied = isSlotOccupied(dayIndex, mins);
+                      return (
+                        <div
+                          key={mins}
+                          className={`h-8 border-b border-zinc-100 ${
+                            !occupied ? "cursor-pointer hover:bg-zinc-50" : ""
+                          }`}
+                          onClick={() => {
+                            if (!occupied) addSlot(dayIndex, mins);
+                          }}
+                        />
+                      );
+                    })}
 
-                    {/* Availability blocks overlay */}
                     {blocksForDay(dayIndex).map((block) => {
                       const style = getBlockStyle(block);
                       const blockIndex = blocks.findIndex((b) => b._tempId === block._tempId);
                       return (
                         <div
                           key={block._tempId}
-                          className="absolute left-0.5 right-0.5 bg-zinc-900 text-white rounded-sm px-1.5 py-1 text-xs cursor-pointer hover:ring-1 hover:ring-zinc-600 transition-all duration-150 overflow-hidden z-10"
+                          title="Click to remove"
+                          className="absolute left-0.5 right-0.5 bg-zinc-900 text-white rounded-sm px-1 py-0.5 text-[10px] cursor-pointer hover:bg-zinc-700 transition-colors duration-150 overflow-hidden z-10"
                           style={style}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openEditBlock(blockIndex);
+                            removeBlock(blockIndex);
                           }}
                         >
                           <div className="font-medium leading-tight truncate">
                             {formatTimeDisplay(block.start_time)}–{formatTimeDisplay(block.end_time)}
                           </div>
-                          {timeToMinutes(block.end_time) - timeToMinutes(block.start_time) >= 60 && (
-                            <div className="text-zinc-400 text-[10px] mt-0.5 truncate">
-                              {block.slot_duration}min slots · {block.buffer_time}min buffer
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -459,7 +392,6 @@ export function ExpertAvailabilityPage() {
           </div>
         </div>
 
-        {/* Quick actions */}
         <div className="flex items-center gap-4 mb-8 text-sm">
           <button
             type="button"
@@ -479,146 +411,21 @@ export function ExpertAvailabilityPage() {
           </button>
         </div>
 
-        {/* Block Popover */}
-        {popover.open && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div
-              ref={popoverRef}
-              className="bg-white rounded-xl border border-zinc-200 shadow-lg p-5 w-full max-w-sm mx-4"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-zinc-900">
-                  {popover.editIndex !== null ? "Edit availability block" : "Add availability block"}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setPopover(INITIAL_POPOVER)}
-                  className="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="space-y-3 text-sm">
-                <div>
-                  <label className="block text-xs text-zinc-500 mb-1">Day</label>
-                  <select
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                    value={popover.dayOfWeek}
-                    onChange={(e) => setPopover((p) => ({ ...p, dayOfWeek: Number(e.target.value) }))}
-                  >
-                    {DAYS.map((d, i) => (
-                      <option key={i} value={i}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-zinc-500 mb-1">Start time</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                      value={popover.startTime}
-                      onChange={(e) => setPopover((p) => ({ ...p, startTime: e.target.value }))}
-                    >
-                      {timeOptions.map((t) => (
-                        <option key={t} value={t}>{formatTimeDisplay(t)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-zinc-500 mb-1">End time</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                      value={popover.endTime}
-                      onChange={(e) => setPopover((p) => ({ ...p, endTime: e.target.value }))}
-                    >
-                      {timeOptions.map((t) => (
-                        <option key={t} value={t}>{formatTimeDisplay(t)}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-zinc-500 mb-1">Slot duration (min)</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                      value={popover.slotDuration}
-                      onChange={(e) => setPopover((p) => ({ ...p, slotDuration: Number(e.target.value) }))}
-                    >
-                      {[15, 20, 30, 45, 60, 90, 120].map((v) => (
-                        <option key={v} value={v}>{v} min</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-zinc-500 mb-1">Buffer (min)</label>
-                    <select
-                      className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm"
-                      value={popover.bufferTime}
-                      onChange={(e) => setPopover((p) => ({ ...p, bufferTime: Number(e.target.value) }))}
-                    >
-                      {[0, 5, 10, 15, 20, 30].map((v) => (
-                        <option key={v} value={v}>{v} min</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-5">
-                {popover.editIndex !== null ? (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteBlock(popover.editIndex!)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                ) : (
-                  <div />
-                )}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPopover(INITIAL_POPOVER)}
-                    className="px-4 py-2 rounded-lg border border-zinc-300 text-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePopoverSave}
-                    className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
-                  >
-                    {popover.editIndex !== null ? "Update" : "Add"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Overrides section */}
         <div className="mt-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-zinc-900">Date overrides</h2>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() =>
-                  setOverridePopover((p) => ({ ...INITIAL_OVERRIDE_POPOVER, open: !p.open }))
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
-              >
-                <Plus className="w-4 h-4" />
-                Add override
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setOverridePopover((p) => ({ ...INITIAL_OVERRIDE_POPOVER, open: !p.open }))
+              }
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <Plus className="w-4 h-4" />
+              Add override
+            </button>
           </div>
 
-          {/* Override popover modal */}
           {overridePopover.open && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
               <div
@@ -749,7 +556,6 @@ export function ExpertAvailabilityPage() {
             </div>
           )}
 
-          {/* Overrides list */}
           {overrides.length === 0 ? (
             <p className="text-sm text-zinc-500">No date overrides configured yet.</p>
           ) : (
