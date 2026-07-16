@@ -21,6 +21,7 @@ import {
   Stethoscope,
   Bell,
   Settings,
+  Server,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
@@ -32,6 +33,7 @@ const primaryNavItems = [
   { to: "/organisations", icon: Building2, label: "Organisations" },
   { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
   { to: "/support", icon: LifeBuoy, label: "Support" },
+  { to: "/server", icon: Server, label: "Server", adminOnly: true as const },
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/employees", icon: Users, label: "Employees" },
 ];
@@ -233,7 +235,10 @@ export function AdminLayout() {
             </div>
           )}
 
-          {primaryNavItems.slice(4).map(({ to, icon: Icon, label, end }) => (
+          {primaryNavItems
+            .slice(4)
+            .filter((item) => !("adminOnly" in item && item.adminOnly) || employeeRole === "admin")
+            .map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}

@@ -27,6 +27,7 @@ import { ExpertUpcomingPage } from "./features/experts/ExpertUpcomingPage";
 import { Notifications } from "./features/notifications/Notifications";
 import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
 import { ConsoleEngagementsPage } from "./features/console/ConsoleEngagementsPage";
+import { ServerHealth } from "./features/server/ServerHealth";
 
 import { loginPathWithRedirect } from "./lib/authStorage";
 
@@ -207,6 +208,7 @@ function AppRoutes() {
         />
         <Route path="my-tasks" element={<MyTasks />} />
         <Route path="support" element={<SupportTickets />} />
+        <Route path="server" element={<ServerHealth />} />
         <Route path="settings" element={<Settings />} />
       </Route>
       <Route
