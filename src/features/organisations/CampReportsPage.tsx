@@ -72,6 +72,11 @@ export function CampReportsPage() {
     title: string;
     data: Record<string, unknown>;
   } | null>(null);
+  const [validateRiskModal, setValidateRiskModal] = useState<{
+    title: string;
+    data: Record<string, unknown>;
+  } | null>(null);
+  const [validateRiskExpanded, setValidateRiskExpanded] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -296,6 +301,34 @@ export function CampReportsPage() {
     }
   };
 
+  const handleValidateOverallRisk = async (report: CampReportRow) => {
+    const loadStateKey = `${report.report_id}:overall_risk_score`;
+    setLoadingKey(`${loadStateKey}:validate`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+    setValidateRiskExpanded({});
+
+    try {
+      const response =
+        report.department === null
+          ? await campReportsApi.validateOverallRiskScore(campNo)
+          : await campReportsApi.validateDepartmentOverallRiskScore(
+              campNo,
+              report.department
+            );
+      setValidateRiskModal({
+        title: "Validate: Overall Risk Score",
+        data: response.data.data,
+      });
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   if (!Number.isFinite(campNo)) {
     return (
       <div className="p-6">
@@ -435,6 +468,21 @@ export function CampReportsPage() {
                                       disabled={isSectionBusy}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate positive wins"
+                                    >
+                                      {isValidateLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <ShieldCheck className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  )}
+                                  {section.section_key === "overall_risk_score" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleValidateOverallRisk(report)}
+                                      disabled={isSectionBusy}
+                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                      title="Validate overall risk score"
                                     >
                                       {isValidateLoading ? (
                                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -783,8 +831,17 @@ export function CampReportsPage() {
         {validateQModal && (() => {
           const data = validateQModal.data;
           const totalEnrolled = (data.total_enrolled as number) ?? 0;
+          const totalResponded = (data.total_responded as number) ?? 0;
+          const totalMapped = (data.total_mapped as number) ?? 0;
+          const totalUnmapped = (data.total_unmapped as number) ?? 0;
           const questionKey = (data.question_key as string) ?? "";
-          const summary = data.summary as Record<string, { enrolled: number; responded: number; not_responded: number }> | undefined;
+          const mismatch = data.mismatch as
+            | { has_mismatch?: boolean; highlight?: string | null }
+            | undefined;
+          const summary = data.summary as Record<
+            string,
+            { enrolled: number; responded: number; not_responded: number; unmapped?: number }
+          > | undefined;
           const participants = (data.participants as Array<{
             user_id: number;
             name: string;
@@ -794,14 +851,30 @@ export function CampReportsPage() {
             reason: string | null;
           }>) ?? [];
 
-          const notResponded = participants.filter((p) => p.reason !== null);
+          const notResponded = participants.filter(
+            (p) => p.reason !== null && p.bucket !== "unmapped"
+          );
+          const unmapped = participants.filter((p) => p.bucket === "unmapped");
           const responded = participants.filter((p) => p.reason === null);
 
           return (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {mismatch?.has_mismatch && mismatch.highlight && (
+                <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed">
+                  {mismatch.highlight}
+                </div>
+              )}
+
               <div className="px-4 py-2.5 bg-zinc-50 rounded-lg text-xs text-zinc-600 space-y-1">
                 <div>Question key: <span className="font-medium font-mono">{questionKey}</span></div>
                 <div>Total enrolled: <span className="font-medium">{totalEnrolled}</span></div>
+                <div>
+                  Responded: <span className="font-medium text-emerald-700">{totalResponded}</span>
+                  {" · "}
+                  Mapped: <span className="font-medium">{totalMapped}</span>
+                  {" · "}
+                  Unmapped: <span className="font-medium text-amber-700">{totalUnmapped}</span>
+                </div>
               </div>
 
               {summary && (
@@ -815,7 +888,8 @@ export function CampReportsPage() {
                         <div className="text-[11px] text-zinc-600 space-y-0.5">
                           <div>Enrolled: <span className="font-medium">{s.enrolled}</span></div>
                           <div>Responded: <span className="font-medium text-emerald-700">{s.responded}</span></div>
-                          <div>Not responded: <span className="font-medium text-amber-700">{s.not_responded}</span></div>
+                          <div>Unmapped: <span className="font-medium text-amber-700">{s.unmapped ?? 0}</span></div>
+                          <div>Not responded: <span className="font-medium text-zinc-700">{s.not_responded}</span></div>
                         </div>
                       </div>
                     );
@@ -823,11 +897,38 @@ export function CampReportsPage() {
                 </div>
               )}
 
+              {unmapped.length > 0 && (
+                <div className="rounded-lg border-2 border-amber-300 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-amber-100">
+                    <h4 className="text-xs font-semibold text-amber-900">
+                      Unmapped answers included as &apos;unmapped&apos; ({unmapped.length})
+                    </h4>
+                  </div>
+                  <div className="divide-y divide-amber-100">
+                    {unmapped.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
+                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-amber-800 mt-0.5 font-medium">{p.reason}</p>
+                        {p.answer !== null && (
+                          <p className="text-[10px] text-zinc-500 mt-0.5">Raw answer: <span className="font-mono">{p.answer}</span></p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {notResponded.length > 0 && (
                 <div className="rounded-lg border border-amber-200 overflow-hidden">
                   <div className="px-4 py-2.5 bg-amber-50">
                     <h4 className="text-xs font-medium text-amber-800">
-                      Participants without valid response ({notResponded.length})
+                      Participants without response ({notResponded.length})
                     </h4>
                   </div>
                   <div className="divide-y divide-amber-100">
@@ -841,9 +942,6 @@ export function CampReportsPage() {
                           </div>
                         </div>
                         <p className="text-[11px] text-amber-700 mt-0.5">{p.reason}</p>
-                        {p.answer !== null && (
-                          <p className="text-[10px] text-zinc-500 mt-0.5">Raw answer: <span className="font-mono">{p.answer}</span></p>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -854,7 +952,7 @@ export function CampReportsPage() {
                 <div className="rounded-lg border border-zinc-200 overflow-hidden">
                   <div className="px-4 py-2.5 bg-emerald-50">
                     <h4 className="text-xs font-medium text-emerald-800">
-                      Participants with valid response ({responded.length})
+                      Participants with valid mapped response ({responded.length})
                     </h4>
                   </div>
                   <div className="divide-y divide-zinc-100">
@@ -875,6 +973,144 @@ export function CampReportsPage() {
                   </div>
                 </div>
               )}
+            </div>
+          );
+        })()}
+      </Modal>
+
+      <Modal
+        open={validateRiskModal !== null}
+        onClose={() => setValidateRiskModal(null)}
+        title={validateRiskModal?.title ?? "Validate"}
+        maxWidthClassName="max-w-2xl"
+      >
+        {validateRiskModal && (() => {
+          const data = validateRiskModal.data;
+          const totalEnrolled = (data.total_enrolled as number) ?? 0;
+          const withScore = (data.with_metabolic_score as number) ?? 0;
+          const missing = (data.missing_metabolic_score as number) ?? 0;
+          const mismatch = data.mismatch as
+            | { has_mismatch?: boolean; highlight?: string | null }
+            | undefined;
+          const reasonCounts = (data.reason_counts as Record<string, number>) ?? {};
+          const withoutScore = (data.without_score as Array<{
+            user_id: number;
+            name: string;
+            gender: string | null;
+            reason: string | null;
+          }>) ?? [];
+          const scored = (data.with_score as Array<{
+            user_id: number;
+            name: string;
+            gender: string | null;
+            metabolic_score: number | null;
+          }>) ?? [];
+          const withoutExpanded = validateRiskExpanded["without"] ?? false;
+          const withExpanded = validateRiskExpanded["with"] ?? false;
+
+          return (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {mismatch?.has_mismatch && mismatch.highlight && (
+                <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed">
+                  {mismatch.highlight}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-zinc-200 px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Enrolled</div>
+                  <div className="text-lg font-semibold text-zinc-900">{totalEnrolled}</div>
+                </div>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-emerald-700 uppercase tracking-wide">With score</div>
+                  <div className="text-lg font-semibold text-emerald-800">{withScore}</div>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">Missing</div>
+                  <div className="text-lg font-semibold text-amber-800">{missing}</div>
+                </div>
+              </div>
+
+              {Object.keys(reasonCounts).length > 0 && (
+                <div className="rounded-lg border border-zinc-200 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-zinc-50">
+                    <h4 className="text-xs font-medium text-zinc-800">Exclusion reasons</h4>
+                  </div>
+                  <div className="divide-y divide-zinc-100">
+                    {Object.entries(reasonCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([reason, count]) => (
+                        <div key={reason} className="px-4 py-2 flex items-start justify-between gap-3">
+                          <p className="text-[11px] text-zinc-700 leading-snug">{reason}</p>
+                          <span className="text-xs font-semibold text-amber-800 shrink-0">{count}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border border-amber-200 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 bg-amber-50 flex items-center justify-between text-left"
+                  onClick={() =>
+                    setValidateRiskExpanded((prev) => ({ ...prev, without: !withoutExpanded }))
+                  }
+                >
+                  <h4 className="text-xs font-medium text-amber-800">
+                    Excluded participants ({withoutScore.length})
+                  </h4>
+                  {withoutExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-amber-700" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-amber-700" />
+                  )}
+                </button>
+                {withoutExpanded && (
+                  <div className="divide-y divide-amber-100 max-h-64 overflow-y-auto">
+                    {withoutScore.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 mt-0.5">{p.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-emerald-200 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 bg-emerald-50 flex items-center justify-between text-left"
+                  onClick={() =>
+                    setValidateRiskExpanded((prev) => ({ ...prev, with: !withExpanded }))
+                  }
+                >
+                  <h4 className="text-xs font-medium text-emerald-800">
+                    Included (with metabolic score) ({scored.length})
+                  </h4>
+                  {withExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-emerald-700" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-emerald-700" />
+                  )}
+                </button>
+                {withExpanded && (
+                  <div className="divide-y divide-emerald-100 max-h-64 overflow-y-auto">
+                    {scored.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                        <span className="text-[10px] font-mono text-emerald-800">
+                          score {p.metabolic_score}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()}

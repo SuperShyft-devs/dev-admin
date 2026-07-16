@@ -945,6 +945,14 @@ export const campReportsApi = {
     api.get<{ data: Record<string, unknown> }>(
       `/reports/camps/${campNo}/department/${slug}/validate/sleeping-hours`
     ),
+  validateOverallRiskScore: (campNo: number) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/validate/overall-risk-score`
+    ),
+  validateDepartmentOverallRiskScore: (campNo: number, slug: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/department/${slug}/validate/overall-risk-score`
+    ),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>
