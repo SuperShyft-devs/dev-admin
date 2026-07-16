@@ -9,7 +9,7 @@ import {
   type HealthRun,
   type ServerHealthCurrent,
 } from "../../lib/api";
-
+import { VitalMonitors } from "./VitalMonitors";
 const REFRESH_MS = 60_000;
 
 function formatRunAt(value: string | null | undefined): string {
@@ -179,6 +179,28 @@ export function ServerHealth() {
         sortable: true,
         className: "text-red-700 font-medium tabular-nums",
       },
+      {
+        key: "cpu_pct",
+        label: "CPU %",
+        sortable: true,
+        hideOnMobile: true,
+        render: (row) => (
+          <span className="tabular-nums text-zinc-700">
+            {row.cpu_pct == null ? "—" : `${Math.round(row.cpu_pct)}%`}
+          </span>
+        ),
+      },
+      {
+        key: "mem_pct",
+        label: "Mem %",
+        sortable: true,
+        hideOnMobile: true,
+        render: (row) => (
+          <span className="tabular-nums text-zinc-700">
+            {row.mem_pct == null ? "—" : `${Math.round(row.mem_pct)}%`}
+          </span>
+        ),
+      },
     ],
     []
   );
@@ -232,6 +254,8 @@ export function ServerHealth() {
           No health check runs recorded yet.
         </div>
       ) : null}
+
+      <VitalMonitors history={history} loading={loadingHistory} />
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b border-zinc-100">

@@ -3282,6 +3282,8 @@ export interface HealthRun {
   warn_count: number;
   crit_count: number;
   overall_status: string;
+  cpu_pct?: number | null;
+  mem_pct?: number | null;
 }
 
 export interface HealthCheck {
