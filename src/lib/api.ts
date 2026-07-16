@@ -728,6 +728,8 @@ export interface Organization {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+  industry_key?: string | null;
+  industry?: string | null;
   contact_person_user_id?: number | null;
   bd_employee_id?: number | null;
   status?: string | null;
@@ -747,6 +749,8 @@ export interface OrganizationListItem {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+  industry_key?: string | null;
+  industry?: string | null;
   status?: string | null;
 }
 
@@ -760,10 +764,25 @@ export interface OrganizationCreate {
   city?: string | null;
   state?: string | null;
   country?: string | null;
+  industry_key?: string | null;
   contact_person_user_id?: number | null;
   bd_employee_id?: number | null;
   departments?: OrganizationDepartmentInput[] | null;
 }
+
+export interface Industry {
+  id: number;
+  industry_key: string;
+  industry: string;
+}
+
+export const industriesApi = {
+  getAll: () => api.get<{ data: Industry[] }>("/organizations/industries"),
+  create: (data: { industry: string }) => api.post<{ data: Industry }>("/organizations/industries", data),
+  update: (id: number, data: { industry: string }) =>
+    api.put<{ data: Industry }>(`/organizations/industries/${id}`, data),
+  delete: (id: number) => api.delete<{ data: { success: boolean } }>(`/organizations/industries/${id}`),
+};
 
 export const organizationsApi = {
   list: (params?: {
@@ -775,6 +794,7 @@ export const organizationsApi = {
     search?: string;
     city?: string;
     country?: string;
+    industry_key?: string;
     sort_by?: string;
     sort_dir?: "asc" | "desc";
   }) =>
@@ -783,7 +803,7 @@ export const organizationsApi = {
       { params }
     ),
   filterOptions: () =>
-    api.get<{ data: { cities: string[]; countries: string[] } }>("/organizations/filter-options"),
+    api.get<{ data: { cities: string[]; countries: string[]; industries: { industry_key: string; industry: string }[] } }>("/organizations/filter-options"),
   get: (id: number) =>
     api.get<{ data: Organization }>(`/organizations/${id}`),
   create: (payload: OrganizationCreate) =>
