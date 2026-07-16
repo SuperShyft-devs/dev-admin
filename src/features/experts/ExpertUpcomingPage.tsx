@@ -17,19 +17,36 @@ function formatType(typeKey: string): string {
   return typeKey.charAt(0).toUpperCase() + typeKey.slice(1).replace(/_/g, " ");
 }
 
+function isValidMeetLink(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith("http://") || trimmed.startsWith("https://");
+}
+
 export function ExpertUpcomingPage() {
   const [items, setItems] = useState<ConsultationRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [doingKey, setDoingKey] = useState<string | null>(null);
+  const [meetLinks, setMeetLinks] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await expertsPortalApi.listUpcoming();
-      setItems(res.data.data ?? []);
+      const data = res.data.data ?? [];
+      setItems(data);
+      setMeetLinks((prev) => {
+        const next = { ...prev };
+        for (const item of data) {
+          const key = `${item.engagement_id}:${item.user_id}:${item.expert_type}`;
+          if (item.meet_link && !next[key]) {
+            next[key] = item.meet_link;
+          }
+        }
+        return next;
+      });
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -46,6 +63,12 @@ export function ExpertUpcomingPage() {
 
   const handleMarkDone = async (item: ConsultationRequestItem) => {
     const key = rowKey(item);
+    const meetLink = (meetLinks[key] ?? item.meet_link ?? "").trim();
+    if (!isValidMeetLink(meetLink)) {
+      setError("Please enter a valid Google Meet link (must start with http:// or https://)");
+      return;
+    }
+
     setDoingKey(key);
     setError(null);
     try {
@@ -53,6 +76,7 @@ export function ExpertUpcomingPage() {
         user_id: item.user_id,
         engagement_id: item.engagement_id,
         expert_type: item.expert_type,
+        meet_link: meetLink,
       });
       setItems((prev) => prev.filter((r) => rowKey(r) !== key));
       if (openKey === key) setOpenKey(null);
@@ -94,6 +118,8 @@ export function ExpertUpcomingPage() {
               const key = rowKey(item);
               const isOpen = openKey === key;
               const marking = doingKey === key;
+              const meetLink = meetLinks[key] ?? item.meet_link ?? "";
+              const canMarkDone = isValidMeetLink(meetLink);
               return (
                 <div key={key}>
                   <div className="flex items-stretch gap-2">
@@ -122,7 +148,7 @@ export function ExpertUpcomingPage() {
                     <div className="flex items-center pr-3">
                       <button
                         type="button"
-                        disabled={marking}
+                        disabled={marking || !canMarkDone}
                         onClick={() => void handleMarkDone(item)}
                         className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 disabled:opacity-40 shrink-0"
                       >
@@ -167,6 +193,25 @@ export function ExpertUpcomingPage() {
                               ? `${item.date} at ${item.slot}`
                               : "—"}
                           </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="text-xs text-zinc-500 block mb-1">
+                            Google Meet link
+                          </label>
+                          <input
+                            type="url"
+                            value={meetLink}
+                            onChange={(e) =>
+                              setMeetLinks((prev) => ({ ...prev, [key]: e.target.value }))
+                            }
+                            placeholder="https://meet.google.com/..."
+                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                          />
+                          {!canMarkDone && (
+                            <p className="text-xs text-zinc-500 mt-1">
+                              Add a valid meet link before marking this consultation done.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

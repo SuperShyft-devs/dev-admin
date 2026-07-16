@@ -1091,14 +1091,22 @@ export const expertsApi = {
 export type OverrideStatus = "available" | "unavailable" | "booked";
 
 export interface ConsultationPreference {
+  consultation_id?: number | null;
   want: boolean;
   date?: string | null;
   slot?: string | null;
   expert_id?: number | null;
   done?: boolean;
+  meet_link?: string | null;
+  consent?: {
+    bio_ai?: boolean;
+    blood_report?: boolean;
+    questionnaire?: boolean;
+  } | null;
 }
 
 export interface ConsultationRequestItem {
+  consultation_id?: number;
   user_id: number;
   first_name?: string | null;
   last_name?: string | null;
@@ -1111,6 +1119,7 @@ export interface ConsultationRequestItem {
   slot?: string | null;
   engagement_participant_id?: number;
   expert_id?: number | null;
+  meet_link?: string | null;
 }
 
 export const expertsPortalApi = {
@@ -1132,6 +1141,7 @@ export const expertsPortalApi = {
     engagement_id: number;
     expert_type: string;
     expert_id?: number;
+    meet_link: string;
   }) =>
     api.post<{ data: { message: string } }>("/experts/portal/consultations/done", payload),
 };
