@@ -80,7 +80,9 @@ function StatusBannerWithCounts({ run }: { run: HealthRun }) {
                 ? "Warning"
                 : normalized === "CRITICAL"
                   ? "Critical"
-                  : run.overall_status}
+                  : normalized === "UNKNOWN"
+                    ? "Unknown"
+                    : run.overall_status}
           </p>
           <p className="text-sm opacity-80 mt-0.5">Last check: {formatRunAt(run.run_at)}</p>
         </div>
