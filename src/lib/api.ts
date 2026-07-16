@@ -3274,3 +3274,39 @@ export const bookingApi = {
       };
     }>("/book/blood-test", payload),
 };
+
+export interface HealthRun {
+  id: number;
+  run_at: string;
+  ok_count: number;
+  warn_count: number;
+  crit_count: number;
+  overall_status: string;
+}
+
+export interface HealthCheck {
+  id: number;
+  run_id: number;
+  category: string;
+  status: string;
+  message: string;
+}
+
+export interface HealthChecksByCategory {
+  category: string;
+  checks: HealthCheck[];
+}
+
+export interface ServerHealthCurrent {
+  run: HealthRun;
+  checks_by_category: HealthChecksByCategory[];
+}
+
+export const serverHealthApi = {
+  current: () => api.get<{ data: ServerHealthCurrent | null }>("/server-health/current"),
+  history: (params?: { limit?: number; from?: string; to?: string }) =>
+    api.get<{ data: HealthRun[]; meta: { limit: number; total: number } }>(
+      "/server-health/history",
+      { params }
+    ),
+};
