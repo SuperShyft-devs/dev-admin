@@ -12,6 +12,7 @@ import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
 import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
 import { CampReportInitMenu } from "../../shared/ui/CampReportInitMenu";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
+import { ManageIndustriesModal } from "./ManageIndustriesModal";
 import {
   organizationsApi,
   employeesApi,
@@ -45,19 +46,23 @@ export function Organisations() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
   const [countryFilter, setCountryFilter] = useState<string>("");
+  const [industryFilter, setIndustryFilter] = useState<string>("");
   const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [countryOptions, setCountryOptions] = useState<string[]>([]);
+  const [industryOptions, setIndustryOptions] = useState<{ industry_key: string; industry: string }[]>([]);
   const [sortKey, setSortKey] = useState<string>("organization_id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [manageIndustriesOpen, setManageIndustriesOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"view" | "add" | "edit">("view");
   const [selected, setSelected] = useState<Organization | null>(null);
   const [formData, setFormData] = useState<OrganizationCreate>({
     name: "",
     organization_type: "",
+    industry_key: "",
     logo: "",
     website_url: "",
     address: "",
@@ -137,10 +142,12 @@ export function Organisations() {
       .then((res) => {
         setCityOptions(res.data.data.cities);
         setCountryOptions(res.data.data.countries);
+        setIndustryOptions(res.data.data.industries || []);
       })
       .catch(() => {
         setCityOptions([]);
         setCountryOptions([]);
+        setIndustryOptions([]);
       });
   }, []);
 
@@ -155,6 +162,7 @@ export function Organisations() {
         search: search.trim() || undefined,
         city: cityFilter || undefined,
         country: countryFilter || undefined,
+        industry_key: industryFilter || undefined,
         sort_by: sortKey,
         sort_dir: sortDir,
       });
@@ -165,7 +173,7 @@ export function Organisations() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, cityFilter, countryFilter, sortKey, sortDir]);
+  }, [page, limit, statusFilter, search, cityFilter, countryFilter, industryFilter, sortKey, sortDir]);
 
   const fetchCamps = useCallback(async () => {
     setCampsLoading(true);
@@ -231,7 +239,7 @@ export function Organisations() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, cityFilter, countryFilter]);
+  }, [search, statusFilter, cityFilter, countryFilter, industryFilter]);
 
   useEffect(() => {
     setCampsPage(1);
@@ -319,6 +327,7 @@ export function Organisations() {
     setFormData({
       name: "",
       organization_type: "",
+      industry_key: "",
       logo: "",
       website_url: "",
       address: "",
@@ -343,6 +352,7 @@ export function Organisations() {
       setFormData({
         name: o.name ?? "",
         organization_type: o.organization_type ?? "",
+        industry_key: o.industry_key ?? "",
         logo: o.logo ?? "",
         website_url: o.website_url ?? "",
         address: o.address ?? "",
@@ -353,7 +363,15 @@ export function Organisations() {
         contact_person_user_id: o.contact_person_user_id ?? 0,
         bd_employee_id: o.bd_employee_id ?? undefined,
       });
-      setDepartmentNames((o.departments ?? []).map((d) => d.department));
+      setDepartmentNames(
+        (o.departments ?? [])
+          .map((d: any) => {
+            if (typeof d === "string") return d;
+            if (d && typeof d === "object" && typeof d.department === "string") return d.department;
+            return "";
+          })
+          .filter(Boolean)
+      );
       setDepartmentInput("");
       setModalMode("edit");
       setModalOpen(true);
@@ -426,6 +444,7 @@ export function Organisations() {
   const columns: Column<OrganizationListItem>[] = [
     { key: "name", label: "Name", sortable: true },
     { key: "organization_type", label: "Type", sortable: true, hideOnMobile: true },
+    { key: "industry", label: "Industry", sortable: false, hideOnMobile: true },
     { key: "city", label: "City", sortable: true, hideOnMobile: true },
     { key: "country", label: "Country", sortable: true, hideOnTablet: true },
     {
@@ -578,13 +597,22 @@ export function Organisations() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Organisations</h1>
         {activeTab === "organizations" && (
-          <button
-            onClick={openAdd}
-            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Add Organisation</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setManageIndustriesOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-100 text-zinc-700 text-sm font-medium hover:bg-zinc-200 shrink-0 border border-zinc-200"
+            >
+              <span className="hidden sm:inline">Manage Industries</span>
+              <span className="sm:hidden">Industries</span>
+            </button>
+            <button
+              onClick={openAdd}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Add Organisation</span>
+            </button>
+          </div>
         )}
         {activeTab === "camps" && (
           <button
@@ -654,6 +682,18 @@ export function Organisations() {
             {countryOptions.map((country) => (
               <option key={country} value={country}>
                 {country}
+              </option>
+            ))}
+          </select>
+          <select
+            value={industryFilter}
+            onChange={(e) => setIndustryFilter(e.target.value)}
+            className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="">All industries</option>
+            {industryOptions.map((ind) => (
+              <option key={ind.industry_key} value={ind.industry_key}>
+                {ind.industry}
               </option>
             ))}
           </select>
@@ -854,6 +894,7 @@ export function Organisations() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div><span className="text-zinc-500">Name:</span> {selected.name}</div>
               <div><span className="text-zinc-500">Type:</span> {selected.organization_type ?? "—"}</div>
+              <div><span className="text-zinc-500">Industry:</span> {selected.industry ?? "—"}</div>
               <div><span className="text-zinc-500">Logo URL:</span> {selected.logo ?? "—"}</div>
               <div><span className="text-zinc-500">Website:</span> {selected.website_url ?? "—"}</div>
               <div className="md:col-span-2">
@@ -946,13 +987,29 @@ export function Organisations() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Organization Type</label>
                 <input
                   type="text"
                   value={formData.organization_type ?? ""}
                   onChange={(e) => setFormData({ ...formData, organization_type: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  placeholder="e.g. Healthcare, IT"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Industry</label>
+                <select
+                  value={formData.industry_key ?? ""}
+                  onChange={(e) => setFormData({ ...formData, industry_key: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                >
+                  <option value="">Select industry</option>
+                  {industryOptions.map((ind) => (
+                    <option key={ind.industry_key} value={ind.industry_key}>
+                      {ind.industry}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Logo URL</label>
@@ -1283,6 +1340,13 @@ export function Organisations() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {manageIndustriesOpen && (
+        <ManageIndustriesModal
+          open={manageIndustriesOpen}
+          onClose={() => setManageIndustriesOpen(false)}
+        />
       )}
     </div>
   );
