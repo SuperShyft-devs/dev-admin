@@ -651,6 +651,13 @@ export const uploadsApi = {
     formData.append("file", file);
     return api.post<{ data: { url: string } }>("/uploads/packages/image", formData);
   },
+  uploadConsultationAttachments: (files: File[]) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("files", file);
+    }
+    return api.post<{ data: { urls: string[] } }>("/uploads/consultation-attachments", formData);
+  },
 };
 
 // Employees
@@ -1150,6 +1157,71 @@ export interface ConsultationRequestItem {
   meet_link?: string | null;
 }
 
+export interface ConsultationSharedResourceState {
+  consent: boolean;
+  available: boolean;
+}
+
+export interface ConsultationManageDetail {
+  consultation_id: number;
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  engagement_id: number;
+  engagement_code?: string | null;
+  engagement_participant_id?: number;
+  expert_type: string;
+  expert_id?: number | null;
+  date?: string | null;
+  slot?: string | null;
+  done: boolean;
+  meet_link?: string | null;
+  consent: {
+    bio_ai?: boolean;
+    blood_report?: boolean;
+    questionnaire?: boolean;
+  };
+  consultation_summary?: string | null;
+  attachments: string[];
+  shared_resources: {
+    bio_ai: ConsultationSharedResourceState;
+    blood_report: ConsultationSharedResourceState;
+    questionnaire: ConsultationSharedResourceState;
+  };
+  slot_reached: boolean;
+}
+
+export interface ConsultationQuestionnaireQuestion {
+  question_id: number;
+  question_key?: string | null;
+  question_text?: string | null;
+  answer?: unknown;
+  answer_state?: string;
+  submitted_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ConsultationQuestionnaireCategory {
+  category_id: number;
+  display_name?: string | null;
+  category_key?: string | null;
+  questions: ConsultationQuestionnaireQuestion[];
+}
+
+export interface ConsultationQuestionnairePayload {
+  consultation_id: number;
+  user_id: number;
+  engagement_id: number;
+  assessments: Array<{
+    assessment_instance_id: number;
+    package_id: number;
+    status?: string | null;
+    categories: ConsultationQuestionnaireCategory[];
+  }>;
+}
+
 export const expertsPortalApi = {
   me: () => api.get<{ data: ExpertDetail }>("/experts/portal/me"),
   listRequests: () =>
@@ -1172,6 +1244,36 @@ export const expertsPortalApi = {
     meet_link: string;
   }) =>
     api.post<{ data: { message: string } }>("/experts/portal/consultations/done", payload),
+  getConsultation: (consultationId: number) =>
+    api.get<{ data: ConsultationManageDetail }>(`/experts/portal/consultations/${consultationId}`),
+  updateConsultation: (
+    consultationId: number,
+    payload: {
+      consultation_summary?: string | null;
+      attachments?: string[];
+      meet_link?: string | null;
+    }
+  ) =>
+    api.patch<{ data: ConsultationManageDetail }>(
+      `/experts/portal/consultations/${consultationId}`,
+      payload
+    ),
+  markConsultationDoneById: (consultationId: number) =>
+    api.post<{ data: { message: string; done: boolean } }>(
+      `/experts/portal/consultations/${consultationId}/done`
+    ),
+  getConsultationQuestionnaire: (consultationId: number) =>
+    api.get<{ data: ConsultationQuestionnairePayload }>(
+      `/experts/portal/consultations/${consultationId}/questionnaire`
+    ),
+  fetchConsultationPdfBlob: async (consultationId: number, kind: "bio_ai" | "blood_report") => {
+    const path =
+      kind === "bio_ai"
+        ? `/experts/portal/consultations/${consultationId}/bio-ai/pdf`
+        : `/experts/portal/consultations/${consultationId}/blood-report/pdf`;
+    const res = await api.get<Blob>(path, { responseType: "blob" });
+    return res.data;
+  },
 };
 
 export const expertsConsultationsApi = {
