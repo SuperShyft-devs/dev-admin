@@ -12,7 +12,9 @@ import {
   type DefaultOnboardingAssistantItem,
   type DiagnosticPackageListItem,
   type EmployeeListItem,
+  type EngagementKind,
   type EngagementNotificationDefaults,
+  type BloodCollectionType,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
   type NotificationServiceItem,
@@ -74,6 +76,20 @@ function labelEmployee(emp: EmployeeListItem | DefaultOnboardingAssistantItem) {
 
 const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager"]);
 
+const ENGAGEMENT_TYPE_OPTIONS: { value: EngagementKind; label: string }[] = [
+  { value: "bio_ai", label: "BioAi" },
+  { value: "blood_test", label: "Blood Test" },
+  { value: "consultation", label: "Consultation" },
+  { value: "blood_test_with_consultation", label: "Blood Test with Consultation" },
+  { value: "bio_ai_with_consultation", label: "BioAi with Consultation" },
+];
+
+const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: string }[] = [
+  { value: "", label: "None" },
+  { value: "home_collection", label: "Home Collection" },
+  { value: "camp_collection", label: "Camp Collection" },
+];
+
 function formatCount(n: number | undefined) {
   if (n === undefined) return "—";
   return n.toLocaleString();
@@ -95,6 +111,10 @@ export function Settings() {
 
   const [assessmentId, setAssessmentId] = useState<number>(1);
   const [diagnosticId, setDiagnosticId] = useState<number>(1);
+  const [engagementType, setEngagementType] = useState<EngagementKind>("bio_ai");
+  const [bloodCollectionType, setBloodCollectionType] = useState<BloodCollectionType | null>(null);
+  const [createProfileOnMetsights, setCreateProfileOnMetsights] = useState(true);
+  const [enrollForFitprintFull, setEnrollForFitprintFull] = useState(false);
 
   const [notificationServices, setNotificationServices] = useState<NotificationServiceItem[]>([]);
   const [notificationDefaults, setNotificationDefaults] = useState<EngagementNotificationDefaults>({});
@@ -157,6 +177,10 @@ export function Settings() {
       const d = defaultsRes.data.data;
       setAssessmentId(d.b2c_default_assessment_package_id);
       setDiagnosticId(d.b2c_default_diagnostic_package_id);
+      setEngagementType(d.b2c_default_engagement_type);
+      setBloodCollectionType(d.b2c_default_blood_collection_type);
+      setCreateProfileOnMetsights(d.b2c_default_create_profile_on_metsights);
+      setEnrollForFitprintFull(d.b2c_default_enroll_for_fitprint_full);
       setNotificationDefaults(notifDefaultsRes.data.data ?? {});
       setSelectedDefaultAssistantIds(new Set(assistantDefaultsRes.data.data.employee_ids ?? []));
       setSupportQueryNotification(
@@ -228,6 +252,10 @@ export function Settings() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (enrollForFitprintFull && !createProfileOnMetsights) {
+      setError("FitPrint Full enrollment requires Metsights profile creation.");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSaveOk(null);
@@ -235,8 +263,12 @@ export function Settings() {
       await platformSettingsApi.patchB2cOnboarding({
         b2c_default_assessment_package_id: assessmentId,
         b2c_default_diagnostic_package_id: diagnosticId,
+        b2c_default_engagement_type: engagementType,
+        b2c_default_blood_collection_type: bloodCollectionType,
+        b2c_default_create_profile_on_metsights: createProfileOnMetsights,
+        b2c_default_enroll_for_fitprint_full: enrollForFitprintFull,
       });
-      setSaveOk("Saved. New public B2C onboardings will use these packages.");
+      setSaveOk("Saved. New public B2C onboardings will use these defaults.");
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -513,6 +545,97 @@ export function Settings() {
             </select>
           </div>
 
+          <div>
+            <label htmlFor="b2c-engagement-type" className="block text-sm font-medium text-zinc-700 mb-1">
+              Engagement Type
+            </label>
+            <select
+              id="b2c-engagement-type"
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+              value={engagementType}
+              onChange={(ev) => setEngagementType(ev.target.value as EngagementKind)}
+            >
+              {ENGAGEMENT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="b2c-blood-collection-type" className="block text-sm font-medium text-zinc-700 mb-1">
+              Blood Collection Type
+            </label>
+            <select
+              id="b2c-blood-collection-type"
+              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+              value={bloodCollectionType ?? ""}
+              onChange={(ev) =>
+                setBloodCollectionType((ev.target.value || null) as BloodCollectionType | null)
+              }
+            >
+              {BLOOD_COLLECTION_TYPE_OPTIONS.map((option) => (
+                <option key={option.value || "none"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium text-zinc-700 mb-1">Create Profile On Metsights</span>
+            <div className="flex gap-5 py-2">
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  name="b2c-create-profile-on-metsights"
+                  checked={createProfileOnMetsights}
+                  onChange={() => setCreateProfileOnMetsights(true)}
+                />
+                Yes
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  name="b2c-create-profile-on-metsights"
+                  checked={!createProfileOnMetsights}
+                  onChange={() => setCreateProfileOnMetsights(false)}
+                />
+                No
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium text-zinc-700 mb-1">Enroll For FitPrint Full</span>
+            <div className="flex gap-5 py-2">
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  name="b2c-enroll-for-fitprint-full"
+                  checked={enrollForFitprintFull}
+                  onChange={() => setEnrollForFitprintFull(true)}
+                />
+                Yes
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  name="b2c-enroll-for-fitprint-full"
+                  checked={!enrollForFitprintFull}
+                  onChange={() => setEnrollForFitprintFull(false)}
+                />
+                No
+              </label>
+            </div>
+            {enrollForFitprintFull && !createProfileOnMetsights ? (
+              <p className="text-xs text-red-600">
+                FitPrint Full requires Metsights profile creation.
+              </p>
+            ) : null}
+          </div>
+
           {error ? (
             <p className="text-sm text-red-600" role="alert">
               {error}
@@ -522,7 +645,12 @@ export function Settings() {
 
           <button
             type="submit"
-            disabled={saving || assessmentPackages.length === 0 || diagnosticPackages.length === 0}
+            disabled={
+              saving ||
+              assessmentPackages.length === 0 ||
+              diagnosticPackages.length === 0 ||
+              (enrollForFitprintFull && !createProfileOnMetsights)
+            }
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

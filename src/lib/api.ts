@@ -239,6 +239,10 @@ export const supportApi = {
 export interface B2cOnboardingDefaults {
   b2c_default_assessment_package_id: number;
   b2c_default_diagnostic_package_id: number;
+  b2c_default_engagement_type: EngagementKind;
+  b2c_default_blood_collection_type: BloodCollectionType | null;
+  b2c_default_create_profile_on_metsights: boolean;
+  b2c_default_enroll_for_fitprint_full: boolean;
 }
 
 export interface EngagementNotificationDefaults {
