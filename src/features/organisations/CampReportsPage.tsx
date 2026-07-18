@@ -836,12 +836,28 @@ export function CampReportsPage() {
           const totalUnmapped = (data.total_unmapped as number) ?? 0;
           const questionKey = (data.question_key as string) ?? "";
           const mismatch = data.mismatch as
-            | { has_mismatch?: boolean; highlight?: string | null }
+            | { has_mismatch?: boolean; highlight?: string | null; highlights?: string[] }
             | undefined;
           const summary = data.summary as Record<
             string,
             { enrolled: number; responded: number; not_responded: number; unmapped?: number }
           > | undefined;
+          const anyQuestionnaire = data.any_questionnaire_responders as
+            | { male?: number; female?: number; total?: number }
+            | undefined;
+          const sibling = data.sibling as
+            | {
+                label?: string;
+                responded?: { male?: number; female?: number; total?: number };
+                xor_participants?: Array<{
+                  user_id: number;
+                  name: string;
+                  gender: string | null;
+                  reason: string;
+                }>;
+              }
+            | null
+            | undefined;
           const participants = (data.participants as Array<{
             user_id: number;
             name: string;
@@ -856,12 +872,25 @@ export function CampReportsPage() {
           );
           const unmapped = participants.filter((p) => p.bucket === "unmapped");
           const responded = participants.filter((p) => p.reason === null);
+          const highlightItems =
+            mismatch?.highlights && mismatch.highlights.length > 0
+              ? mismatch.highlights
+              : mismatch?.highlight
+                ? [mismatch.highlight]
+                : [];
 
           return (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-              {mismatch?.has_mismatch && mismatch.highlight && (
-                <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed">
-                  {mismatch.highlight}
+              {mismatch?.has_mismatch && highlightItems.length > 0 && (
+                <div className="space-y-2">
+                  {highlightItems.map((text, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed"
+                    >
+                      {text}
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -869,14 +898,54 @@ export function CampReportsPage() {
                 <div>Question key: <span className="font-medium font-mono">{questionKey}</span></div>
                 <div>Total enrolled: <span className="font-medium">{totalEnrolled}</span></div>
                 <div>
-                  Responded: <span className="font-medium text-emerald-700">{totalResponded}</span>
+                  Responded (this question): <span className="font-medium text-emerald-700">{totalResponded}</span>
                   {" · "}
                   Mapped: <span className="font-medium">{totalMapped}</span>
                   {" · "}
                   Unmapped: <span className="font-medium text-amber-700">{totalUnmapped}</span>
                 </div>
+                {anyQuestionnaire && (
+                  <div>
+                    Any questionnaire starters:{" "}
+                    <span className="font-medium text-amber-800">
+                      {anyQuestionnaire.total ?? 0}
+                    </span>
+                    {" "}(male {anyQuestionnaire.male ?? 0}, female {anyQuestionnaire.female ?? 0})
+                  </div>
+                )}
+                {sibling?.responded && (
+                  <div>
+                    Sibling ({sibling.label ?? "related"}):{" "}
+                    <span className="font-medium">
+                      male {sibling.responded.male ?? 0}, female {sibling.responded.female ?? 0}
+                    </span>
+                  </div>
+                )}
               </div>
 
+              {sibling?.xor_participants && sibling.xor_participants.length > 0 && (
+                <div className="rounded-lg border-2 border-rose-300 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-rose-50">
+                    <h4 className="text-xs font-semibold text-rose-900">
+                      Cross-section mismatch vs {sibling.label} ({sibling.xor_participants.length})
+                    </h4>
+                  </div>
+                  <div className="divide-y divide-rose-100">
+                    {sibling.xor_participants.map((p) => (
+                      <div key={p.user_id} className="px-4 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
+                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-rose-800 mt-0.5 font-medium">{p.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {summary && (
                 <div className="grid grid-cols-2 gap-2">
                   {(["male", "female"] as const).map((g) => {
@@ -990,9 +1059,13 @@ export function CampReportsPage() {
           const withScore = (data.with_metabolic_score as number) ?? 0;
           const missing = (data.missing_metabolic_score as number) ?? 0;
           const mismatch = data.mismatch as
-            | { has_mismatch?: boolean; highlight?: string | null }
+            | { has_mismatch?: boolean; highlight?: string | null; highlights?: string[] }
             | undefined;
           const reasonCounts = (data.reason_counts as Record<string, number>) ?? {};
+          const anyQuestionnaire = data.any_questionnaire_responders as
+            | { male?: number; female?: number; total?: number }
+            | undefined;
+          const bioAiGenerated = (data.bio_ai_generated as number) ?? null;
           const withoutScore = (data.without_score as Array<{
             user_id: number;
             name: string;
@@ -1007,30 +1080,55 @@ export function CampReportsPage() {
           }>) ?? [];
           const withoutExpanded = validateRiskExpanded["without"] ?? false;
           const withExpanded = validateRiskExpanded["with"] ?? false;
+          const highlightItems =
+            mismatch?.highlights && mismatch.highlights.length > 0
+              ? mismatch.highlights
+              : mismatch?.highlight
+                ? [mismatch.highlight]
+                : [];
 
           return (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-              {mismatch?.has_mismatch && mismatch.highlight && (
-                <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed">
-                  {mismatch.highlight}
+              {mismatch?.has_mismatch && highlightItems.length > 0 && (
+                <div className="space-y-2">
+                  {highlightItems.map((text, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed"
+                    >
+                      {text}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="rounded-lg border border-zinc-200 px-3 py-2.5 text-center">
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Enrolled</div>
                   <div className="text-lg font-semibold text-zinc-900">{totalEnrolled}</div>
+                </div>
+                <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-sky-700 uppercase tracking-wide">Bio AI generated</div>
+                  <div className="text-lg font-semibold text-sky-800">{bioAiGenerated ?? "—"}</div>
                 </div>
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center">
                   <div className="text-[10px] text-emerald-700 uppercase tracking-wide">With score</div>
                   <div className="text-lg font-semibold text-emerald-800">{withScore}</div>
                 </div>
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">Missing</div>
+                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">Excluded</div>
                   <div className="text-lg font-semibold text-amber-800">{missing}</div>
                 </div>
               </div>
 
+              {anyQuestionnaire && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-950">
+                  Questionnaire starters (any question):{" "}
+                  <span className="font-semibold">{anyQuestionnaire.total ?? 0}</span>
+                  {" "}(male {anyQuestionnaire.male ?? 0}, female {anyQuestionnaire.female ?? 0}).
+                  {" "}Overall Risk Score does <span className="font-semibold">not</span> use this count.
+                </div>
+              )}
               {Object.keys(reasonCounts).length > 0 && (
                 <div className="rounded-lg border border-zinc-200 overflow-hidden">
                   <div className="px-4 py-2.5 bg-zinc-50">
