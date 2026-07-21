@@ -77,6 +77,21 @@ export function CampReportsPage() {
     data: Record<string, unknown>;
   } | null>(null);
   const [validateRiskExpanded, setValidateRiskExpanded] = useState<Record<string, boolean>>({});
+  const [bulkRefresh, setBulkRefresh] = useState<{
+    open: boolean;
+    running: boolean;
+    done: number;
+    total: number;
+    currentLabel: string | null;
+    failures: { label: string; error: string }[];
+  }>({
+    open: false,
+    running: false,
+    done: 0,
+    total: 0,
+    currentLabel: null,
+    failures: [],
+  });
 
   const fetchData = useCallback(async () => {
     if (!Number.isFinite(campNo)) {
@@ -201,6 +216,79 @@ export function CampReportsPage() {
     } finally {
       setLoadingKey(null);
     }
+  };
+
+  const reportDisplayName = (report: CampReportRow): string => {
+    if (report.department === null) return "Main report";
+    const meta = getReportMeta(report);
+    if (typeof meta?.camp_name === "string" && meta.camp_name) return meta.camp_name;
+    return `Department: ${report.department}`;
+  };
+
+  const handleRefreshAllSections = async () => {
+    if (sortedReports.length === 0 || sections.length === 0 || bulkRefresh.running) return;
+
+    const jobs = sortedReports.flatMap((report) =>
+      sections.map((section) => ({
+        report,
+        section,
+        label: `${reportDisplayName(report)} · ${section.section}`,
+      }))
+    );
+
+    setBulkRefresh({
+      open: true,
+      running: true,
+      done: 0,
+      total: jobs.length,
+      currentLabel: null,
+      failures: [],
+    });
+
+    const failures: { label: string; error: string }[] = [];
+
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+      setBulkRefresh((prev) => ({
+        ...prev,
+        currentLabel: job.label,
+      }));
+
+      try {
+        if (job.report.department === null) {
+          await campReportsApi.refreshCamp(campNo, job.section.section_key);
+        } else {
+          await campReportsApi.refreshDepartment(
+            campNo,
+            job.report.department,
+            job.section.section_key
+          );
+        }
+      } catch (err) {
+        failures.push({ label: job.label, error: getApiError(err) });
+      }
+
+      setBulkRefresh((prev) => ({
+        ...prev,
+        done: i + 1,
+      }));
+    }
+
+    await fetchData();
+
+    setBulkRefresh({
+      open: true,
+      running: false,
+      done: jobs.length,
+      total: jobs.length,
+      currentLabel: null,
+      failures,
+    });
+  };
+
+  const closeBulkRefreshModal = () => {
+    if (bulkRefresh.running) return;
+    setBulkRefresh((prev) => ({ ...prev, open: false }));
   };
 
   const handleValidateSection = async (report: CampReportRow) => {
@@ -347,9 +435,27 @@ export function CampReportsPage() {
         Back to camps
       </Link>
 
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-semibold text-zinc-900">Manage Reports</h1>
-        <p className="text-sm text-zinc-500 mt-1">Camp no. {campNo}</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-zinc-900">Manage Reports</h1>
+          <p className="text-sm text-zinc-500 mt-1">Camp no. {campNo}</p>
+        </div>
+        {!loading && !error && sortedReports.length > 0 && sections.length > 0 && (
+          <button
+            type="button"
+            onClick={() => void handleRefreshAllSections()}
+            disabled={bulkRefresh.running}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0"
+            title="Refresh every section on the main report and all department reports"
+          >
+            {bulkRefresh.running ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Refresh all sections
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -551,6 +657,72 @@ export function CampReportsPage() {
           })}
         </div>
       )}
+
+      <Modal
+        open={bulkRefresh.open}
+        onClose={closeBulkRefreshModal}
+        title={bulkRefresh.running ? "Refreshing all sections" : "Refresh complete"}
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-4">
+          {bulkRefresh.running ? (
+            <>
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-zinc-700 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-900">
+                    Refreshing {bulkRefresh.done} / {bulkRefresh.total}
+                  </p>
+                  {bulkRefresh.currentLabel && (
+                    <p className="text-xs text-zinc-500 mt-1 truncate">{bulkRefresh.currentLabel}</p>
+                  )}
+                </div>
+              </div>
+              <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-zinc-900 transition-all duration-300"
+                  style={{
+                    width: `${
+                      bulkRefresh.total > 0
+                        ? Math.round((bulkRefresh.done / bulkRefresh.total) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-zinc-500">
+                Keep this window open. Main report and every department section are refreshed one by one.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-700">
+                Finished {bulkRefresh.done} / {bulkRefresh.total} section refreshes.
+                {bulkRefresh.failures.length === 0
+                  ? " All succeeded."
+                  : ` ${bulkRefresh.failures.length} failed.`}
+              </p>
+              {bulkRefresh.failures.length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-red-200 bg-red-50 divide-y divide-red-100">
+                  {bulkRefresh.failures.map((failure) => (
+                    <div key={failure.label} className="px-3 py-2">
+                      <p className="text-xs font-medium text-red-800">{failure.label}</p>
+                      <p className="text-xs text-red-600 mt-0.5">{failure.error}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={closeBulkRefreshModal}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+              >
+                Close
+              </button>
+            </>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={dashboardModal !== null}

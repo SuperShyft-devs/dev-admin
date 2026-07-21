@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
 import { Search, Plus, Loader2, Users, X, FileBarChart } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
@@ -525,27 +524,10 @@ export function Organisations() {
     setCampReportDeleting(true);
     setCampActionError(null);
     try {
-      const orgRes = await organizationsApi.get(row.organization_id);
-      const slugs = (orgRes.data.data.departments ?? []).map((d) => d.slug);
-      const results = await Promise.allSettled([
-        campReportsApi.deleteCamp(row.camp_no),
-        ...slugs.map((slug) => campReportsApi.deleteDepartment(row.camp_no, slug)),
-      ]);
-      const hardFailures = results.filter((r) => {
-        if (r.status === "fulfilled") return false;
-        if (axios.isAxiosError(r.reason) && r.reason.response?.status === 404) return false;
-        return true;
-      });
-      if (hardFailures.length > 0) {
-        const first = hardFailures[0];
-        setCampActionError(
-          first.status === "rejected" ? getApiError(first.reason) : "Failed to delete camp reports"
-        );
-      } else {
-        setCampActionMessage("Camp reports deleted successfully");
-        setCampReportDeleteConfirm(null);
-        fetchCamps();
-      }
+      await campReportsApi.deleteCamp(row.camp_no);
+      setCampActionMessage("Camp reports deleted successfully");
+      setCampReportDeleteConfirm(null);
+      fetchCamps();
     } catch (err) {
       setCampActionError(getApiError(err));
     } finally {
