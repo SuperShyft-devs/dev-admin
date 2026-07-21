@@ -866,6 +866,17 @@ export function Settings() {
             }
             services={notificationServices}
           />
+          <NotificationServiceChipInput
+            label="Notify users for consultation"
+            value={notificationDefaults.default_notify_users_for_consultation ?? null}
+            onChange={(next) =>
+              setNotificationDefaults((prev) => ({
+                ...prev,
+                default_notify_users_for_consultation: next,
+              }))
+            }
+            services={notificationServices}
+          />
 
           {notificationError ? (
             <p className="text-sm text-red-600" role="alert">

@@ -252,6 +252,7 @@ export interface EngagementNotificationDefaults {
   default_questionnaire_reminder_2?: string | null;
   default_blood_report_notification?: string | null;
   default_bioai_report_notification?: string | null;
+  default_notify_users_for_consultation?: string | null;
 }
 
 export interface SupportQueryNotification {
@@ -1426,6 +1427,7 @@ export interface Engagement {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  notify_users_for_consultation?: string | null;
 }
 
 export interface EngagementListItem {
@@ -1464,6 +1466,7 @@ export interface EngagementListItem {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  notify_users_for_consultation?: string | null;
   readiness?: ChecklistReadiness | null;
 }
 
@@ -1500,6 +1503,7 @@ export interface EngagementCreate {
   questionnaire_reminder_2?: string | null;
   blood_report_notification?: string | null;
   bioai_report_notification?: string | null;
+  notify_users_for_consultation?: string | null;
 }
 
 export interface GeocodeSuggestion extends EngagementLocationFields {

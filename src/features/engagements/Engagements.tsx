@@ -653,6 +653,7 @@ const EMPTY_NOTIFICATION_FIELDS: Pick<
   | "questionnaire_reminder_2"
   | "blood_report_notification"
   | "bioai_report_notification"
+  | "notify_users_for_consultation"
 > = {
   onboarding_notification: null,
   pretest_guidelines_notification: null,
@@ -660,6 +661,7 @@ const EMPTY_NOTIFICATION_FIELDS: Pick<
   questionnaire_reminder_2: null,
   blood_report_notification: null,
   bioai_report_notification: null,
+  notify_users_for_consultation: null,
 };
 
 export function Engagements({
@@ -973,6 +975,7 @@ export function Engagements({
         questionnaire_reminder_2: d.default_questionnaire_reminder_2 ?? null,
         blood_report_notification: d.default_blood_report_notification ?? null,
         bioai_report_notification: d.default_bioai_report_notification ?? null,
+        notify_users_for_consultation: d.default_notify_users_for_consultation ?? null,
       };
     } catch {
       // keep empty defaults
@@ -1016,6 +1019,9 @@ export function Engagements({
         preset?.blood_report_notification ?? notificationDefaults.blood_report_notification,
       bioai_report_notification:
         preset?.bioai_report_notification ?? notificationDefaults.bioai_report_notification,
+      notify_users_for_consultation:
+        preset?.notify_users_for_consultation ??
+        notificationDefaults.notify_users_for_consultation,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1070,6 +1076,7 @@ export function Engagements({
         questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
         blood_report_notification: e.blood_report_notification ?? null,
         bioai_report_notification: e.bioai_report_notification ?? null,
+        notify_users_for_consultation: e.notify_users_for_consultation ?? null,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1136,6 +1143,7 @@ export function Engagements({
           questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
           blood_report_notification: data.blood_report_notification || null,
           bioai_report_notification: data.bioai_report_notification || null,
+          notify_users_for_consultation: data.notify_users_for_consultation || null,
           camp_no: computeCampNo(orgId, data.start_date),
         };
         const created = await engagementsApi.create(createPayload);
@@ -1175,6 +1183,7 @@ export function Engagements({
           questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
           blood_report_notification: data.blood_report_notification || null,
           bioai_report_notification: data.bioai_report_notification || null,
+          notify_users_for_consultation: data.notify_users_for_consultation || null,
           camp_no: computeCampNo(orgId, data.start_date),
         };
         await engagementsApi.update(selected.engagement_id, payload);

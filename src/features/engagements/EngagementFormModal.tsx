@@ -777,6 +777,12 @@ export function EngagementFormModal({
               onChange={(next) => setFormData({ ...formData, bioai_report_notification: next })}
               services={notificationServices}
             />
+            <NotificationServiceChipInput
+              label="Notify users for consultation"
+              value={formData.notify_users_for_consultation ?? null}
+              onChange={(next) => setFormData({ ...formData, notify_users_for_consultation: next })}
+              services={notificationServices}
+            />
           </div>
         )}
 

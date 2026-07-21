@@ -322,6 +322,9 @@ export function EngagementNotificationsTab({
         <Field label="BioAI Report Notification">
           {formatServices(engagement.bioai_report_notification)}
         </Field>
+        <Field label="Notify users for consultation">
+          {formatServices(engagement.notify_users_for_consultation)}
+        </Field>
       </div>
     </div>
   );
