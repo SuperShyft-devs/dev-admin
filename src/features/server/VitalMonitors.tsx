@@ -47,6 +47,8 @@ function MonitorPanel({
   const height = 120;
   const points = useMemo(() => buildPoints(values, width, height), [values]);
   const display = latest == null ? "—" : `${Math.round(latest)}${unit}`;
+  const gradId = `fade-${label.replace(/\s+/g, "-")}`;
+  const gridId = `grid-${label.replace(/\s+/g, "-")}`;
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-[#0b1220] overflow-hidden shadow-sm">
@@ -73,17 +75,16 @@ function MonitorPanel({
           aria-label={`${label} trend`}
         >
           <defs>
-            <linearGradient id={`fade-${label}`} x1="0" y1="0" x2="1" y2="0">
+            <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor={stroke} stopOpacity="0.05" />
               <stop offset="40%" stopColor={stroke} stopOpacity="0.9" />
               <stop offset="100%" stopColor={stroke} stopOpacity="1" />
             </linearGradient>
-            <pattern id={`grid-${label}`} width="24" height="24" patternUnits="userSpaceOnUse">
+            <pattern id={gridId} width="24" height="24" patternUnits="userSpaceOnUse">
               <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#1f2a3a" strokeWidth="1" />
             </pattern>
           </defs>
-          <rect x="0" y="0" width={width} height={height} fill={`url(#grid-${label})`} />
-          {/* clinical baseline guides */}
+          <rect x="0" y="0" width={width} height={height} fill={`url(#${gridId})`} />
           <line x1="0" y1={height * 0.25} x2={width} y2={height * 0.25} stroke="#243044" strokeWidth="1" />
           <line x1="0" y1={height * 0.5} x2={width} y2={height * 0.5} stroke="#2b3a52" strokeWidth="1" />
           <line x1="0" y1={height * 0.75} x2={width} y2={height * 0.75} stroke="#243044" strokeWidth="1" />
@@ -92,7 +93,7 @@ function MonitorPanel({
             <>
               <polyline
                 fill="none"
-                stroke={`url(#fade-${label})`}
+                stroke={`url(#${gradId})`}
                 strokeWidth="2.5"
                 strokeLinejoin="round"
                 strokeLinecap="round"
@@ -117,7 +118,8 @@ function MonitorPanel({
 
           <rect width="28" height={height} fill={stroke} opacity="0.08">
             <animate attributeName="x" from="-28" to={String(width)} dur="3.2s" repeatCount="indefinite" />
-          </rect>        </svg>
+          </rect>
+        </svg>
         <p className="px-2 pb-1 text-[11px] text-zinc-500">
           Last {values.length || 0} samples · 0–100{unit} scale · updates every health run (~15m)
         </p>
@@ -127,16 +129,16 @@ function MonitorPanel({
 }
 
 export function VitalMonitors({ history, loading }: VitalMonitorProps) {
-  // History API returns newest-first; chart left→right should be oldest→newest
   const chronological = useMemo(() => [...history].reverse(), [history]);
   const cpuValues = chronological.map((r) => r.cpu_pct ?? null);
   const memValues = chronological.map((r) => r.mem_pct ?? null);
-  const latestCpu = chronological.length ? chronological[chronological.length - 1]?.cpu_pct ?? null : null;
-  const latestMem = chronological.length ? chronological[chronological.length - 1]?.mem_pct ?? null : null;
+  const storageValues = chronological.map((r) => r.storage_pct ?? null);
+  const latest = chronological.length ? chronological[chronological.length - 1] : null;
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="h-44 rounded-xl bg-zinc-900/80 animate-pulse" />
         <div className="h-44 rounded-xl bg-zinc-900/80 animate-pulse" />
         <div className="h-44 rounded-xl bg-zinc-900/80 animate-pulse" />
       </div>
@@ -148,12 +150,31 @@ export function VitalMonitors({ history, loading }: VitalMonitorProps) {
       <div>
         <h2 className="text-sm font-semibold text-zinc-900">Live vitals</h2>
         <p className="text-xs text-zinc-500 mt-0.5">
-          CPU and memory trend (hospital-monitor style). Needs script samples in recent runs.
+          CPU, memory, and storage trends (hospital-monitor style). Storage is root filesystem usage.
         </p>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <MonitorPanel label="CPU" unit="%" latest={latestCpu} values={cpuValues} stroke="#34d399" />
-        <MonitorPanel label="Memory" unit="%" latest={latestMem} values={memValues} stroke="#38bdf8" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <MonitorPanel
+          label="CPU"
+          unit="%"
+          latest={latest?.cpu_pct ?? null}
+          values={cpuValues}
+          stroke="#34d399"
+        />
+        <MonitorPanel
+          label="Memory"
+          unit="%"
+          latest={latest?.mem_pct ?? null}
+          values={memValues}
+          stroke="#38bdf8"
+        />
+        <MonitorPanel
+          label="Storage"
+          unit="%"
+          latest={latest?.storage_pct ?? null}
+          values={storageValues}
+          stroke="#fbbf24"
+        />
       </div>
     </div>
   );

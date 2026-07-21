@@ -3398,6 +3398,7 @@ export interface HealthRun {
   overall_status: string;
   cpu_pct?: number | null;
   mem_pct?: number | null;
+  storage_pct?: number | null;
 }
 
 export interface HealthCheck {

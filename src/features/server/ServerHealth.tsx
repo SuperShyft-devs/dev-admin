@@ -1,16 +1,93 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Server, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, Server, Loader2, RefreshCw } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import {
   getApiError,
   serverHealthApi,
+  type HealthCheck,
   type HealthRun,
   type ServerHealthCurrent,
 } from "../../lib/api";
 import { VitalMonitors } from "./VitalMonitors";
 const REFRESH_MS = 60_000;
+
+function categoryHasIssues(checks: HealthCheck[]): boolean {
+  return checks.some((c) => {
+    const s = c.status.toUpperCase();
+    return s === "WARN" || s === "CRIT";
+  });
+}
+
+function CategoryAccordion({
+  category,
+  checks,
+  defaultOpen,
+}: {
+  category: string;
+  checks: HealthCheck[];
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const issueCount = checks.filter((c) => {
+    const s = c.status.toUpperCase();
+    return s === "WARN" || s === "CRIT";
+  }).length;
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3 bg-zinc-50 border-b border-zinc-100 text-left hover:bg-zinc-100/80 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <ChevronDown
+            className={`w-4 h-4 text-zinc-500 shrink-0 transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+            aria-hidden
+          />
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 truncate">
+            {category}
+          </h3>
+          <span className="text-[11px] text-zinc-400 tabular-nums shrink-0">
+            {checks.length} check{checks.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        {issueCount > 0 ? (
+          <span className="text-[11px] font-medium text-amber-700 shrink-0">
+            {issueCount} issue{issueCount === 1 ? "" : "s"}
+          </span>
+        ) : (
+          <span className="text-[11px] font-medium text-emerald-700 shrink-0">All OK</span>
+        )}
+      </button>
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500">
+                <th className="px-4 sm:px-5 py-2.5 font-medium w-28">Status</th>
+                <th className="px-4 sm:px-5 py-2.5 font-medium">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {checks.map((check) => (
+                <tr key={check.id} className="border-b border-zinc-50 last:border-0">
+                  <td className="px-4 sm:px-5 py-3 align-top">
+                    <CheckStatusBadge status={check.status} />
+                  </td>
+                  <td className="px-4 sm:px-5 py-3 text-zinc-700">{check.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function formatRunAt(value: string | null | undefined): string {
   if (!value) return "—";
@@ -201,6 +278,17 @@ export function ServerHealth() {
           </span>
         ),
       },
+      {
+        key: "storage_pct",
+        label: "Disk %",
+        sortable: true,
+        hideOnMobile: true,
+        render: (row) => (
+          <span className="tabular-nums text-zinc-700">
+            {row.storage_pct == null ? "—" : `${Math.round(row.storage_pct)}%`}
+          </span>
+        ),
+      },
     ],
     []
   );
@@ -274,33 +362,12 @@ export function ServerHealth() {
         ) : (
           <div className="divide-y divide-zinc-100">
             {current.checks_by_category.map((group) => (
-              <section key={group.category}>
-                <div className="px-4 sm:px-5 py-3 bg-zinc-50 border-b border-zinc-100">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                    {group.category}
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-100 text-left text-xs text-zinc-500">
-                        <th className="px-4 sm:px-5 py-2.5 font-medium w-28">Status</th>
-                        <th className="px-4 sm:px-5 py-2.5 font-medium">Message</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.checks.map((check) => (
-                        <tr key={check.id} className="border-b border-zinc-50 last:border-0">
-                          <td className="px-4 sm:px-5 py-3 align-top">
-                            <CheckStatusBadge status={check.status} />
-                          </td>
-                          <td className="px-4 sm:px-5 py-3 text-zinc-700">{check.message}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+              <CategoryAccordion
+                key={group.category}
+                category={group.category}
+                checks={group.checks}
+                defaultOpen={categoryHasIssues(group.checks)}
+              />
             ))}
           </div>
         )}
