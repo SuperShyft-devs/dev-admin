@@ -3292,8 +3292,7 @@ export const bookingApi = {
   checkServiceAvailability: (payload: {
     members: Array<{
       user_id: number;
-      house_flat_no: string;
-      building_area: string;
+      address_line: string;
       landmark?: string;
       city: string;
       pincode: string;
