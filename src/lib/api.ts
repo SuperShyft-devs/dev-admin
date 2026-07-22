@@ -217,7 +217,7 @@ export interface SupportTicket {
 }
 
 export interface SupportTicketCreate {
-  contact_input: string;
+  user_id: number;
   query_text: string;
 }
 

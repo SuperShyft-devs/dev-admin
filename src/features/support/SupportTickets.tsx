@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
   getApiError,
   supportApi,
@@ -26,7 +27,7 @@ export function SupportTickets() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createForm, setCreateForm] = useState<SupportTicketCreate>({
-    contact_input: "",
+    user_id: 0,
     query_text: "",
   });
 
@@ -158,8 +159,8 @@ export function SupportTickets() {
   ];
 
   const submitCreate = async () => {
-    if (!createForm.contact_input.trim() || !createForm.query_text.trim()) {
-      setError("Contact and query are required.");
+    if (!createForm.user_id || createForm.user_id <= 0 || !createForm.query_text.trim()) {
+      setError("User and query are required.");
       return;
     }
 
@@ -167,11 +168,11 @@ export function SupportTickets() {
     setError(null);
     try {
       await supportApi.submitTicket({
-        contact_input: createForm.contact_input.trim(),
+        user_id: createForm.user_id,
         query_text: createForm.query_text.trim(),
       });
       setCreateOpen(false);
-      setCreateForm({ contact_input: "", query_text: "" });
+      setCreateForm({ user_id: 0, query_text: "" });
       await fetchTickets();
     } catch (err) {
       setError(getApiError(err));
@@ -207,7 +208,11 @@ export function SupportTickets() {
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Support Tickets</h1>
         <button
           type="button"
-          onClick={() => setCreateOpen(true)}
+          onClick={() => {
+            setCreateForm({ user_id: 0, query_text: "" });
+            setError(null);
+            setCreateOpen(true);
+          }}
           className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
@@ -321,7 +326,10 @@ export function SupportTickets() {
 
       <Modal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateForm({ user_id: 0, query_text: "" });
+        }}
         title="Create Support Ticket"
         maxWidthClassName="max-w-xl"
       >
@@ -332,21 +340,14 @@ export function SupportTickets() {
           }}
           className="space-y-4"
         >
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">
-              Contact (email/phone) *
-            </label>
-            <input
-              type="text"
-              value={createForm.contact_input}
-              onChange={(event) =>
-                setCreateForm((prev) => ({ ...prev, contact_input: event.target.value }))
-              }
-              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              placeholder="user@example.com or +91xxxxxxxxxx"
-              required
-            />
-          </div>
+          <UserSearchPicker
+            label="User"
+            value={createForm.user_id}
+            onChange={(userId) => setCreateForm((prev) => ({ ...prev, user_id: userId }))}
+            required
+            disabled={createSubmitting}
+            placeholder="Search by name, phone, or email…"
+          />
 
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">Query *</label>
@@ -371,7 +372,10 @@ export function SupportTickets() {
             </button>
             <button
               type="button"
-              onClick={() => setCreateOpen(false)}
+              onClick={() => {
+                setCreateOpen(false);
+                setCreateForm({ user_id: 0, query_text: "" });
+              }}
               className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
             >
               Cancel
