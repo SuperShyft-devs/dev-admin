@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
-import { engagementsApi, type CampListItem, getApiError } from "../../lib/api";
+import { type CampListItem, getApiError } from "../../lib/api";
+import { listAllEngagementsForCamp } from "./listAllEngagementsForCamp";
 
 interface CampCitiesModalProps {
   camp: CampListItem | null;
@@ -29,12 +30,11 @@ export function CampCitiesModal({ camp, onClose }: CampCitiesModalProps) {
     setLoading(true);
     setError(null);
 
-    engagementsApi
-      .list({ camp_no: camp.camp_no, page: 1, limit: 200 })
-      .then((res) => {
+    listAllEngagementsForCamp(camp.camp_no)
+      .then((rows) => {
         if (cancelled) return;
         const counts = new Map<string, CityCount>();
-        for (const row of res.data.data) {
+        for (const row of rows) {
           const raw = (row.city ?? "").trim();
           if (!raw) continue;
           const key = raw.toLowerCase();

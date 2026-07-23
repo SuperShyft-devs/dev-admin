@@ -3,11 +3,11 @@ import { FileText, Loader2 } from "lucide-react";
 import axios from "axios";
 import {
   campReportsApi,
-  engagementsApi,
   organizationsApi,
   getApiError,
 } from "../../lib/api";
 import { Modal } from "./Modal";
+import { listAllEngagementsForCamp } from "./listAllEngagementsForCamp";
 
 interface CampReportInitMenuProps {
   campNo: number;
@@ -31,9 +31,9 @@ async function fetchDepartmentSlugs(organizationId: number): Promise<string[]> {
 }
 
 async function fetchCampCities(campNo: number): Promise<string[]> {
-  const res = await engagementsApi.list({ camp_no: campNo, page: 1, limit: 200 });
+  const rows = await listAllEngagementsForCamp(campNo);
   const cities = new Map<string, string>();
-  for (const row of res.data.data) {
+  for (const row of rows) {
     const raw = (row.city ?? "").trim();
     if (!raw) continue;
     const key = raw.toLowerCase();
