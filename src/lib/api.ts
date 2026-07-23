@@ -852,6 +852,19 @@ export const organizationsApi = {
       `/organizations/${organizationId}/camps`,
       { params }
     ),
+  remapCampNo: (campNo: number, newCampNo: number) =>
+    api.put<{
+      data: {
+        camp_no: number;
+        new_camp_no: number;
+        updated_engagements: number;
+        target_existing_engagements: number;
+      };
+    }>(`/organizations/camps/${campNo}`, { new_camp_no: newCampNo }),
+  getCampEngagementCount: (campNo: number) =>
+    api.get<{ data: { camp_no: number; engagement_count: number } }>(
+      `/organizations/camps/${campNo}/engagement-count`
+    ),
 };
 
 export interface CampListItem {
@@ -969,6 +982,34 @@ export const campReportsApi = {
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/department/${slug}/init`),
+  initCity: (campNo: number, city: string) =>
+    api.post<{ data: { report_id: number } }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/init`
+    ),
+  initCityDepartment: (campNo: number, city: string, slug: string) =>
+    api.post<{ data: { report_id: number } }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/department/${slug}/init`
+    ),
+  refreshCity: (campNo: number, city: string, section: string) =>
+    api.put<{ data: CampReportRefreshResult }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/refresh`,
+      { section }
+    ),
+  refreshCityDepartment: (campNo: number, city: string, slug: string, section: string) =>
+    api.put<{ data: CampReportRefreshResult }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/department/${slug}/refresh`,
+      { section }
+    ),
+  getCityDashboard: (campNo: number, city: string, section: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/dashboard`,
+      { params: { section } }
+    ),
+  getCityDepartmentDashboard: (campNo: number, city: string, slug: string, section: string) =>
+    api.get<{ data: Record<string, unknown> }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/department/${slug}/dashboard`,
+      { params: { section } }
+    ),
   deleteCamp: (campNo: number) =>
     api.delete<{ data: { deleted: boolean } }>(`/reports/camps/${campNo}`),
   deleteDepartment: (campNo: number, slug: string) =>
@@ -979,6 +1020,7 @@ export interface CampReportRow {
   report_id: number;
   camp_no: number;
   department: string | null;
+  city?: string | null;
   organization_id: number;
   report: Record<string, unknown> | null;
   created_at: string | null;

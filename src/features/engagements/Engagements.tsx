@@ -708,6 +708,11 @@ export function Engagements({
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [selected, setSelected] = useState<Engagement | null>(null);
+  const [campNoConfirm, setCampNoConfirm] = useState<{
+    payload: Record<string, unknown>;
+    currentCampNo: number | null;
+    nextCampNo: number | null;
+  } | null>(null);
   const [formData, setFormData] = useState<EngagementCreate>({
     engagement_name: "",
     metsights_engagement_id: "",
@@ -1091,6 +1096,16 @@ export function Engagements({
     return trimmed ? trimmed : null;
   };
 
+  const performEngagementUpdate = async (
+    engagementId: number,
+    payload: Record<string, unknown>
+  ) => {
+    await engagementsApi.update(engagementId, payload as never);
+    setModalOpen(false);
+    setCampNoConfirm(null);
+    fetchList();
+  };
+
   const handleSubmit = async (data: EngagementCreate) => {
     const orgId = resolveOrganizationId(data);
     const missingOrg = modalMode === "add" && !orgId;
@@ -1153,7 +1168,11 @@ export function Engagements({
         // once the checklist prompt flow (Yes → checklist modal, or No) finishes.
         setPendingAssistantsEngagementId(engagementId);
         setAddChecklistPromptOpen(true);
+        setModalOpen(false);
+        fetchList();
       } else if (selected) {
+        const nextCampNo = computeCampNo(orgId, data.start_date);
+        const currentCampNo = selected.camp_no ?? null;
         const payload = {
           engagement_name: data.engagement_name,
           engagement_code: (data.engagement_code ?? "").trim(),
@@ -1184,12 +1203,40 @@ export function Engagements({
           blood_report_notification: data.blood_report_notification || null,
           bioai_report_notification: data.bioai_report_notification || null,
           notify_users_for_consultation: data.notify_users_for_consultation || null,
-          camp_no: computeCampNo(orgId, data.start_date),
         };
-        await engagementsApi.update(selected.engagement_id, payload);
+
+        if (orgId && nextCampNo != null && currentCampNo !== nextCampNo) {
+          setCampNoConfirm({
+            payload,
+            currentCampNo,
+            nextCampNo,
+          });
+          return;
+        }
+
+        await performEngagementUpdate(selected.engagement_id, {
+          ...payload,
+          camp_no: nextCampNo,
+        });
       }
-      setModalOpen(false);
-      fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmCampNoUpdate = async (includeCampNo: boolean) => {
+    if (!selected || !campNoConfirm) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await performEngagementUpdate(selected.engagement_id, {
+        ...campNoConfirm.payload,
+        camp_no: includeCampNo
+          ? campNoConfirm.nextCampNo
+          : campNoConfirm.currentCampNo,
+      });
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -1723,6 +1770,68 @@ export function Engagements({
         onSubmit={(data) => void handleSubmit(data)}
       />
 
+      <Modal
+        open={!!campNoConfirm}
+        onClose={() => {
+          if (!submitting) setCampNoConfirm(null);
+        }}
+        title="Camp number will change"
+        maxWidthClassName="max-w-md"
+      >
+        {campNoConfirm && (
+          <div className="space-y-3 text-sm">
+            <p className="text-zinc-600">
+              Updating organisation or start date would change camp_no from{" "}
+              <span className="font-medium text-zinc-900">
+                {campNoConfirm.currentCampNo ?? "—"}
+              </span>{" "}
+              to{" "}
+              <span className="font-medium text-zinc-900">
+                {campNoConfirm.nextCampNo ?? "—"}
+              </span>
+              .
+            </p>
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void confirmCampNoUpdate(false)}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-3 text-left hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <div className="font-medium text-zinc-900">
+                  Only update what we have updated now
+                </div>
+                <div className="text-zinc-500 mt-0.5">
+                  Keep camp_no as {campNoConfirm.currentCampNo ?? "—"}.
+                </div>
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void confirmCampNoUpdate(true)}
+                className="w-full rounded-lg border border-zinc-200 px-3 py-3 text-left hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <div className="font-medium text-zinc-900">
+                  Update what we have updated now + camp_no
+                </div>
+                <div className="text-zinc-500 mt-0.5">
+                  Also set camp_no to {campNoConfirm.nextCampNo ?? "—"}.
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => setCampNoConfirm(null)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <EngagementDrawer
         open={drawerOpen}
