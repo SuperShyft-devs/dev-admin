@@ -2614,6 +2614,8 @@ export const diagnosticPackagesApi = {
     ),
   reorder: (payload: { package_ids: number[] }) =>
     api.patch<{ data: { reordered: boolean } }>("/diagnostic-packages/order", payload),
+  duplicate: (id: number) =>
+    api.post<{ data: DiagnosticPackageListItem }>(`/diagnostic-packages/${id}/duplicate`),
   delete: (id: number) => api.delete(`/diagnostic-packages/${id}`),
   addReason: (id: number, payload: { reason_text: string; display_order?: number }) =>
     api.post<{ data: DiagnosticReason }>(`/diagnostic-packages/${id}/reasons`, payload),
