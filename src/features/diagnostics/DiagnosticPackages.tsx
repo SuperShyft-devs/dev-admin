@@ -294,6 +294,17 @@ export function DiagnosticPackages() {
     }
   };
 
+  const handleDuplicatePackage = async (row: DiagnosticPackageListItem) => {
+    try {
+      setLoading(true);
+      await diagnosticPackagesApi.duplicate(row.diagnostic_package_id);
+      await fetchPackages();
+    } catch (err) {
+      setError(getApiError(err));
+      setLoading(false);
+    }
+  };
+
   const handleImageUpload = async (file?: File) => {
     if (!file) return;
     setImageUploading(true);
@@ -583,6 +594,7 @@ export function DiagnosticPackages() {
                 keyExtractor={(row) => row.diagnostic_package_id}
                 onView={openDrawer}
                 onEdit={openEdit}
+                onDuplicate={handleDuplicatePackage}
                 onDelete={handleDeletePackage}
                 onReorder={
                   canReorderPackages && filteredRows.length > 1 && !reorderingPackages

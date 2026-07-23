@@ -15,6 +15,7 @@ import {
   CalendarDays,
   Building2,
   Send,
+  Copy,
 } from "lucide-react";
 import {
   DndContext,
@@ -57,6 +58,7 @@ interface DataTableProps<T> {
   onSort?: (key: string) => void;
   onView?: (row: T) => void;
   onEdit?: (row: T) => void;
+  onDuplicate?: (row: T) => void;
   onDelete?: (row: T) => void;
   onDeleteLabel?: string;
   canDelete?: (row: T) => boolean;
@@ -91,6 +93,7 @@ interface SortableRowProps<T> {
   hasActions: boolean;
   onView?: (row: T) => void;
   onEdit?: (row: T) => void;
+  onDuplicate?: (row: T) => void;
   onDelete?: (row: T) => void;
   onDeleteLabel?: string;
   canDelete?: (row: T) => boolean;
@@ -189,6 +192,11 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
                     <Pencil className="w-4 h-4" /> Edit
                   </button>
                 )}
+                {props.onDuplicate && (
+                  <button onClick={() => { props.onDuplicate!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                    <Copy className="w-4 h-4" /> Duplicate
+                  </button>
+                )}
                 {props.onParticipants && (
                   <button onClick={() => { props.onParticipants!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
                     <Users className="w-4 h-4" /> View Participants
@@ -256,6 +264,7 @@ export function DataTable<T extends object>(
     onSort,
     onView,
     onEdit,
+    onDuplicate,
     onDelete,
     onDeleteLabel = "Delete",
     canDelete,
@@ -305,6 +314,7 @@ export function DataTable<T extends object>(
   const hasActions =
     onView ||
     onEdit ||
+    onDuplicate ||
     onDelete ||
     onQuestions ||
     onParticipants ||
@@ -409,6 +419,7 @@ export function DataTable<T extends object>(
                   hasActions={!!hasActions}
                   onView={onView}
                   onEdit={onEdit}
+                  onDuplicate={onDuplicate}
                   onDelete={onDelete}
                   onDeleteLabel={onDeleteLabel}
                   canDelete={canDelete}
