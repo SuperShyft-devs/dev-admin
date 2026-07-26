@@ -884,10 +884,18 @@ export function CampReportsPage() {
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
                   Client timeout: {confirmModal.estimate.timeout_seconds}s
-                  {confirmModal.estimate.operations.length === 1 &&
-                    confirmModal.estimate.operations[0].participant_count != null && (
-                      <> · {confirmModal.estimate.operations[0].participant_count} participants</>
-                    )}
+                  {confirmModal.estimate.operations.length === 1 && (
+                    <>
+                      {confirmModal.estimate.operations[0].participant_count != null && (
+                        <> · {confirmModal.estimate.operations[0].participant_count} participants</>
+                      )}
+                      {confirmModal.estimate.operations[0].unit_count != null &&
+                        confirmModal.estimate.operations[0].unit_count !==
+                          confirmModal.estimate.operations[0].participant_count && (
+                          <> · {confirmModal.estimate.operations[0].unit_count} assessments</>
+                        )}
+                    </>
+                  )}
                 </p>
               </div>
               {!confirmModal.estimate.all_allowed && (
