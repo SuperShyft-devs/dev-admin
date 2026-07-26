@@ -3,10 +3,13 @@ import { authStorage, loginPathWithRedirect } from "./authStorage";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+/** Shared client timeout for long-running admin API calls (camp report refresh/validate). */
+export const API_TIMEOUT_MS = 120_000;
+
 export const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
-  timeout: 120_000,
+  timeout: API_TIMEOUT_MS,
 });
 
 const authHttp = axios.create({
@@ -938,6 +941,10 @@ export const campReportsApi = {
       `/reports/camps/${campNo}/department/${slug}/refresh`,
       { section }
     ),
+  estimate: (campNo: number, operations: CampReportEstimateOperation[]) =>
+    api.post<{ data: CampReportEstimateResult }>(`/reports/camps/${campNo}/estimate`, {
+      operations,
+    }),
   validateCompanyAverageScores: (campNo: number) =>
     api.get<{ data: Record<string, unknown> }>(
       `/reports/camps/${campNo}/validate/company-average-scores`
@@ -1052,6 +1059,29 @@ export interface CampReportSectionPayload {
 export interface CampReportRefreshResult {
   report_id: number;
   section: CampReportSectionPayload;
+}
+
+export interface CampReportEstimateOperation {
+  section: string;
+  action: "refresh" | "validate";
+  department?: string | null;
+}
+
+export interface CampReportEstimateOperationResult {
+  section: string;
+  action: string;
+  department: string | null;
+  participant_count: number;
+  unit_count: number;
+  estimated_seconds: number;
+  allowed: boolean;
+}
+
+export interface CampReportEstimateResult {
+  timeout_seconds: number;
+  operations: CampReportEstimateOperationResult[];
+  total_estimated_seconds: number;
+  all_allowed: boolean;
 }
 
 // Expert Types (dynamic catalog)

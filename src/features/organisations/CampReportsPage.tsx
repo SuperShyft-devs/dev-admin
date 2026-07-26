@@ -14,6 +14,8 @@ import {
   campReportSectionsApi,
   campReportsApi,
   getApiError,
+  type CampReportEstimateOperation,
+  type CampReportEstimateResult,
   type CampReportRow,
   type CampReportSection,
   type CampReportSectionPayload,
@@ -42,6 +44,38 @@ function getSectionData(
 function reportAccordionKey(report: CampReportRow): string {
   return `${report.report_id}-${report.department ?? "overall"}`;
 }
+
+function formatEstimatedTime(seconds: number): string {
+  if (seconds < 60) {
+    return `about ${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `about ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  if (remMinutes === 0) {
+    return `about ${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  return `about ${hours}h ${remMinutes}m`;
+}
+
+type ConfirmValidateKind =
+  | "company_average"
+  | "positive_wins"
+  | "overall_risk"
+  | "questionnaire";
+
+type ConfirmAction =
+  | { kind: "refresh"; report: CampReportRow; section: CampReportSection }
+  | {
+      kind: "validate";
+      report: CampReportRow;
+      sectionKey: string;
+      validateKind: ConfirmValidateKind;
+    }
+  | { kind: "refresh_all" };
 
 export function CampReportsPage() {
   const { campNo: campNoParam } = useParams<{ campNo: string }>();
@@ -91,6 +125,23 @@ export function CampReportsPage() {
     total: 0,
     currentLabel: null,
     failures: [],
+  });
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    action: ConfirmAction | null;
+    estimating: boolean;
+    estimate: CampReportEstimateResult | null;
+    error: string | null;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    action: null,
+    estimating: false,
+    estimate: null,
+    error: null,
   });
 
   const fetchData = useCallback(async () => {
@@ -223,6 +274,124 @@ export function CampReportsPage() {
     const meta = getReportMeta(report);
     if (typeof meta?.camp_name === "string" && meta.camp_name) return meta.camp_name;
     return `Department: ${report.department}`;
+  };
+
+  const closeConfirmModal = () => {
+    if (confirmModal.estimating) return;
+    setConfirmModal((prev) => ({ ...prev, open: false, action: null }));
+  };
+
+  const openConfirmModal = async (
+    title: string,
+    description: string,
+    action: ConfirmAction,
+    operations: CampReportEstimateOperation[]
+  ) => {
+    setConfirmModal({
+      open: true,
+      title,
+      description,
+      action,
+      estimating: true,
+      estimate: null,
+      error: null,
+    });
+    try {
+      const response = await campReportsApi.estimate(campNo, operations);
+      setConfirmModal((prev) => ({
+        ...prev,
+        estimating: false,
+        estimate: response.data.data,
+        error: null,
+      }));
+    } catch (err) {
+      setConfirmModal((prev) => ({
+        ...prev,
+        estimating: false,
+        estimate: null,
+        error: getApiError(err),
+      }));
+    }
+  };
+
+  const requestRefreshSection = (
+    report: CampReportRow,
+    section: CampReportSection
+  ) => {
+    void openConfirmModal(
+      "Confirm refresh",
+      `Refresh “${section.section}” on ${reportDisplayName(report)}?`,
+      { kind: "refresh", report, section },
+      [
+        {
+          section: section.section_key,
+          action: "refresh",
+          department: report.department,
+        },
+      ]
+    );
+  };
+
+  const requestValidate = (
+    report: CampReportRow,
+    sectionKey: string,
+    validateKind: ConfirmValidateKind,
+    label: string
+  ) => {
+    void openConfirmModal(
+      "Confirm validate",
+      `Validate “${label}” on ${reportDisplayName(report)}?`,
+      { kind: "validate", report, sectionKey, validateKind },
+      [
+        {
+          section: sectionKey,
+          action: "validate",
+          department: report.department,
+        },
+      ]
+    );
+  };
+
+  const requestRefreshAllSections = () => {
+    if (sortedReports.length === 0 || sections.length === 0 || bulkRefresh.running) return;
+    const operations: CampReportEstimateOperation[] = sortedReports.flatMap((report) =>
+      sections.map((section) => ({
+        section: section.section_key,
+        action: "refresh" as const,
+        department: report.department,
+      }))
+    );
+    void openConfirmModal(
+      "Confirm refresh all",
+      `Refresh every section on the main report and all department reports (${operations.length} operations)?`,
+      { kind: "refresh_all" },
+      operations
+    );
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmModal.action;
+    const estimate = confirmModal.estimate;
+    if (!action || !estimate?.all_allowed) return;
+    setConfirmModal((prev) => ({ ...prev, open: false, action: null }));
+
+    if (action.kind === "refresh") {
+      await handleRefreshSection(action.report, action.section);
+      return;
+    }
+    if (action.kind === "refresh_all") {
+      await handleRefreshAllSections();
+      return;
+    }
+    if (action.validateKind === "company_average") {
+      await handleValidateSection(action.report);
+    } else if (action.validateKind === "positive_wins") {
+      await handleValidatePositiveWins(action.report);
+    } else if (action.validateKind === "overall_risk") {
+      await handleValidateOverallRisk(action.report);
+    } else {
+      await handleValidateQuestionnaire(action.report, action.sectionKey);
+    }
   };
 
   const handleRefreshAllSections = async () => {
@@ -443,8 +612,8 @@ export function CampReportsPage() {
         {!loading && !error && sortedReports.length > 0 && sections.length > 0 && (
           <button
             type="button"
-            onClick={() => void handleRefreshAllSections()}
-            disabled={bulkRefresh.running}
+            onClick={() => requestRefreshAllSections()}
+            disabled={bulkRefresh.running || confirmModal.open}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0"
             title="Refresh every section on the main report and all department reports"
           >
@@ -555,8 +724,15 @@ export function CampReportsPage() {
                                   {section.section_key === "company_average_scores" && (
                                     <button
                                       type="button"
-                                      onClick={() => void handleValidateSection(report)}
-                                      disabled={isSectionBusy}
+                                      onClick={() =>
+                                        requestValidate(
+                                          report,
+                                          section.section_key,
+                                          "company_average",
+                                          section.section
+                                        )
+                                      }
+                                      disabled={isSectionBusy || confirmModal.open}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate scores"
                                     >
@@ -570,8 +746,15 @@ export function CampReportsPage() {
                                   {section.section_key === "positive_wins" && (
                                     <button
                                       type="button"
-                                      onClick={() => void handleValidatePositiveWins(report)}
-                                      disabled={isSectionBusy}
+                                      onClick={() =>
+                                        requestValidate(
+                                          report,
+                                          section.section_key,
+                                          "positive_wins",
+                                          section.section
+                                        )
+                                      }
+                                      disabled={isSectionBusy || confirmModal.open}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate positive wins"
                                     >
@@ -585,8 +768,15 @@ export function CampReportsPage() {
                                   {section.section_key === "overall_risk_score" && (
                                     <button
                                       type="button"
-                                      onClick={() => void handleValidateOverallRisk(report)}
-                                      disabled={isSectionBusy}
+                                      onClick={() =>
+                                        requestValidate(
+                                          report,
+                                          section.section_key,
+                                          "overall_risk",
+                                          section.section
+                                        )
+                                      }
+                                      disabled={isSectionBusy || confirmModal.open}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate overall risk score"
                                     >
@@ -601,8 +791,15 @@ export function CampReportsPage() {
                                     section.section_key === "distribution_by_sleeping_hours") && (
                                     <button
                                       type="button"
-                                      onClick={() => void handleValidateQuestionnaire(report, section.section_key)}
-                                      disabled={isSectionBusy}
+                                      onClick={() =>
+                                        requestValidate(
+                                          report,
+                                          section.section_key,
+                                          "questionnaire",
+                                          section.section
+                                        )
+                                      }
+                                      disabled={isSectionBusy || confirmModal.open}
                                       className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                       title="Validate distribution"
                                     >
@@ -628,8 +825,8 @@ export function CampReportsPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => void handleRefreshSection(report, section)}
-                                    disabled={isSectionBusy}
+                                    onClick={() => requestRefreshSection(report, section)}
+                                    disabled={isSectionBusy || confirmModal.open}
                                     className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
                                     title="Refresh and load section data"
                                   >
@@ -657,6 +854,95 @@ export function CampReportsPage() {
           })}
         </div>
       )}
+
+      <Modal
+        open={confirmModal.open}
+        onClose={closeConfirmModal}
+        title={confirmModal.title}
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-600">{confirmModal.description}</p>
+
+          {confirmModal.estimating ? (
+            <div className="flex items-center gap-3 py-2">
+              <Loader2 className="w-5 h-5 animate-spin text-zinc-500 shrink-0" />
+              <p className="text-sm text-zinc-500">Estimating completion time…</p>
+            </div>
+          ) : confirmModal.error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {confirmModal.error}
+            </div>
+          ) : confirmModal.estimate ? (
+            <div className="space-y-2">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3">
+                <p className="text-sm text-zinc-900">
+                  Estimated time:{" "}
+                  <span className="font-medium">
+                    {formatEstimatedTime(confirmModal.estimate.total_estimated_seconds)}
+                  </span>
+                </p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Client timeout: {confirmModal.estimate.timeout_seconds}s
+                  {confirmModal.estimate.operations.length === 1 &&
+                    confirmModal.estimate.operations[0].participant_count != null && (
+                      <> · {confirmModal.estimate.operations[0].participant_count} participants</>
+                    )}
+                </p>
+              </div>
+              {!confirmModal.estimate.all_allowed && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {confirmModal.action?.kind === "refresh_all" ? (
+                    <>
+                      One or more sections are estimated to exceed the {confirmModal.estimate.timeout_seconds}s
+                      timeout and cannot be started.
+                      <ul className="mt-2 list-disc list-inside text-xs space-y-0.5">
+                        {confirmModal.estimate.operations
+                          .filter((op) => !op.allowed)
+                          .map((op) => (
+                            <li key={`${op.action}:${op.section}:${op.department ?? ""}`}>
+                              {op.section}
+                              {op.department ? ` (${op.department})` : ""} —{" "}
+                              {formatEstimatedTime(op.estimated_seconds)}
+                            </li>
+                          ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <>
+                      This operation is estimated to take longer than the{" "}
+                      {confirmModal.estimate.timeout_seconds}s client timeout. It cannot be started.
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={closeConfirmModal}
+              disabled={confirmModal.estimating}
+              className="px-4 py-2 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConfirmAction()}
+              disabled={
+                confirmModal.estimating ||
+                !!confirmModal.error ||
+                !confirmModal.estimate?.all_allowed
+              }
+              className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={bulkRefresh.open}
