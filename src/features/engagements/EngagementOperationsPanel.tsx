@@ -742,43 +742,76 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                     </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleAssessmentConnectMetsights(pkg)}
-                      disabled={
-                        assessmentConnectingPackageId !== null ||
-                        assessmentSyncingPackageId !== null
-                      }
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                      title="Connect Metsights records for assigned participants"
-                    >
-                      <Link2
-                        className={`w-4 h-4 ${assessmentConnectingPackageId === pkg.package_id ? "animate-pulse" : ""}`}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAssessmentSyncPackage(pkg)}
-                      disabled={
-                        assessmentSyncingPackageId !== null ||
-                        assessmentConnectingPackageId !== null
-                      }
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-50"
-                      title="Assign package to missing participants"
-                    >
-                      <RefreshCw
-                        className={`w-4 h-4 ${assessmentSyncingPackageId === pkg.package_id ? "animate-spin" : ""}`}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAssessmentDeleteConfirm(pkg)}
-                      disabled={assessmentConnectingPackageId !== null || assessmentSyncingPackageId !== null}
-                      className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                      title="Remove from engagement"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <span className="relative group/connect">
+                      <button
+                        type="button"
+                        onClick={() => handleAssessmentConnectMetsights(pkg)}
+                        disabled={
+                          assessmentConnectingPackageId !== null ||
+                          assessmentSyncingPackageId !== null
+                        }
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                        aria-label="Connect to Metsights"
+                      >
+                        <Link2
+                          className={`w-4 h-4 ${assessmentConnectingPackageId === pkg.package_id ? "animate-pulse" : ""}`}
+                        />
+                      </button>
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-48 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/connect:opacity-100 group-focus-within/connect:opacity-100"
+                      >
+                        <span className="font-medium">Connect</span>
+                        <span className="mt-0.5 block font-normal text-zinc-300">
+                          Links each person&apos;s assessment to their Metsights profile so results can sync.
+                        </span>
+                      </span>
+                    </span>
+                    <span className="relative group/refresh">
+                      <button
+                        type="button"
+                        onClick={() => handleAssessmentSyncPackage(pkg)}
+                        disabled={
+                          assessmentSyncingPackageId !== null ||
+                          assessmentConnectingPackageId !== null
+                        }
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors disabled:opacity-50"
+                        aria-label="Assign to missing participants"
+                      >
+                        <RefreshCw
+                          className={`w-4 h-4 ${assessmentSyncingPackageId === pkg.package_id ? "animate-spin" : ""}`}
+                        />
+                      </button>
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-48 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/refresh:opacity-100 group-focus-within/refresh:opacity-100"
+                      >
+                        <span className="font-medium">Refresh</span>
+                        <span className="mt-0.5 block font-normal text-zinc-300">
+                          Gives this assessment to people who don&apos;t have it yet.
+                        </span>
+                      </span>
+                    </span>
+                    <span className="relative group/remove">
+                      <button
+                        type="button"
+                        onClick={() => setAssessmentDeleteConfirm(pkg)}
+                        disabled={assessmentConnectingPackageId !== null || assessmentSyncingPackageId !== null}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                        aria-label="Remove from engagement"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <span
+                        role="tooltip"
+                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-44 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/remove:opacity-100 group-focus-within/remove:opacity-100"
+                      >
+                        <span className="font-medium">Remove</span>
+                        <span className="mt-0.5 block font-normal text-zinc-300">
+                          Removes this assessment from the engagement.
+                        </span>
+                      </span>
+                    </span>
                   </div>
                 </div>
               ))}
