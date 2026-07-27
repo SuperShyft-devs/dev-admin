@@ -35,7 +35,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { PortalMenu } from "./PortalMenu";
 
 export interface Column<T> {
   key: string;
@@ -111,7 +112,6 @@ interface SortableRowProps<T> {
   firstColumnClickableView: boolean;
   openActionsRow: string | number | null;
   setOpenActionsRow: (val: string | number | null | ((curr: string | number | null) => string | number | null)) => void;
-  actionsMenuRef: React.RefObject<HTMLDivElement>;
   visibilityClass: (col: Column<T>) => string;
   onReorder?: boolean;
 }
@@ -134,7 +134,10 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
     backgroundColor: isDragging ? "var(--bg-zinc-50, #fafafa)" : undefined,
   };
 
-  const { row, rowKey, columns, hasActions, openActionsRow, setOpenActionsRow, actionsMenuRef } = props;
+  const { row, rowKey, columns, hasActions, openActionsRow, setOpenActionsRow } = props;
+  const actionsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const menuOpen = openActionsRow === rowKey;
+  const closeMenu = () => setOpenActionsRow(null);
 
   return (
     <tr
@@ -170,81 +173,87 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
         );
       })}
       {hasActions && (
-        <td className="px-2 sm:px-4 py-2.5 sm:py-3 relative">
-          <div className="flex justify-end" ref={openActionsRow === rowKey ? actionsMenuRef : null}>
+        <td className="px-2 sm:px-4 py-2.5 sm:py-3">
+          <div className="flex justify-end">
             <button
+              ref={actionsButtonRef}
               type="button"
               onClick={() => setOpenActionsRow((curr) => (curr === rowKey ? null : rowKey))}
               className="p-1.5 sm:p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
               title="Actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            {openActionsRow === rowKey && (
-              <div className="absolute right-0 top-full z-[999] mt-1 w-52 rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden">
-                {props.onView && (
-                  <button onClick={() => { props.onView!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Eye className="w-4 h-4" /> View
-                  </button>
-                )}
-                {props.onEdit && (
-                  <button onClick={() => { props.onEdit!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Pencil className="w-4 h-4" /> Edit
-                  </button>
-                )}
-                {props.onDuplicate && (
-                  <button onClick={() => { props.onDuplicate!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Copy className="w-4 h-4" /> Duplicate
-                  </button>
-                )}
-                {props.onParticipants && (
-                  <button onClick={() => { props.onParticipants!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> View Participants
-                  </button>
-                )}
-                {props.onAssistants && (
-                  <button onClick={() => { props.onAssistants!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <UserCog className="w-4 h-4" /> Manage Onboarding Assistants
-                  </button>
-                )}
-                {props.onOccupiedSlots && (
-                  <button onClick={() => { props.onOccupiedSlots!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <CalendarClock className="w-4 h-4" /> View Occupied Slots
-                  </button>
-                )}
-                {props.onManageChecklists && (
-                  <button onClick={() => { props.onManageChecklists!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <ClipboardCheck className="w-4 h-4" /> {props.onManageChecklistsLabel}
-                  </button>
-                )}
-                {props.onViewEngagements && (
-                  <button onClick={() => { props.onViewEngagements!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4" /> View Engagements
-                  </button>
-                )}
-                {props.onViewDepartments && (
-                  <button onClick={() => { props.onViewDepartments!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" /> View Departments
-                  </button>
-                )}
-                {props.renderExtraMenuItems?.(row, () => setOpenActionsRow(null))}
-                {props.onQuestions && (
-                  <button onClick={() => { props.onQuestions!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <ListChecks className="w-4 h-4" /> {props.onQuestionsLabel}
-                  </button>
-                )}
-                {props.onSendMessage && (
-                  <button onClick={() => { props.onSendMessage!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
-                    <Send className="w-4 h-4" /> Send Message
-                  </button>
-                )}
-                {props.onDelete && (!props.canDelete || props.canDelete(row)) && (
-                  <button onClick={() => { props.onDelete!(row); setOpenActionsRow(null); }} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-                    <Trash2 className="w-4 h-4" /> {props.onDeleteLabel ?? "Delete"}
-                  </button>
-                )}
-              </div>
-            )}
+            <PortalMenu
+              open={menuOpen}
+              anchorRef={actionsButtonRef}
+              onClose={closeMenu}
+              width={208}
+            >
+              {props.onView && (
+                <button onClick={() => { props.onView!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Eye className="w-4 h-4" /> View
+                </button>
+              )}
+              {props.onEdit && (
+                <button onClick={() => { props.onEdit!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Pencil className="w-4 h-4" /> Edit
+                </button>
+              )}
+              {props.onDuplicate && (
+                <button onClick={() => { props.onDuplicate!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Copy className="w-4 h-4" /> Duplicate
+                </button>
+              )}
+              {props.onParticipants && (
+                <button onClick={() => { props.onParticipants!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Users className="w-4 h-4" /> View Participants
+                </button>
+              )}
+              {props.onAssistants && (
+                <button onClick={() => { props.onAssistants!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <UserCog className="w-4 h-4" /> Manage Onboarding Assistants
+                </button>
+              )}
+              {props.onOccupiedSlots && (
+                <button onClick={() => { props.onOccupiedSlots!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <CalendarClock className="w-4 h-4" /> View Occupied Slots
+                </button>
+              )}
+              {props.onManageChecklists && (
+                <button onClick={() => { props.onManageChecklists!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4" /> {props.onManageChecklistsLabel}
+                </button>
+              )}
+              {props.onViewEngagements && (
+                <button onClick={() => { props.onViewEngagements!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4" /> View Engagements
+                </button>
+              )}
+              {props.onViewDepartments && (
+                <button onClick={() => { props.onViewDepartments!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" /> View Departments
+                </button>
+              )}
+              {props.renderExtraMenuItems?.(row, closeMenu)}
+              {props.onQuestions && (
+                <button onClick={() => { props.onQuestions!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <ListChecks className="w-4 h-4" /> {props.onQuestionsLabel}
+                </button>
+              )}
+              {props.onSendMessage && (
+                <button onClick={() => { props.onSendMessage!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2">
+                  <Send className="w-4 h-4" /> Send Message
+                </button>
+              )}
+              {props.onDelete && (!props.canDelete || props.canDelete(row)) && (
+                <button onClick={() => { props.onDelete!(row); closeMenu(); }} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" /> {props.onDeleteLabel ?? "Delete"}
+                </button>
+              )}
+            </PortalMenu>
           </div>
         </td>
       )}
@@ -326,26 +335,6 @@ export function DataTable<T extends object>(
     onSendMessage ||
     renderExtraMenuItems;
   const [openActionsRow, setOpenActionsRow] = useState<string | number | null>(null);
-  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (!actionsMenuRef.current) return;
-      if (!actionsMenuRef.current.contains(event.target as Node)) {
-        setOpenActionsRow(null);
-      }
-    };
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenActionsRow(null);
-    };
-
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, []);
 
   // Build a helper that returns the visibility class for a column
   const visibilityClass = (col: Column<T>) => {
@@ -437,7 +426,6 @@ export function DataTable<T extends object>(
                   firstColumnClickableView={firstColumnClickableView}
                   openActionsRow={openActionsRow}
                   setOpenActionsRow={setOpenActionsRow}
-                  actionsMenuRef={actionsMenuRef as any}
                   visibilityClass={visibilityClass}
                   onReorder={!!onReorder}
                 />

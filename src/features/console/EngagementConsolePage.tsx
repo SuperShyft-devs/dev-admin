@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Search,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
+import { PortalMenu } from "../../shared/ui/PortalMenu";
 import { BarcodeScannerModal } from "./BarcodeScannerModal";
 import { ParticipantQuestionnaireModal } from "./ParticipantQuestionnaireModal";
 import { useAuth } from "../../contexts/AuthContext";
@@ -82,6 +83,7 @@ export function EngagementConsolePage() {
   const [departmentFilter, setDepartmentFilter] = useState("");
 
   const [actionMenuRow, setActionMenuRow] = useState<number | null>(null);
+  const actionMenuAnchorRef = useRef<HTMLButtonElement | null>(null);
   const [selectedParticipant, setSelectedParticipant] =
     useState<Participant | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -306,13 +308,6 @@ export function EngagementConsolePage() {
     }
   };
 
-  useEffect(() => {
-    if (actionMenuRow === null) return;
-    const handleClick = () => setActionMenuRow(null);
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [actionMenuRow]);
-
   if (!engId || isNaN(engId)) {
     return (
       <ConsoleLayout
@@ -493,7 +488,7 @@ export function EngagementConsolePage() {
                       <td className="px-4 py-3 text-zinc-600 truncate hidden md:table-cell">
                         {p.participant_department ?? "—"}
                       </td>
-                      <td className="px-2 sm:px-4 py-3 text-center relative">
+                      <td className="px-2 sm:px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           {isParticipantBooked(p) && (
                             <span
@@ -508,36 +503,35 @@ export function EngagementConsolePage() {
                             </span>
                           )}
                           <button
+                            ref={
+                              actionMenuRow ===
+                              (p.engagement_participant_id ?? p.user_id)
+                                ? actionMenuAnchorRef
+                                : undefined
+                            }
                             onClick={(e) => {
                               e.stopPropagation();
-                              setActionMenuRow(
-                                actionMenuRow ===
-                                  (p.engagement_participant_id ?? p.user_id)
-                                  ? null
-                                  : (p.engagement_participant_id ?? p.user_id)
-                              );
+                              const rowId =
+                                p.engagement_participant_id ?? p.user_id;
+                              if (actionMenuRow === rowId) {
+                                setActionMenuRow(null);
+                                actionMenuAnchorRef.current = null;
+                              } else {
+                                actionMenuAnchorRef.current = e.currentTarget;
+                                setActionMenuRow(rowId);
+                              }
                             }}
                             className="p-1.5 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
                             aria-label="Actions"
+                            aria-haspopup="menu"
+                            aria-expanded={
+                              actionMenuRow ===
+                              (p.engagement_participant_id ?? p.user_id)
+                            }
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
                         </div>
-                        {actionMenuRow ===
-                          (p.engagement_participant_id ?? p.user_id) && (
-                          <div className="absolute right-2 sm:right-4 top-full z-20 mt-0.5 w-36 bg-white border border-zinc-200 rounded-lg shadow-lg py-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDetail(p);
-                              }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                            >
-                              <Eye className="w-4 h-4" />
-                              View
-                            </button>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))
@@ -545,6 +539,34 @@ export function EngagementConsolePage() {
               </tbody>
             </table>
           </div>
+          <PortalMenu
+            open={actionMenuRow !== null}
+            anchorRef={actionMenuAnchorRef}
+            onClose={() => {
+              setActionMenuRow(null);
+              actionMenuAnchorRef.current = null;
+            }}
+            width={144}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const participant = filtered.find(
+                  (row) =>
+                    (row.engagement_participant_id ?? row.user_id) ===
+                    actionMenuRow
+                );
+                if (participant) openDetail(participant);
+                setActionMenuRow(null);
+                actionMenuAnchorRef.current = null;
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <Eye className="w-4 h-4" />
+              View
+            </button>
+          </PortalMenu>
         </div>
       )}
 
