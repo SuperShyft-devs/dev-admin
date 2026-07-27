@@ -759,11 +759,11 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                       </button>
                       <span
                         role="tooltip"
-                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-48 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/connect:opacity-100 group-focus-within/connect:opacity-100"
+                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-56 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/connect:opacity-100 group-focus-within/connect:opacity-100"
                       >
                         <span className="font-medium">Connect</span>
                         <span className="mt-0.5 block font-normal text-zinc-300">
-                          Links each person&apos;s assessment to their Metsights profile so results can sync.
+                          Creates a new record in Metsights for people who already have this assessment here, then saves the link. Does not create a new assessment on our side.
                         </span>
                       </span>
                     </span>
@@ -784,11 +784,11 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                       </button>
                       <span
                         role="tooltip"
-                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-48 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/refresh:opacity-100 group-focus-within/refresh:opacity-100"
+                        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1.5 w-56 -translate-y-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover/refresh:opacity-100 group-focus-within/refresh:opacity-100"
                       >
                         <span className="font-medium">Refresh</span>
                         <span className="mt-0.5 block font-normal text-zinc-300">
-                          Gives this assessment to people who don&apos;t have it yet.
+                          Adds this assessment on our side for people who don&apos;t have it yet. Does not create anything in Metsights.
                         </span>
                       </span>
                     </span>
