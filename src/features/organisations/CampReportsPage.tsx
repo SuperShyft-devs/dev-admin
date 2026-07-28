@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  Info,
   Loader2,
   RefreshCw,
   ShieldCheck,
@@ -185,22 +186,65 @@ function BtsModalBody({
 
         {blood && Object.keys(blood).length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
-            <p className="text-xs font-medium text-zinc-800 mb-1.5">How blood tests were counted</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            <p className="text-xs font-medium text-zinc-800 mb-1.5">Blood test breakdown</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {(
                 [
-                  ["with_booking_id", "Had a lab booking"],
-                  ["with_metsights_collection", "Sample collected (no booking on file)"],
-                  ["missing_collection", "Checked — no sample yet"],
-                  ["no_record_id", "No assessment record to check"],
-                  ["check_failed", "Could not check right now"],
-                  ["users_needing_metsights_check", "Needed an online sample check"],
+                  {
+                    key: "with_booking_id",
+                    label: "Has booking",
+                    tip: "These people already have a lab booking saved with us. They are counted as blood tests.",
+                  },
+                  {
+                    key: "with_metsights_collection",
+                    label: "Sample collected",
+                    tip: "No booking saved with us, but the lab system says their blood was already taken. They are counted as blood tests.",
+                  },
+                  {
+                    key: "missing_collection",
+                    label: "No sample yet",
+                    tip: "We checked the lab system. Their blood has not been taken yet. Not counted.",
+                  },
+                  {
+                    key: "no_record_id",
+                    label: "Cannot check",
+                    tip: "We could not find their health assessment, so we could not check if blood was taken. Not counted.",
+                  },
+                  {
+                    key: "check_failed",
+                    label: "Check failed",
+                    tip: "We tried to check the lab system, but it did not respond properly. Not counted this time.",
+                  },
+                  {
+                    key: "users_needing_metsights_check",
+                    label: "Checked online",
+                    tip: "How many people we had to look up in the lab system because they had no booking saved with us.",
+                  },
                 ] as const
-              ).map(([key, label]) =>
-                blood[key] == null ? null : (
-                  <div key={key} className="text-[11px] text-zinc-600">
-                    <span className="text-zinc-500">{label}:</span>{" "}
-                    <span className="font-medium text-zinc-800">{String(blood[key])}</span>
+              ).map((item) =>
+                blood[item.key] == null ? null : (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between gap-2 text-[11px] text-zinc-600"
+                  >
+                    <span className="inline-flex items-center gap-1 min-w-0 text-zinc-500">
+                      <span className="truncate">{item.label}</span>
+                      <span className="relative group/tip shrink-0">
+                        <Info
+                          className="w-3 h-3 text-zinc-400"
+                          aria-label={item.tip}
+                        />
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-52 -translate-x-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover/tip:opacity-100 group-focus-within/tip:opacity-100"
+                        >
+                          {item.tip}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="font-medium text-zinc-800 tabular-nums shrink-0">
+                      {String(blood[item.key])}
+                    </span>
                   </div>
                 )
               )}
