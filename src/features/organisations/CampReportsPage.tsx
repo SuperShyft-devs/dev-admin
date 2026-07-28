@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Eye,
   Loader2,
   RefreshCw,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 import {
@@ -61,21 +63,170 @@ function formatEstimatedTime(seconds: number): string {
   return `about ${hours}h ${remMinutes}m`;
 }
 
-type ConfirmValidateKind =
-  | "company_average"
-  | "positive_wins"
-  | "overall_risk"
-  | "questionnaire";
+function formatFieldLabel(key: string): string {
+  return key.replace(/\./g, " · ").replace(/_/g, " ");
+}
+
+function isBtsFieldEntry(
+  value: unknown
+): value is {
+  match: boolean;
+  expected: unknown;
+  stored: unknown;
+  reason?: string | null;
+} {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "match" in value &&
+    "expected" in value &&
+    "stored" in value
+  );
+}
 
 type ConfirmAction =
   | { kind: "refresh"; report: CampReportRow; section: CampReportSection }
-  | {
-      kind: "validate";
-      report: CampReportRow;
-      sectionKey: string;
-      validateKind: ConfirmValidateKind;
-    }
+  | { kind: "validate"; report: CampReportRow; section: CampReportSection }
   | { kind: "refresh_all" };
+
+function BtsModalBody({
+  data,
+}: {
+  data: Record<string, unknown> | null;
+}) {
+  if (data == null) {
+    return (
+      <p className="text-sm text-zinc-500">
+        No validation data yet. Confirm validate to generate it.
+      </p>
+    );
+  }
+
+  const status = typeof data.status === "string" ? data.status : null;
+
+  if (status === "not_implemented") {
+    return (
+      <p className="text-sm text-zinc-600">
+        {typeof data.message === "string"
+          ? data.message
+          : "Validation for this section is not available yet."}
+      </p>
+    );
+  }
+
+  const fields =
+    data.fields && typeof data.fields === "object"
+      ? (data.fields as Record<string, unknown>)
+      : null;
+  const details =
+    data.details && typeof data.details === "object"
+      ? (data.details as Record<string, unknown>)
+      : null;
+  const blood =
+    details?.blood && typeof details.blood === "object"
+      ? (details.blood as Record<string, unknown>)
+      : null;
+
+  if (fields || status === "ok" || status === "mismatch") {
+    const statusClass =
+      status === "ok"
+        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+        : status === "mismatch"
+          ? "bg-amber-50 text-amber-900 border-amber-200"
+          : "bg-zinc-50 text-zinc-700 border-zinc-200";
+
+    return (
+      <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="flex flex-wrap items-center gap-2">
+          {status && (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${statusClass}`}
+            >
+              {status}
+            </span>
+          )}
+          {typeof data.checked_at === "string" && (
+            <span className="text-xs text-zinc-500">
+              Checked at {new Date(data.checked_at).toLocaleString()}
+            </span>
+          )}
+        </div>
+
+        {typeof data.message === "string" && data.message && (
+          <p className="text-sm text-zinc-600">{data.message}</p>
+        )}
+
+        {blood && Object.keys(blood).length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
+            <p className="text-xs font-medium text-zinc-800 mb-1.5">Blood test details</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {Object.entries(blood).map(([key, value]) => (
+                <div key={key} className="text-[11px] text-zinc-600">
+                  <span className="text-zinc-500">{formatFieldLabel(key)}:</span>{" "}
+                  <span className="font-medium text-zinc-800">{String(value ?? "—")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {fields && Object.keys(fields).length > 0 ? (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-zinc-50 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+              <span>Field</span>
+              <span className="text-right">Expected</span>
+              <span className="text-right">Stored</span>
+              <span className="w-5" />
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {Object.entries(fields).map(([key, raw]) => {
+                if (!isBtsFieldEntry(raw)) {
+                  return (
+                    <div key={key} className="px-3 py-2 text-xs text-zinc-600">
+                      <span className="font-medium">{formatFieldLabel(key)}</span>
+                      <pre className="mt-1 text-[10px] whitespace-pre-wrap break-words">
+                        {JSON.stringify(raw, null, 2)}
+                      </pre>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={key} className="px-3 py-2.5">
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-start">
+                      <span className="text-xs font-medium text-zinc-800 capitalize">
+                        {formatFieldLabel(key)}
+                      </span>
+                      <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
+                        {raw.expected == null ? "—" : String(raw.expected)}
+                      </span>
+                      <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
+                        {raw.stored == null ? "—" : String(raw.stored)}
+                      </span>
+                      {raw.match ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                    </div>
+                    {!raw.match && raw.reason && (
+                      <p className="mt-1.5 text-[11px] text-amber-800 leading-snug">{raw.reason}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <pre className="text-xs text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words max-h-[70vh]">
+      {JSON.stringify(data, null, 2)}
+    </pre>
+  );
+}
 
 export function CampReportsPage() {
   const { campNo: campNoParam } = useParams<{ campNo: string }>();
@@ -92,25 +243,11 @@ export function CampReportsPage() {
     title: string;
     data: Record<string, unknown>;
   } | null>(null);
-  const [validateModal, setValidateModal] = useState<{
+  const [btsModal, setBtsModal] = useState<{
     title: string;
-    data: Record<string, unknown>;
+    sectionKey: string;
+    data: Record<string, unknown> | null;
   } | null>(null);
-  const [validateExpanded, setValidateExpanded] = useState<Record<string, boolean>>({});
-  const [validatePWModal, setValidatePWModal] = useState<{
-    title: string;
-    data: Record<string, unknown>;
-  } | null>(null);
-  const [validatePWExpanded, setValidatePWExpanded] = useState<Record<string, boolean>>({});
-  const [validateQModal, setValidateQModal] = useState<{
-    title: string;
-    data: Record<string, unknown>;
-  } | null>(null);
-  const [validateRiskModal, setValidateRiskModal] = useState<{
-    title: string;
-    data: Record<string, unknown>;
-  } | null>(null);
-  const [validateRiskExpanded, setValidateRiskExpanded] = useState<Record<string, boolean>>({});
   const [bulkRefresh, setBulkRefresh] = useState<{
     open: boolean;
     running: boolean;
@@ -144,14 +281,14 @@ export function CampReportsPage() {
     error: null,
   });
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (opts?: { silent?: boolean }): Promise<CampReportRow[]> => {
     if (!Number.isFinite(campNo)) {
       setError("Invalid camp number");
       setLoading(false);
-      return;
+      return [];
     }
 
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const [reportsRes, sectionRows] = await Promise.all([
@@ -173,10 +310,12 @@ export function CampReportsPage() {
         }
         return next;
       });
+      return rows;
     } catch (err) {
       setError(getApiError(err));
+      return [];
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [campNo]);
 
@@ -269,6 +408,51 @@ export function CampReportsPage() {
     }
   };
 
+  const handleValidateSection = async (
+    report: CampReportRow,
+    section: CampReportSection
+  ) => {
+    const loadStateKey = `${report.report_id}:${section.section_key}`;
+    setLoadingKey(`${loadStateKey}:validate`);
+    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
+
+    try {
+      let refreshResult: { report_bts?: Record<string, unknown> | null } | undefined;
+      if (report.department === null) {
+        const response = await campReportsApi.refreshCamp(campNo, section.section_key);
+        refreshResult = response.data.data;
+      } else {
+        const response = await campReportsApi.refreshDepartment(
+          campNo,
+          report.department,
+          section.section_key
+        );
+        refreshResult = response.data.data;
+      }
+
+      const rows = await fetchData({ silent: true });
+      const refreshed = rows.find((row) => row.report_id === report.report_id);
+      const sectionBtsRaw = refreshed?.report_bts?.[section.section_key];
+      const sectionBts =
+        sectionBtsRaw && typeof sectionBtsRaw === "object"
+          ? (sectionBtsRaw as Record<string, unknown>)
+          : refreshResult?.report_bts ?? null;
+
+      setBtsModal({
+        title: `Validation: ${section.section}`,
+        sectionKey: section.section_key,
+        data: sectionBts,
+      });
+    } catch (err) {
+      setSectionErrors((prev) => ({
+        ...prev,
+        [loadStateKey]: getApiError(err),
+      }));
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   const reportDisplayName = (report: CampReportRow): string => {
     if (report.department === null) return "Main report";
     const meta = getReportMeta(report);
@@ -332,23 +516,12 @@ export function CampReportsPage() {
     );
   };
 
-  const requestValidate = (
-    report: CampReportRow,
-    sectionKey: string,
-    validateKind: ConfirmValidateKind,
-    label: string
-  ) => {
+  const requestValidate = (report: CampReportRow, section: CampReportSection) => {
     void openConfirmModal(
       "Confirm validate",
-      `Validate “${label}” on ${reportDisplayName(report)}?`,
-      { kind: "validate", report, sectionKey, validateKind },
-      [
-        {
-          section: sectionKey,
-          action: "validate",
-          department: report.department,
-        },
-      ]
+      `Validate “${section.section}” on ${reportDisplayName(report)}? This will refresh the section and update validation data.`,
+      { kind: "validate", report, section },
+      [{ section: section.section_key, action: "validate", department: report.department }]
     );
   };
 
@@ -383,15 +556,7 @@ export function CampReportsPage() {
       await handleRefreshAllSections();
       return;
     }
-    if (action.validateKind === "company_average") {
-      await handleValidateSection(action.report);
-    } else if (action.validateKind === "positive_wins") {
-      await handleValidatePositiveWins(action.report);
-    } else if (action.validateKind === "overall_risk") {
-      await handleValidateOverallRisk(action.report);
-    } else {
-      await handleValidateQuestionnaire(action.report, action.sectionKey);
-    }
+    await handleValidateSection(action.report, action.section);
   };
 
   const handleRefreshAllSections = async () => {
@@ -443,7 +608,7 @@ export function CampReportsPage() {
       }));
     }
 
-    await fetchData();
+    await fetchData({ silent: true });
 
     setBulkRefresh({
       open: true,
@@ -460,130 +625,17 @@ export function CampReportsPage() {
     setBulkRefresh((prev) => ({ ...prev, open: false }));
   };
 
-  const handleValidateSection = async (report: CampReportRow) => {
-    const loadStateKey = `${report.report_id}:company_average_scores`;
-    setLoadingKey(`${loadStateKey}:validate`);
-    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
-
-    try {
-      const response =
-        report.department === null
-          ? await campReportsApi.validateCompanyAverageScores(campNo)
-          : await campReportsApi.validateDepartmentCompanyAverageScores(
-              campNo,
-              report.department
-            );
-      setValidateModal({
-        title: "Validate: Company Average Scores",
-        data: response.data.data,
-      });
-      setValidateExpanded({});
-    } catch (err) {
-      setSectionErrors((prev) => ({
-        ...prev,
-        [loadStateKey]: getApiError(err),
-      }));
-    } finally {
-      setLoadingKey(null);
-    }
-  };
-
-  const handleValidatePositiveWins = async (report: CampReportRow) => {
-    const loadStateKey = `${report.report_id}:positive_wins`;
-    setLoadingKey(`${loadStateKey}:validate`);
-    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
-
-    try {
-      const response =
-        report.department === null
-          ? await campReportsApi.validatePositiveWins(campNo)
-          : await campReportsApi.validateDepartmentPositiveWins(
-              campNo,
-              report.department
-            );
-      setValidatePWModal({
-        title: "Validate: Positive Wins",
-        data: response.data.data,
-      });
-      setValidatePWExpanded({});
-    } catch (err) {
-      setSectionErrors((prev) => ({
-        ...prev,
-        [loadStateKey]: getApiError(err),
-      }));
-    } finally {
-      setLoadingKey(null);
-    }
-  };
-
-  const handleValidateQuestionnaire = async (
-    report: CampReportRow,
-    sectionKey: string
-  ) => {
-    const loadStateKey = `${report.report_id}:${sectionKey}`;
-    setLoadingKey(`${loadStateKey}:validate`);
-    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
-
-    try {
-      let response;
-      if (sectionKey === "distribution_by_physical_activity_frequency") {
-        response =
-          report.department === null
-            ? await campReportsApi.validatePhysicalActivity(campNo)
-            : await campReportsApi.validateDepartmentPhysicalActivity(
-                campNo,
-                report.department
-              );
-      } else {
-        response =
-          report.department === null
-            ? await campReportsApi.validateSleepingHours(campNo)
-            : await campReportsApi.validateDepartmentSleepingHours(
-                campNo,
-                report.department
-              );
-      }
-      const title =
-        sectionKey === "distribution_by_physical_activity_frequency"
-          ? "Validate: Physical Activity Frequency"
-          : "Validate: Sleeping Hours";
-      setValidateQModal({ title, data: response.data.data });
-    } catch (err) {
-      setSectionErrors((prev) => ({
-        ...prev,
-        [loadStateKey]: getApiError(err),
-      }));
-    } finally {
-      setLoadingKey(null);
-    }
-  };
-
-  const handleValidateOverallRisk = async (report: CampReportRow) => {
-    const loadStateKey = `${report.report_id}:overall_risk_score`;
-    setLoadingKey(`${loadStateKey}:validate`);
-    setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
-    setValidateRiskExpanded({});
-
-    try {
-      const response =
-        report.department === null
-          ? await campReportsApi.validateOverallRiskScore(campNo)
-          : await campReportsApi.validateDepartmentOverallRiskScore(
-              campNo,
-              report.department
-            );
-      setValidateRiskModal({
-        title: "Validate: Overall Risk Score",
-        data: response.data.data,
-      });
-    } catch (err) {
-      setSectionErrors((prev) => ({
-        ...prev,
-        [loadStateKey]: getApiError(err),
-      }));
-    } finally {
-      setLoadingKey(null);
-    }
+  const openExistingBtsFromConfirm = () => {
+    const action = confirmModal.action;
+    if (!action || action.kind !== "validate") return;
+    const raw = action.report.report_bts?.[action.section.section_key];
+    const data =
+      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+    setBtsModal({
+      title: `Validation: ${action.section.section}`,
+      sectionKey: action.section.section_key,
+      data,
+    });
   };
 
   if (!Number.isFinite(campNo)) {
@@ -721,95 +773,19 @@ export function CampReportsPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
-                                  {section.section_key === "company_average_scores" && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        requestValidate(
-                                          report,
-                                          section.section_key,
-                                          "company_average",
-                                          section.section
-                                        )
-                                      }
-                                      disabled={isSectionBusy || confirmModal.open}
-                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
-                                      title="Validate scores"
-                                    >
-                                      {isValidateLoading ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <ShieldCheck className="w-4 h-4" />
-                                      )}
-                                    </button>
-                                  )}
-                                  {section.section_key === "positive_wins" && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        requestValidate(
-                                          report,
-                                          section.section_key,
-                                          "positive_wins",
-                                          section.section
-                                        )
-                                      }
-                                      disabled={isSectionBusy || confirmModal.open}
-                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
-                                      title="Validate positive wins"
-                                    >
-                                      {isValidateLoading ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <ShieldCheck className="w-4 h-4" />
-                                      )}
-                                    </button>
-                                  )}
-                                  {section.section_key === "overall_risk_score" && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        requestValidate(
-                                          report,
-                                          section.section_key,
-                                          "overall_risk",
-                                          section.section
-                                        )
-                                      }
-                                      disabled={isSectionBusy || confirmModal.open}
-                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
-                                      title="Validate overall risk score"
-                                    >
-                                      {isValidateLoading ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <ShieldCheck className="w-4 h-4" />
-                                      )}
-                                    </button>
-                                  )}
-                                  {(section.section_key === "distribution_by_physical_activity_frequency" ||
-                                    section.section_key === "distribution_by_sleeping_hours") && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        requestValidate(
-                                          report,
-                                          section.section_key,
-                                          "questionnaire",
-                                          section.section
-                                        )
-                                      }
-                                      disabled={isSectionBusy || confirmModal.open}
-                                      className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
-                                      title="Validate distribution"
-                                    >
-                                      {isValidateLoading ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <ShieldCheck className="w-4 h-4" />
-                                      )}
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => requestValidate(report, section)}
+                                    disabled={isSectionBusy || confirmModal.open}
+                                    className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50"
+                                    title="Validate section"
+                                  >
+                                    {isValidateLoading ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <ShieldCheck className="w-4 h-4" />
+                                    )}
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => void handleLoadSection(report, section)}
@@ -936,6 +912,16 @@ export function CampReportsPage() {
             >
               Cancel
             </button>
+            {confirmModal.action?.kind === "validate" && (
+              <button
+                type="button"
+                onClick={openExistingBtsFromConfirm}
+                disabled={confirmModal.estimating}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                View
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleConfirmAction()}
@@ -1032,652 +1018,12 @@ export function CampReportsPage() {
       </Modal>
 
       <Modal
-        open={validateModal !== null}
-        onClose={() => setValidateModal(null)}
-        title={validateModal?.title ?? "Validate"}
+        open={btsModal !== null}
+        onClose={() => setBtsModal(null)}
+        title={btsModal?.title ?? "Validation"}
         maxWidthClassName="max-w-2xl"
       >
-        {validateModal && (
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-            {(["nutrition", "fitness", "lifestyle"] as const).map((key) => {
-              const entry = validateModal.data[key] as {
-                score: number;
-                valid_count: number;
-                total_participants: number;
-                participants: Array<{
-                  user_id: number;
-                  name: string;
-                  score: number | null;
-                  reason: string | null;
-                  detail?: string | null;
-                  missing_questions?: string[];
-                }>;
-              } | undefined;
-              if (!entry) return null;
-              const isExpanded = validateExpanded[key] ?? false;
-              const failedParticipants = entry.participants.filter((p) => p.reason !== null);
-
-              return (
-                <div key={key} className="rounded-lg border border-zinc-200 overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 text-left"
-                    onClick={() =>
-                      setValidateExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-                    }
-                  >
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-zinc-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-zinc-400" />
-                      )}
-                      <h4 className="text-sm font-medium text-zinc-900 capitalize">{key}</h4>
-                      <span className="text-xs text-zinc-500">
-                        {entry.valid_count} of {entry.total_participants} participants
-                      </span>
-                    </div>
-                    <span className="text-lg font-semibold text-zinc-900">{entry.score}</span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t border-zinc-200">
-                      {failedParticipants.length === 0 ? (
-                        <p className="px-4 py-3 text-xs text-zinc-500">
-                          All participants have valid scores.
-                        </p>
-                      ) : (
-                        <div className="divide-y divide-zinc-100">
-                          {failedParticipants.map((p) => (
-                            <div key={p.user_id} className="px-4 py-2.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                                <span className="text-xs text-zinc-400">#{p.user_id}</span>
-                              </div>
-                              <p className="text-xs font-medium text-amber-700 mt-0.5">{p.reason}</p>
-                              {p.detail && (
-                                <p className="text-[11px] text-zinc-500 mt-0.5">{p.detail}</p>
-                              )}
-                              {p.missing_questions && p.missing_questions.length > 0 && (
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  {p.missing_questions.map((q) => (
-                                    <span
-                                      key={q}
-                                      className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800"
-                                    >
-                                      {q}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {(() => {
-              const noFitprint = validateModal.data.no_fitprint_assigned as
-                | Array<{ user_id: number; name: string }>
-                | undefined;
-              if (!noFitprint || noFitprint.length === 0) return null;
-              const isExpanded = validateExpanded["no_fitprint"] ?? false;
-              return (
-                <div className="rounded-lg border border-red-200 overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-left"
-                    onClick={() =>
-                      setValidateExpanded((prev) => ({
-                        ...prev,
-                        no_fitprint: !prev["no_fitprint"],
-                      }))
-                    }
-                  >
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-red-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-red-400" />
-                      )}
-                      <h4 className="text-sm font-medium text-red-800">No FitPrint Assigned</h4>
-                      <span className="text-xs text-red-600">{noFitprint.length} participants</span>
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t border-red-200 divide-y divide-red-100">
-                      {noFitprint.map((p) => (
-                        <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                          <span className="text-xs text-zinc-400">#{p.user_id}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-      </Modal>
-
-      <Modal
-        open={validatePWModal !== null}
-        onClose={() => setValidatePWModal(null)}
-        title={validatePWModal?.title ?? "Validate"}
-        maxWidthClassName="max-w-2xl"
-      >
-        {validatePWModal && (
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <div className="px-4 py-2 bg-zinc-50 rounded-lg text-xs text-zinc-600">
-              Total participants: <span className="font-medium">{(validatePWModal.data.total_participants as number) ?? "—"}</span>
-            </div>
-            {(["low_risk", "healthy_habits", "healthy_profiles"] as const).map((key) => {
-              const entry = validatePWModal.data[key] as {
-                aggregated: Array<Record<string, unknown>>;
-                participants: Array<{
-                  user_id: number;
-                  name: string;
-                  items: string[] | null;
-                  reason: string | null;
-                  detail?: string | null;
-                }>;
-              } | undefined;
-              if (!entry) return null;
-              const isExpanded = validatePWExpanded[key] ?? false;
-              const failedParticipants = entry.participants.filter((p) => p.reason !== null);
-              const successCount = entry.participants.length - failedParticipants.length;
-              const label = key === "low_risk" ? "Low Risk" : key === "healthy_habits" ? "Healthy Habits" : "Healthy Profiles";
-
-              return (
-                <div key={key} className="rounded-lg border border-zinc-200 overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 text-left"
-                    onClick={() =>
-                      setValidatePWExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-                    }
-                  >
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-zinc-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-zinc-400" />
-                      )}
-                      <h4 className="text-sm font-medium text-zinc-900">{label}</h4>
-                      <span className="text-xs text-zinc-500">
-                        {successCount} of {entry.participants.length} participants contributing
-                      </span>
-                    </div>
-                    <span className="text-xs font-medium text-zinc-600">
-                      {entry.aggregated.length} aggregated
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t border-zinc-200">
-                      {entry.aggregated.length > 0 && (
-                        <div className="px-4 py-2.5 bg-emerald-50 border-b border-zinc-200">
-                          <p className="text-[11px] font-medium text-emerald-700 mb-1">Aggregated result:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {entry.aggregated.map((item, i) => {
-                              const displayName =
-                                typeof item === "string"
-                                  ? item
-                                  : (item as Record<string, unknown>).name ??
-                                    (item as Record<string, unknown>).habit_label ??
-                                    JSON.stringify(item);
-                              return (
-                                <span
-                                  key={i}
-                                  className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 border border-emerald-200 text-emerald-800"
-                                >
-                                  {String(displayName)}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {failedParticipants.length === 0 ? (
-                        <p className="px-4 py-3 text-xs text-zinc-500">
-                          All participants are contributing to this field.
-                        </p>
-                      ) : (
-                        <div className="divide-y divide-zinc-100">
-                          {entry.participants.map((p) => (
-                            <div key={p.user_id} className="px-4 py-2.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                                <span className="text-xs text-zinc-400">#{p.user_id}</span>
-                              </div>
-                              {p.reason ? (
-                                <>
-                                  <p className="text-xs font-medium text-amber-700 mt-0.5">{p.reason}</p>
-                                  {p.detail && (
-                                    <p className="text-[11px] text-zinc-500 mt-0.5">{p.detail}</p>
-                                  )}
-                                </>
-                              ) : p.items && p.items.length > 0 ? (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {p.items.map((item) => (
-                                    <span
-                                      key={item}
-                                      className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800"
-                                    >
-                                      {item}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Modal>
-
-      <Modal
-        open={validateQModal !== null}
-        onClose={() => setValidateQModal(null)}
-        title={validateQModal?.title ?? "Validate"}
-        maxWidthClassName="max-w-2xl"
-      >
-        {validateQModal && (() => {
-          const data = validateQModal.data;
-          const totalEnrolled = (data.total_enrolled as number) ?? 0;
-          const totalResponded = (data.total_responded as number) ?? 0;
-          const totalMapped = (data.total_mapped as number) ?? 0;
-          const totalUnmapped = (data.total_unmapped as number) ?? 0;
-          const questionKey = (data.question_key as string) ?? "";
-          const mismatch = data.mismatch as
-            | { has_mismatch?: boolean; highlight?: string | null; highlights?: string[] }
-            | undefined;
-          const summary = data.summary as Record<
-            string,
-            { enrolled: number; responded: number; not_responded: number; unmapped?: number }
-          > | undefined;
-          const anyQuestionnaire = data.any_questionnaire_responders as
-            | { male?: number; female?: number; total?: number }
-            | undefined;
-          const sibling = data.sibling as
-            | {
-                label?: string;
-                responded?: { male?: number; female?: number; total?: number };
-                xor_participants?: Array<{
-                  user_id: number;
-                  name: string;
-                  gender: string | null;
-                  reason: string;
-                }>;
-              }
-            | null
-            | undefined;
-          const participants = (data.participants as Array<{
-            user_id: number;
-            name: string;
-            gender: string | null;
-            answer: string | null;
-            bucket: string | null;
-            reason: string | null;
-          }>) ?? [];
-
-          const notResponded = participants.filter(
-            (p) => p.reason !== null && p.bucket !== "unmapped"
-          );
-          const unmapped = participants.filter((p) => p.bucket === "unmapped");
-          const responded = participants.filter((p) => p.reason === null);
-          const highlightItems =
-            mismatch?.highlights && mismatch.highlights.length > 0
-              ? mismatch.highlights
-              : mismatch?.highlight
-                ? [mismatch.highlight]
-                : [];
-
-          return (
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-              {mismatch?.has_mismatch && highlightItems.length > 0 && (
-                <div className="space-y-2">
-                  {highlightItems.map((text, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed"
-                    >
-                      {text}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="px-4 py-2.5 bg-zinc-50 rounded-lg text-xs text-zinc-600 space-y-1">
-                <div>Question key: <span className="font-medium font-mono">{questionKey}</span></div>
-                <div>Total enrolled: <span className="font-medium">{totalEnrolled}</span></div>
-                <div>
-                  Responded (this question): <span className="font-medium text-emerald-700">{totalResponded}</span>
-                  {" · "}
-                  Mapped: <span className="font-medium">{totalMapped}</span>
-                  {" · "}
-                  Unmapped: <span className="font-medium text-amber-700">{totalUnmapped}</span>
-                </div>
-                {anyQuestionnaire && (
-                  <div>
-                    Any questionnaire starters:{" "}
-                    <span className="font-medium text-amber-800">
-                      {anyQuestionnaire.total ?? 0}
-                    </span>
-                    {" "}(male {anyQuestionnaire.male ?? 0}, female {anyQuestionnaire.female ?? 0})
-                  </div>
-                )}
-                {sibling?.responded && (
-                  <div>
-                    Sibling ({sibling.label ?? "related"}):{" "}
-                    <span className="font-medium">
-                      male {sibling.responded.male ?? 0}, female {sibling.responded.female ?? 0}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {sibling?.xor_participants && sibling.xor_participants.length > 0 && (
-                <div className="rounded-lg border-2 border-rose-300 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-rose-50">
-                    <h4 className="text-xs font-semibold text-rose-900">
-                      Cross-section mismatch vs {sibling.label} ({sibling.xor_participants.length})
-                    </h4>
-                  </div>
-                  <div className="divide-y divide-rose-100">
-                    {sibling.xor_participants.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
-                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-rose-800 mt-0.5 font-medium">{p.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {summary && (
-                <div className="grid grid-cols-2 gap-2">
-                  {(["male", "female"] as const).map((g) => {
-                    const s = summary[g];
-                    if (!s) return null;
-                    return (
-                      <div key={g} className="rounded-lg border border-zinc-200 px-3 py-2.5">
-                        <h4 className="text-xs font-medium text-zinc-900 capitalize mb-1">{g}</h4>
-                        <div className="text-[11px] text-zinc-600 space-y-0.5">
-                          <div>Enrolled: <span className="font-medium">{s.enrolled}</span></div>
-                          <div>Responded: <span className="font-medium text-emerald-700">{s.responded}</span></div>
-                          <div>Unmapped: <span className="font-medium text-amber-700">{s.unmapped ?? 0}</span></div>
-                          <div>Not responded: <span className="font-medium text-zinc-700">{s.not_responded}</span></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {unmapped.length > 0 && (
-                <div className="rounded-lg border-2 border-amber-300 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-amber-100">
-                    <h4 className="text-xs font-semibold text-amber-900">
-                      Unmapped answers included as &apos;unmapped&apos; ({unmapped.length})
-                    </h4>
-                  </div>
-                  <div className="divide-y divide-amber-100">
-                    {unmapped.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
-                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-amber-800 mt-0.5 font-medium">{p.reason}</p>
-                        {p.answer !== null && (
-                          <p className="text-[10px] text-zinc-500 mt-0.5">Raw answer: <span className="font-mono">{p.answer}</span></p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {notResponded.length > 0 && (
-                <div className="rounded-lg border border-amber-200 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-amber-50">
-                    <h4 className="text-xs font-medium text-amber-800">
-                      Participants without response ({notResponded.length})
-                    </h4>
-                  </div>
-                  <div className="divide-y divide-amber-100">
-                    {notResponded.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-zinc-400 capitalize">{p.gender ?? "unknown"}</span>
-                            <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-amber-700 mt-0.5">{p.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {responded.length > 0 && (
-                <div className="rounded-lg border border-zinc-200 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-emerald-50">
-                    <h4 className="text-xs font-medium text-emerald-800">
-                      Participants with valid mapped response ({responded.length})
-                    </h4>
-                  </div>
-                  <div className="divide-y divide-zinc-100">
-                    {responded.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs font-medium text-zinc-800 truncate">{p.name}</span>
-                          <span className="text-[10px] text-zinc-400 capitalize shrink-0">{p.gender ?? "unknown"}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800">
-                            {p.bucket}
-                          </span>
-                          <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </Modal>
-
-      <Modal
-        open={validateRiskModal !== null}
-        onClose={() => setValidateRiskModal(null)}
-        title={validateRiskModal?.title ?? "Validate"}
-        maxWidthClassName="max-w-2xl"
-      >
-        {validateRiskModal && (() => {
-          const data = validateRiskModal.data;
-          const totalEnrolled = (data.total_enrolled as number) ?? 0;
-          const withScore = (data.with_metabolic_score as number) ?? 0;
-          const missing = (data.missing_metabolic_score as number) ?? 0;
-          const mismatch = data.mismatch as
-            | { has_mismatch?: boolean; highlight?: string | null; highlights?: string[] }
-            | undefined;
-          const reasonCounts = (data.reason_counts as Record<string, number>) ?? {};
-          const anyQuestionnaire = data.any_questionnaire_responders as
-            | { male?: number; female?: number; total?: number }
-            | undefined;
-          const bioAiGenerated = (data.bio_ai_generated as number) ?? null;
-          const withoutScore = (data.without_score as Array<{
-            user_id: number;
-            name: string;
-            gender: string | null;
-            reason: string | null;
-          }>) ?? [];
-          const scored = (data.with_score as Array<{
-            user_id: number;
-            name: string;
-            gender: string | null;
-            metabolic_score: number | null;
-          }>) ?? [];
-          const withoutExpanded = validateRiskExpanded["without"] ?? false;
-          const withExpanded = validateRiskExpanded["with"] ?? false;
-          const highlightItems =
-            mismatch?.highlights && mismatch.highlights.length > 0
-              ? mismatch.highlights
-              : mismatch?.highlight
-                ? [mismatch.highlight]
-                : [];
-
-          return (
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-              {mismatch?.has_mismatch && highlightItems.length > 0 && (
-                <div className="space-y-2">
-                  {highlightItems.map((text, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950 font-medium leading-relaxed"
-                    >
-                      {text}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="rounded-lg border border-zinc-200 px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wide">Enrolled</div>
-                  <div className="text-lg font-semibold text-zinc-900">{totalEnrolled}</div>
-                </div>
-                <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-sky-700 uppercase tracking-wide">Bio AI generated</div>
-                  <div className="text-lg font-semibold text-sky-800">{bioAiGenerated ?? "—"}</div>
-                </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-emerald-700 uppercase tracking-wide">With score</div>
-                  <div className="text-lg font-semibold text-emerald-800">{withScore}</div>
-                </div>
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-amber-700 uppercase tracking-wide">Excluded</div>
-                  <div className="text-lg font-semibold text-amber-800">{missing}</div>
-                </div>
-              </div>
-
-              {anyQuestionnaire && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-950">
-                  Questionnaire starters (any question):{" "}
-                  <span className="font-semibold">{anyQuestionnaire.total ?? 0}</span>
-                  {" "}(male {anyQuestionnaire.male ?? 0}, female {anyQuestionnaire.female ?? 0}).
-                  {" "}Overall Risk Score does <span className="font-semibold">not</span> use this count.
-                </div>
-              )}
-              {Object.keys(reasonCounts).length > 0 && (
-                <div className="rounded-lg border border-zinc-200 overflow-hidden">
-                  <div className="px-4 py-2.5 bg-zinc-50">
-                    <h4 className="text-xs font-medium text-zinc-800">Exclusion reasons</h4>
-                  </div>
-                  <div className="divide-y divide-zinc-100">
-                    {Object.entries(reasonCounts)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([reason, count]) => (
-                        <div key={reason} className="px-4 py-2 flex items-start justify-between gap-3">
-                          <p className="text-[11px] text-zinc-700 leading-snug">{reason}</p>
-                          <span className="text-xs font-semibold text-amber-800 shrink-0">{count}</span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-lg border border-amber-200 overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full px-4 py-2.5 bg-amber-50 flex items-center justify-between text-left"
-                  onClick={() =>
-                    setValidateRiskExpanded((prev) => ({ ...prev, without: !withoutExpanded }))
-                  }
-                >
-                  <h4 className="text-xs font-medium text-amber-800">
-                    Excluded participants ({withoutScore.length})
-                  </h4>
-                  {withoutExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-amber-700" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-amber-700" />
-                  )}
-                </button>
-                {withoutExpanded && (
-                  <div className="divide-y divide-amber-100 max-h-64 overflow-y-auto">
-                    {withoutScore.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                          <span className="text-[10px] text-zinc-400">#{p.user_id}</span>
-                        </div>
-                        <p className="text-[11px] text-amber-800 mt-0.5">{p.reason}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-emerald-200 overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full px-4 py-2.5 bg-emerald-50 flex items-center justify-between text-left"
-                  onClick={() =>
-                    setValidateRiskExpanded((prev) => ({ ...prev, with: !withExpanded }))
-                  }
-                >
-                  <h4 className="text-xs font-medium text-emerald-800">
-                    Included (with metabolic score) ({scored.length})
-                  </h4>
-                  {withExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-emerald-700" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-emerald-700" />
-                  )}
-                </button>
-                {withExpanded && (
-                  <div className="divide-y divide-emerald-100 max-h-64 overflow-y-auto">
-                    {scored.map((p) => (
-                      <div key={p.user_id} className="px-4 py-2 flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-zinc-800">{p.name}</span>
-                        <span className="text-[10px] font-mono text-emerald-800">
-                          score {p.metabolic_score}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })()}
+        {btsModal && <BtsModalBody data={btsModal.data} />}
       </Modal>
     </div>
   );

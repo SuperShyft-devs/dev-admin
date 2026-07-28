@@ -945,46 +945,6 @@ export const campReportsApi = {
     api.post<{ data: CampReportEstimateResult }>(`/reports/camps/${campNo}/estimate`, {
       operations,
     }),
-  validateCompanyAverageScores: (campNo: number) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/validate/company-average-scores`
-    ),
-  validateDepartmentCompanyAverageScores: (campNo: number, slug: string) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/department/${slug}/validate/company-average-scores`
-    ),
-  validatePositiveWins: (campNo: number) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/validate/positive-wins`
-    ),
-  validateDepartmentPositiveWins: (campNo: number, slug: string) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/department/${slug}/validate/positive-wins`
-    ),
-  validatePhysicalActivity: (campNo: number) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/validate/physical-activity-frequency`
-    ),
-  validateDepartmentPhysicalActivity: (campNo: number, slug: string) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/department/${slug}/validate/physical-activity-frequency`
-    ),
-  validateSleepingHours: (campNo: number) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/validate/sleeping-hours`
-    ),
-  validateDepartmentSleepingHours: (campNo: number, slug: string) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/department/${slug}/validate/sleeping-hours`
-    ),
-  validateOverallRiskScore: (campNo: number) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/validate/overall-risk-score`
-    ),
-  validateDepartmentOverallRiskScore: (campNo: number, slug: string) =>
-    api.get<{ data: Record<string, unknown> }>(
-      `/reports/camps/${campNo}/department/${slug}/validate/overall-risk-score`
-    ),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
   initDepartment: (campNo: number, slug: string) =>
@@ -1030,6 +990,7 @@ export interface CampReportRow {
   city?: string | null;
   organization_id: number;
   report: Record<string, unknown> | null;
+  report_bts?: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -1053,12 +1014,14 @@ export interface CampReportSectionPayload {
     nutritionist_consultation?: number;
     doctor_and_nutritionist_consultation?: number;
     high_risk_group?: number;
+    consultations?: Record<string, number>;
   };
 }
 
 export interface CampReportRefreshResult {
   report_id: number;
   section: CampReportSectionPayload;
+  report_bts?: Record<string, unknown> | null;
 }
 
 export interface CampReportEstimateOperation {
