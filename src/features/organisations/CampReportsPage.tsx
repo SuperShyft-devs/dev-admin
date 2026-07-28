@@ -187,7 +187,7 @@ function BtsModalBody({
         {blood && Object.keys(blood).length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
             <p className="text-xs font-medium text-zinc-800 mb-2">Blood test breakdown</p>
-            <ul className="space-y-1.5">
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5">
               {(
                 [
                   {
@@ -225,20 +225,18 @@ function BtsModalBody({
                 blood[item.key] == null ? null : (
                   <li
                     key={item.key}
-                    className="flex items-center gap-2 text-[12px] text-zinc-600"
+                    className="inline-flex items-center gap-1.5 text-[12px] min-w-0"
                   >
-                    <span className="inline-flex items-center gap-1 text-zinc-500 w-36 shrink-0">
-                      <span>{item.label}</span>
-                      <button
-                        type="button"
-                        className="inline-flex text-zinc-400 hover:text-zinc-600"
-                        title={item.tip}
-                        aria-label={item.tip}
-                      >
-                        <Info className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                    <span className="font-medium text-zinc-800 tabular-nums">
+                    <span className="text-zinc-500 truncate">{item.label}</span>
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 text-zinc-400 hover:text-zinc-600"
+                      title={item.tip}
+                      aria-label={item.tip}
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-medium text-zinc-800 tabular-nums shrink-0">
                       {String(blood[item.key])}
                     </span>
                   </li>
