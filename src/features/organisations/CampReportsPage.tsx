@@ -164,7 +164,7 @@ function BtsModalBody({
           : "bg-zinc-50 text-zinc-700 border-zinc-200";
 
     return (
-      <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {status && (
             <span
@@ -186,8 +186,8 @@ function BtsModalBody({
 
         {blood && Object.keys(blood).length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
-            <p className="text-xs font-medium text-zinc-800 mb-1.5">Blood test breakdown</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <p className="text-xs font-medium text-zinc-800 mb-2">Blood test breakdown</p>
+            <ul className="space-y-1.5">
               {(
                 [
                   {
@@ -223,32 +223,28 @@ function BtsModalBody({
                 ] as const
               ).map((item) =>
                 blood[item.key] == null ? null : (
-                  <div
+                  <li
                     key={item.key}
-                    className="flex items-center justify-between gap-2 text-[11px] text-zinc-600"
+                    className="flex items-center gap-2 text-[12px] text-zinc-600"
                   >
-                    <span className="inline-flex items-center gap-1 min-w-0 text-zinc-500">
-                      <span className="truncate">{item.label}</span>
-                      <span className="relative group/tip shrink-0">
-                        <Info
-                          className="w-3 h-3 text-zinc-400"
-                          aria-label={item.tip}
-                        />
-                        <span
-                          role="tooltip"
-                          className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-52 -translate-x-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-zinc-100 opacity-0 shadow-lg transition-opacity group-hover/tip:opacity-100 group-focus-within/tip:opacity-100"
-                        >
-                          {item.tip}
-                        </span>
-                      </span>
+                    <span className="inline-flex items-center gap-1 text-zinc-500 w-36 shrink-0">
+                      <span>{item.label}</span>
+                      <button
+                        type="button"
+                        className="inline-flex text-zinc-400 hover:text-zinc-600"
+                        title={item.tip}
+                        aria-label={item.tip}
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
                     </span>
-                    <span className="font-medium text-zinc-800 tabular-nums shrink-0">
+                    <span className="font-medium text-zinc-800 tabular-nums">
                       {String(blood[item.key])}
                     </span>
-                  </div>
+                  </li>
                 )
               )}
-            </div>
+            </ul>
           </div>
         )}
 
