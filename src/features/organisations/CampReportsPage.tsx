@@ -64,8 +64,35 @@ function formatEstimatedTime(seconds: number): string {
 }
 
 function formatFieldLabel(key: string): string {
+  if (key.startsWith("consultations.")) {
+    const expertKey = key.slice("consultations.".length);
+    const parts = expertKey.split("_").filter(Boolean);
+    if (parts.length === 0) return "Consultations";
+    if (parts.length === 1) {
+      return `${parts[0][0].toUpperCase()}${parts[0].slice(1)} consultations`;
+    }
+    if (parts.length === 2) {
+      return `${parts[0][0].toUpperCase()}${parts[0].slice(1)} and ${parts[1]} consultations`;
+    }
+    return `${parts.map((p, i) => (i === 0 ? p[0].toUpperCase() + p.slice(1) : p)).join(", ")} consultations`;
+  }
+  const labels: Record<string, string> = {
+    employees_enrolled: "People enrolled",
+    male_enrolled: "Men enrolled",
+    female_enrolled: "Women enrolled",
+    total_blood_test: "Blood tests completed",
+    blood_test_percent: "Blood-test coverage (%)",
+    high_risk_group: "High-risk group",
+    doctor_consultation: "Doctor consultations",
+    nutritionist_consultation: "Nutritionist consultations",
+    doctor_and_nutritionist_consultation: "Doctor and nutritionist consultations",
+  };
+  if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
 }
+
+const BTS_COLUMNS =
+  "grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_1.5rem]";
 
 function isBtsFieldEntry(
   value: unknown
@@ -158,25 +185,38 @@ function BtsModalBody({
 
         {blood && Object.keys(blood).length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
-            <p className="text-xs font-medium text-zinc-800 mb-1.5">Blood test details</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {Object.entries(blood).map(([key, value]) => (
-                <div key={key} className="text-[11px] text-zinc-600">
-                  <span className="text-zinc-500">{formatFieldLabel(key)}:</span>{" "}
-                  <span className="font-medium text-zinc-800">{String(value ?? "—")}</span>
-                </div>
-              ))}
+            <p className="text-xs font-medium text-zinc-800 mb-1.5">How blood tests were counted</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {(
+                [
+                  ["with_booking_id", "Had a lab booking"],
+                  ["with_metsights_collection", "Sample collected (no booking on file)"],
+                  ["missing_collection", "Checked — no sample yet"],
+                  ["no_record_id", "No assessment record to check"],
+                  ["check_failed", "Could not check right now"],
+                  ["users_needing_metsights_check", "Needed an online sample check"],
+                ] as const
+              ).map(([key, label]) =>
+                blood[key] == null ? null : (
+                  <div key={key} className="text-[11px] text-zinc-600">
+                    <span className="text-zinc-500">{label}:</span>{" "}
+                    <span className="font-medium text-zinc-800">{String(blood[key])}</span>
+                  </div>
+                )
+              )}
             </div>
           </div>
         )}
 
         {fields && Object.keys(fields).length > 0 ? (
           <div className="rounded-lg border border-zinc-200 overflow-hidden">
-            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-zinc-50 text-[11px] font-medium text-zinc-500 uppercase tracking-wide">
+            <div
+              className={`grid ${BTS_COLUMNS} gap-x-3 px-3 py-2 bg-zinc-50 text-[11px] font-medium text-zinc-500 uppercase tracking-wide`}
+            >
               <span>Field</span>
               <span className="text-right">Expected</span>
-              <span className="text-right">Stored</span>
-              <span className="w-5" />
+              <span className="text-right">In report</span>
+              <span aria-hidden className="w-6" />
             </div>
             <div className="divide-y divide-zinc-100">
               {Object.entries(fields).map(([key, raw]) => {
@@ -192,8 +232,8 @@ function BtsModalBody({
                 }
                 return (
                   <div key={key} className="px-3 py-2.5">
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-start">
-                      <span className="text-xs font-medium text-zinc-800 capitalize">
+                    <div className={`grid ${BTS_COLUMNS} gap-x-3 items-center`}>
+                      <span className="text-xs font-medium text-zinc-800 min-w-0 pr-2">
                         {formatFieldLabel(key)}
                       </span>
                       <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
@@ -202,14 +242,18 @@ function BtsModalBody({
                       <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
                         {raw.stored == null ? "—" : String(raw.stored)}
                       </span>
-                      {raw.match ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                      )}
+                      <span className="flex justify-end">
+                        {raw.match ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        )}
+                      </span>
                     </div>
                     {!raw.match && raw.reason && (
-                      <p className="mt-1.5 text-[11px] text-amber-800 leading-snug">{raw.reason}</p>
+                      <p className="mt-1.5 text-[11px] text-amber-800 leading-relaxed pr-8">
+                        {raw.reason}
+                      </p>
                     )}
                   </div>
                 );
