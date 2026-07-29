@@ -77,6 +77,12 @@ function formatFieldLabel(key: string): string {
     }
     return `${parts.map((p, i) => (i === 0 ? p[0].toUpperCase() + p.slice(1) : p)).join(", ")} consultations`;
   }
+  if (key.startsWith("enrolled.")) {
+    return `People in ${key.slice("enrolled.".length)}`;
+  }
+  if (key.startsWith("percent.")) {
+    return `Share in ${key.slice("percent.".length)} (%)`;
+  }
   const labels: Record<string, string> = {
     employees_enrolled: "People enrolled",
     male_enrolled: "Men enrolled",
@@ -87,9 +93,24 @@ function formatFieldLabel(key: string): string {
     doctor_consultation: "Doctor consultations",
     nutritionist_consultation: "Nutritionist consultations",
     doctor_and_nutritionist_consultation: "Doctor and nutritionist consultations",
+    total_enrolled: "Total people enrolled",
+    age_group: "Age groups",
+    buckets_sum: "Age-group counts add up",
   };
   if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
+}
+
+function formatAgeSource(source: unknown): string {
+  if (source === "date_of_birth") return "Date of birth";
+  if (source === "profile_age") return "Profile age";
+  return source == null ? "—" : String(source);
+}
+
+function formatScalarDisplay(value: unknown): string {
+  if (value == null) return "—";
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
 }
 
 const BTS_COLUMNS =
@@ -122,6 +143,8 @@ function BtsModalBody({
 }: {
   data: Record<string, unknown> | null;
 }) {
+  const [openAgeGroups, setOpenAgeGroups] = useState<Record<string, boolean>>({});
+
   if (data == null) {
     return (
       <p className="text-sm text-zinc-500">
@@ -154,6 +177,17 @@ function BtsModalBody({
     details?.blood && typeof details.blood === "object"
       ? (details.blood as Record<string, unknown>)
       : null;
+  const method =
+    details?.method && typeof details.method === "object"
+      ? (details.method as Record<string, unknown>)
+      : null;
+  const ageGroups =
+    details?.age_groups && typeof details.age_groups === "object"
+      ? (details.age_groups as Record<string, unknown>)
+      : null;
+  const notes = Array.isArray(details?.notes)
+    ? details.notes.filter((n): n is string => typeof n === "string")
+    : [];
 
   if (fields || status === "ok" || status === "mismatch") {
     const statusClass =
@@ -182,6 +216,62 @@ function BtsModalBody({
 
         {typeof data.message === "string" && data.message && (
           <p className="text-sm text-zinc-600">{data.message}</p>
+        )}
+
+        {method && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
+            <p className="text-xs font-medium text-zinc-800">How we counted</p>
+            {typeof method.scope_label === "string" && (
+              <p className="text-[12px] text-zinc-600">
+                Scope: {method.scope_label}
+              </p>
+            )}
+            {typeof method.counting_rule === "string" && (
+              <p className="text-[12px] text-zinc-600">{method.counting_rule}</p>
+            )}
+            {typeof method.reference_date === "string" && (
+              <p className="text-[12px] text-zinc-600">
+                Age as of{" "}
+                {typeof method.reference_date_label === "string"
+                  ? method.reference_date_label.toLowerCase()
+                  : "camp start"}{" "}
+                ({method.reference_date}).
+              </p>
+            )}
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 pt-1">
+              {(
+                [
+                  { key: "engagement_count", label: "Sessions" },
+                  { key: "participant_rows", label: "Enrollments" },
+                  { key: "distinct_people", label: "Unique people" },
+                  { key: "age_from_date_of_birth", label: "Age from date of birth" },
+                  { key: "age_from_profile", label: "Age from profile" },
+                  { key: "under_18_count", label: "Under 18" },
+                ] as const
+              ).map((item) =>
+                method[item.key] == null ? null : (
+                  <li
+                    key={item.key}
+                    className="inline-flex items-center gap-1.5 text-[12px] min-w-0"
+                  >
+                    <span className="text-zinc-500 truncate">{item.label}</span>
+                    <span className="font-medium text-zinc-800 tabular-nums shrink-0">
+                      {String(method[item.key])}
+                    </span>
+                  </li>
+                )
+              )}
+            </ul>
+            {notes.length > 0 && (
+              <ul className="mt-2 space-y-1 border-t border-zinc-200 pt-2">
+                {notes.map((note) => (
+                  <li key={note} className="text-[11px] text-zinc-600 leading-relaxed">
+                    {note}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
 
         {blood && Object.keys(blood).length > 0 && (
@@ -275,10 +365,10 @@ function BtsModalBody({
                         {formatFieldLabel(key)}
                       </span>
                       <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
-                        {raw.expected == null ? "—" : String(raw.expected)}
+                        {formatScalarDisplay(raw.expected)}
                       </span>
                       <span className="text-xs font-mono text-zinc-700 text-right tabular-nums">
-                        {raw.stored == null ? "—" : String(raw.stored)}
+                        {formatScalarDisplay(raw.stored)}
                       </span>
                       <span className="flex justify-end">
                         {raw.match ? (
@@ -299,6 +389,96 @@ function BtsModalBody({
             </div>
           </div>
         ) : null}
+
+        {ageGroups && Object.keys(ageGroups).length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Who is in each age group
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {Object.entries(ageGroups).map(([group, raw]) => {
+                const groupData =
+                  raw && typeof raw === "object"
+                    ? (raw as Record<string, unknown>)
+                    : null;
+                const count =
+                  groupData && typeof groupData.count === "number"
+                    ? groupData.count
+                    : null;
+                const people = Array.isArray(groupData?.people)
+                  ? (groupData.people as Record<string, unknown>[])
+                  : [];
+                const open = openAgeGroups[group] ?? false;
+                return (
+                  <div key={group}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenAgeGroups((prev) => ({
+                          ...prev,
+                          [group]: !open,
+                        }))
+                      }
+                    >
+                      {open ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">{group}</span>
+                      <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                        {count == null ? "—" : `${count} people`}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="px-3 pb-3 overflow-x-auto">
+                        {people.length === 0 ? (
+                          <p className="text-[11px] text-zinc-500 px-1">No one in this group.</p>
+                        ) : (
+                          <table className="w-full text-[11px] text-left">
+                            <thead>
+                              <tr className="text-zinc-500 border-b border-zinc-100">
+                                <th className="py-1.5 pr-3 font-medium">Name</th>
+                                <th className="py-1.5 pr-3 font-medium">User ID</th>
+                                <th className="py-1.5 pr-3 font-medium">Age used</th>
+                                <th className="py-1.5 pr-3 font-medium">Age source</th>
+                                <th className="py-1.5 font-medium">Date of birth</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-50">
+                              {people.map((person, idx) => (
+                                <tr key={`${String(person.user_id)}-${idx}`}>
+                                  <td className="py-1.5 pr-3 text-zinc-800">
+                                    {person.name == null ? "—" : String(person.name)}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                                    {person.user_id == null ? "—" : String(person.user_id)}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                                    {person.age_used == null ? "—" : String(person.age_used)}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-zinc-700">
+                                    {formatAgeSource(person.age_source)}
+                                  </td>
+                                  <td className="py-1.5 text-zinc-700 tabular-nums">
+                                    {person.date_of_birth == null
+                                      ? "—"
+                                      : String(person.date_of_birth)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
