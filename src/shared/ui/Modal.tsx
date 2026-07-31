@@ -7,9 +7,18 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidthClassName?: string;
+  /** Extra controls rendered to the left of the close button. */
+  headerActions?: React.ReactNode;
 }
 
-export function Modal({ open, onClose, title, children, maxWidthClassName }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  maxWidthClassName,
+  headerActions,
+}: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -43,13 +52,16 @@ export function Modal({ open, onClose, title, children, maxWidthClassName }: Mod
           <h2 id="modal-title" className="text-lg font-semibold text-zinc-900">
             {title}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {headerActions}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))]">{children}</div>
       </div>

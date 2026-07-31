@@ -8,6 +8,7 @@ import {
   Eye,
   Info,
   Loader2,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   XCircle,
@@ -504,7 +505,13 @@ export function CampReportsPage() {
   const [dashboardModal, setDashboardModal] = useState<{
     title: string;
     data: Record<string, unknown>;
+    report: CampReportRow;
+    sectionKey: string;
   } | null>(null);
+  const [dashboardEditMode, setDashboardEditMode] = useState(false);
+  const [dashboardEditText, setDashboardEditText] = useState("");
+  const [dashboardEditError, setDashboardEditError] = useState<string | null>(null);
+  const [dashboardSaving, setDashboardSaving] = useState(false);
   const [btsModal, setBtsModal] = useState<{
     title: string;
     sectionKey: string;
@@ -622,9 +629,13 @@ export function CampReportsPage() {
 
     try {
       const data = await fetchDashboard(report, section);
+      setDashboardEditMode(false);
+      setDashboardEditError(null);
       setDashboardModal({
         title: section.section,
         data,
+        report,
+        sectionKey: section.section_key,
       });
     } catch (err) {
       setSectionErrors((prev) => ({
@@ -656,10 +667,15 @@ export function CampReportsPage() {
       }
 
       const data = await fetchDashboard(report, section);
+      setDashboardEditMode(false);
+      setDashboardEditError(null);
       setDashboardModal({
         title: section.section,
         data,
+        report,
+        sectionKey: section.section_key,
       });
+      await fetchData({ silent: true });
     } catch (err) {
       setSectionErrors((prev) => ({
         ...prev,
@@ -667,6 +683,73 @@ export function CampReportsPage() {
       }));
     } finally {
       setLoadingKey(null);
+    }
+  };
+
+  const closeDashboardModal = () => {
+    if (dashboardSaving) return;
+    setDashboardModal(null);
+    setDashboardEditMode(false);
+    setDashboardEditText("");
+    setDashboardEditError(null);
+  };
+
+  const startDashboardEdit = () => {
+    if (!dashboardModal) return;
+    setDashboardEditText(JSON.stringify(dashboardModal.data, null, 2));
+    setDashboardEditError(null);
+    setDashboardEditMode(true);
+  };
+
+  const cancelDashboardEdit = () => {
+    if (dashboardSaving) return;
+    setDashboardEditMode(false);
+    setDashboardEditText("");
+    setDashboardEditError(null);
+  };
+
+  const saveDashboardEdit = async () => {
+    if (!dashboardModal) return;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dashboardEditText);
+    } catch {
+      setDashboardEditError("Invalid JSON — fix the syntax and try again.");
+      return;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      setDashboardEditError("Section payload must be a JSON object.");
+      return;
+    }
+
+    const payload = parsed as Record<string, unknown>;
+    setDashboardSaving(true);
+    setDashboardEditError(null);
+
+    try {
+      const { report, sectionKey } = dashboardModal;
+      const response =
+        report.department === null
+          ? await campReportsApi.updateDashboard(campNo, sectionKey, payload)
+          : await campReportsApi.updateDepartmentDashboard(
+              campNo,
+              report.department,
+              sectionKey,
+              payload
+            );
+      const saved = response.data.data.section;
+      setDashboardModal({
+        ...dashboardModal,
+        data: saved,
+      });
+      setDashboardEditMode(false);
+      setDashboardEditText("");
+      await fetchData({ silent: true });
+    } catch (err) {
+      setDashboardEditError(getApiError(err));
+    } finally {
+      setDashboardSaving(false);
     }
   };
 
@@ -1268,15 +1351,65 @@ export function CampReportsPage() {
 
       <Modal
         open={dashboardModal !== null}
-        onClose={() => setDashboardModal(null)}
+        onClose={closeDashboardModal}
         title={dashboardModal?.title ?? "Section data"}
         maxWidthClassName="max-w-3xl"
+        headerActions={
+          dashboardModal && !dashboardEditMode ? (
+            <button
+              type="button"
+              onClick={startDashboardEdit}
+              className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              aria-label="Edit section JSON"
+              title="Edit"
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+          ) : undefined
+        }
       >
-        <pre className="text-xs text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words">
-          {dashboardModal
-            ? JSON.stringify(dashboardModal.data, null, 2)
-            : ""}
-        </pre>
+        {dashboardEditMode ? (
+          <div className="space-y-3">
+            <textarea
+              value={dashboardEditText}
+              onChange={(e) => {
+                setDashboardEditText(e.target.value);
+                if (dashboardEditError) setDashboardEditError(null);
+              }}
+              spellCheck={false}
+              className="w-full min-h-[320px] font-mono text-xs text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-4 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent resize-y"
+              disabled={dashboardSaving}
+            />
+            {dashboardEditError && (
+              <p className="text-sm text-red-600">{dashboardEditError}</p>
+            )}
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={cancelDashboardEdit}
+                disabled={dashboardSaving}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveDashboardEdit()}
+                disabled={dashboardSaving}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {dashboardSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <pre className="text-xs text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-words">
+            {dashboardModal
+              ? JSON.stringify(dashboardModal.data, null, 2)
+              : ""}
+          </pre>
+        )}
       </Modal>
 
       <Modal

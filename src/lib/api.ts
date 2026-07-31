@@ -934,6 +934,21 @@ export const campReportsApi = {
       `/reports/camps/${campNo}/department/${slug}/dashboard`,
       { params: { section } }
     ),
+  updateDashboard: (campNo: number, section: string, payload: Record<string, unknown>) =>
+    api.put<{ data: { report_id: number; section: Record<string, unknown> } }>(
+      `/reports/camps/${campNo}/dashboard`,
+      { section, payload }
+    ),
+  updateDepartmentDashboard: (
+    campNo: number,
+    slug: string,
+    section: string,
+    payload: Record<string, unknown>
+  ) =>
+    api.put<{ data: { report_id: number; section: Record<string, unknown> } }>(
+      `/reports/camps/${campNo}/department/${slug}/dashboard`,
+      { section, payload }
+    ),
   refreshCamp: (campNo: number, section: string) =>
     api.put<{ data: CampReportRefreshResult }>(`/reports/camps/${campNo}/refresh`, { section }),
   refreshDepartment: (campNo: number, slug: string, section: string) =>
