@@ -301,6 +301,24 @@ export interface MetsightsProfilesImportPageResult {
   skipped_items: { metsights_profile_id: string; reason: string }[];
 }
 
+export interface EngagementsSyncStats {
+  users_with_metsights_profile_id: number;
+  b2c_engagements_total: number;
+}
+
+export interface EngagementsSyncImportPageResult {
+  page: number;
+  page_size: number;
+  users_total: number;
+  users_on_page: number;
+  next_page: number | null;
+  created: number;
+  skipped: number;
+  failed: number;
+  failures: { metsights_profile_id: string; reason: string }[];
+  skipped_items: { metsights_profile_id: string; reason: string }[];
+}
+
 export const platformSettingsApi = {
   getB2cOnboarding: () =>
     api.get<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>("/platform-settings/b2c-onboarding"),
@@ -343,6 +361,16 @@ export const platformSettingsApi = {
   importMetsightsProfilesPage: (payload: { page: number }) =>
     api.post<{ data: MetsightsProfilesImportPageResult; meta: Record<string, unknown> }>(
       "/platform-settings/metsights-profiles/import-page",
+      payload,
+      { timeout: 120_000 }
+    ),
+  getEngagementsSyncStats: () =>
+    api.get<{ data: EngagementsSyncStats; meta: Record<string, unknown> }>(
+      "/platform-settings/engagements-sync/stats"
+    ),
+  importEngagementsSyncPage: (payload: { page: number }) =>
+    api.post<{ data: EngagementsSyncImportPageResult; meta: Record<string, unknown> }>(
+      "/platform-settings/engagements-sync/import-page",
       payload,
       { timeout: 120_000 }
     ),

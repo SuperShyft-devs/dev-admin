@@ -16,6 +16,8 @@ import {
   type EngagementKind,
   type EngagementNotificationDefaults,
   type BloodCollectionType,
+  type EngagementsSyncImportPageResult,
+  type EngagementsSyncStats,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
   type NotificationServiceItem,
@@ -26,6 +28,7 @@ import { NotificationServiceChipInput } from "../../shared/ui/NotificationServic
 import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const SYNC_STORAGE_KEY = "metsights-sync-v1";
+const ENG_SYNC_STORAGE_KEY = "engagements-sync-v1";
 
 type SyncPhase = "idle" | "running" | "paused" | "completed" | "error";
 
@@ -34,6 +37,12 @@ type B2cDefaultsByType = Record<EngagementKind, B2cOnboardingTypeDefaults>;
 interface SyncTotals {
   created: number;
   linked: number;
+  skipped: number;
+  failed: number;
+}
+
+interface EngSyncTotals {
+  created: number;
   skipped: number;
   failed: number;
 }
@@ -47,6 +56,16 @@ interface PageLogEntry {
   page: number;
   created: number;
   linked: number;
+  skipped: number;
+  failed: number;
+  at: string;
+  skippedItems: ProfileImportDetail[];
+  failures: ProfileImportDetail[];
+}
+
+interface EngPageLogEntry {
+  page: number;
+  created: number;
   skipped: number;
   failed: number;
   at: string;
@@ -199,6 +218,23 @@ export function Settings() {
   const abortRef = useRef<AbortController | null>(null);
   const runningRef = useRef(false);
 
+  const [engStats, setEngStats] = useState<EngagementsSyncStats | null>(null);
+  const [engStatsLoading, setEngStatsLoading] = useState(false);
+  const [engStatsError, setEngStatsError] = useState<string | null>(null);
+  const [engSyncPhase, setEngSyncPhase] = useState<SyncPhase>("idle");
+  const [engNextPage, setEngNextPage] = useState(1);
+  const [engProcessedUsers, setEngProcessedUsers] = useState(0);
+  const [engUsersTotal, setEngUsersTotal] = useState(0);
+  const [engPageSizeHint, setEngPageSizeHint] = useState(10);
+  const [engSyncTotals, setEngSyncTotals] = useState<EngSyncTotals>({ created: 0, skipped: 0, failed: 0 });
+  const [engSyncError, setEngSyncError] = useState<string | null>(null);
+  const [engFailedPage, setEngFailedPage] = useState<number | null>(null);
+  const [engActivityLog, setEngActivityLog] = useState<EngPageLogEntry[]>([]);
+  const [engLogOpen, setEngLogOpen] = useState(false);
+  const engPauseRef = useRef(false);
+  const engAbortRef = useRef<AbortController | null>(null);
+  const engRunningRef = useRef(false);
+
   const loadB2c = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -262,14 +298,31 @@ export function Settings() {
     }
   }, []);
 
+  const refreshEngStats = useCallback(async () => {
+    setEngStatsLoading(true);
+    setEngStatsError(null);
+    try {
+      const res = await platformSettingsApi.getEngagementsSyncStats();
+      setEngStats(res.data.data);
+      return res.data.data;
+    } catch (err) {
+      setEngStatsError(getApiError(err));
+      return null;
+    } finally {
+      setEngStatsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadB2c();
     void refreshMsStats();
-  }, [loadB2c, refreshMsStats]);
+    void refreshEngStats();
+  }, [loadB2c, refreshMsStats, refreshEngStats]);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      engAbortRef.current?.abort();
     };
   }, []);
 
@@ -290,6 +343,24 @@ export function Settings() {
       /* ignore */
     }
   }, [syncPhase, nextPage, processedProfiles, metsightsTotal, syncTotals]);
+
+  useEffect(() => {
+    if (engSyncPhase !== "running" && engSyncPhase !== "paused") return;
+    try {
+      sessionStorage.setItem(
+        ENG_SYNC_STORAGE_KEY,
+        JSON.stringify({
+          nextPage: engNextPage,
+          processedUsers: engProcessedUsers,
+          usersTotal: engUsersTotal,
+          syncTotals: engSyncTotals,
+          syncPhase: engSyncPhase,
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [engSyncPhase, engNextPage, engProcessedUsers, engUsersTotal, engSyncTotals]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -529,6 +600,117 @@ export function Settings() {
     void runSyncLoop(failedPage);
   }
 
+  function applyEngPageResult(result: EngagementsSyncImportPageResult) {
+    if (result.users_total > 0) {
+      setEngUsersTotal(result.users_total);
+    }
+    if (result.page_size > 0) {
+      setEngPageSizeHint(result.page_size);
+    }
+    setEngProcessedUsers((prev) => {
+      const next = prev + (result.users_on_page || result.page_size);
+      return result.users_total > 0 ? Math.min(next, result.users_total) : next;
+    });
+    setEngSyncTotals((prev) => ({
+      created: prev.created + result.created,
+      skipped: prev.skipped + result.skipped,
+      failed: prev.failed + result.failed,
+    }));
+    setEngActivityLog((prev) => {
+      const entry: EngPageLogEntry = {
+        page: result.page,
+        created: result.created,
+        skipped: result.skipped,
+        failed: result.failed,
+        at: new Date().toLocaleTimeString(),
+        skippedItems: result.skipped_items ?? [],
+        failures: result.failures ?? [],
+      };
+      return [entry, ...prev].slice(0, 15);
+    });
+  }
+
+  const runEngSyncLoop = useCallback(
+    async (startPage: number) => {
+      if (engRunningRef.current) return;
+      engRunningRef.current = true;
+      engPauseRef.current = false;
+      setEngSyncError(null);
+      setEngFailedPage(null);
+      setEngSyncPhase("running");
+
+      let page = startPage;
+      const total = engUsersTotal || engStats?.users_with_metsights_profile_id || 0;
+
+      try {
+        while (!engPauseRef.current) {
+          if (engAbortRef.current?.signal.aborted) break;
+
+          const res = await platformSettingsApi.importEngagementsSyncPage({ page });
+          const result = res.data.data;
+          applyEngPageResult(result);
+
+          const remoteTotal = result.users_total || total;
+          const pages = totalPagesFromCount(remoteTotal, result.page_size || engPageSizeHint);
+          const hasNext = result.next_page != null;
+
+          page = result.next_page ?? page + 1;
+          setEngNextPage(page);
+
+          if (!hasNext || (pages > 0 && page > pages)) {
+            setEngSyncPhase("completed");
+            await refreshEngStats();
+            break;
+          }
+        }
+
+        if (engPauseRef.current) {
+          setEngSyncPhase("paused");
+          await refreshEngStats();
+        }
+      } catch (err) {
+        if (engAbortRef.current?.signal.aborted) return;
+        setEngSyncError(getApiError(err));
+        setEngFailedPage(page);
+        setEngSyncPhase("error");
+      } finally {
+        engRunningRef.current = false;
+      }
+    },
+    [engUsersTotal, engStats?.users_with_metsights_profile_id, engPageSizeHint, refreshEngStats]
+  );
+
+  function handleEngLoad() {
+    engAbortRef.current = new AbortController();
+    setEngNextPage(1);
+    setEngProcessedUsers(0);
+    setEngSyncTotals({ created: 0, skipped: 0, failed: 0 });
+    setEngActivityLog([]);
+    setEngSyncPhase("idle");
+    const total = engStats?.users_with_metsights_profile_id ?? 0;
+    setEngUsersTotal(total);
+    void runEngSyncLoop(1);
+  }
+
+  function handleEngPause() {
+    engPauseRef.current = true;
+  }
+
+  function handleEngResume() {
+    if (engSyncPhase === "error" && engFailedPage != null) {
+      void runEngSyncLoop(engFailedPage);
+      return;
+    }
+    void runEngSyncLoop(engNextPage);
+  }
+
+  function handleEngRetryPage() {
+    if (engFailedPage == null || engRunningRef.current) return;
+    setEngSyncPhase("running");
+    setEngSyncError(null);
+    void runEngSyncLoop(engFailedPage);
+  }
+
   const progressTotal = metsightsTotal || msStats?.metsights_total || 0;
   const progressPct =
     progressTotal > 0 ? Math.min(100, Math.round((processedProfiles / progressTotal) * 100)) : 0;
@@ -537,6 +719,18 @@ export function Settings() {
   const canLoad =
     syncPhase !== "running" && !msStatsLoading && (msStats?.metsights_total ?? 0) > 0 && !msStatsError;
   const isSyncing = syncPhase === "running";
+
+  const engProgressTotal = engUsersTotal || engStats?.users_with_metsights_profile_id || 0;
+  const engProgressPct =
+    engProgressTotal > 0 ? Math.min(100, Math.round((engProcessedUsers / engProgressTotal) * 100)) : 0;
+  const engTotalPages = totalPagesFromCount(engProgressTotal, engPageSizeHint);
+  const engCurrentPageDisplay = Math.max(1, engNextPage - 1);
+  const canEngLoad =
+    engSyncPhase !== "running" &&
+    !engStatsLoading &&
+    (engStats?.users_with_metsights_profile_id ?? 0) > 0 &&
+    !engStatsError;
+  const isEngSyncing = engSyncPhase === "running";
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -1142,6 +1336,187 @@ export function Settings() {
                       <ul className="ml-3 pl-2 border-l border-red-200 space-y-0.5">
                         {entry.failures.map((item) => (
                           <li key={`fail-${entry.page}-${item.metsights_profile_id}`} className="text-red-700/90">
+                            <span className="font-mono text-[10px] text-red-600/80">
+                              {shortProfileId(item.metsights_profile_id)}
+                            </span>
+                            {" — "}
+                            {item.reason}
+                          </li>
+                        ))}
+                        {entry.failed > entry.failures.length ? (
+                          <li className="text-zinc-400 italic">
+                            +{entry.failed - entry.failures.length} more failed (not listed)
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Engagements sync</h2>
+            <p className="text-xs text-zinc-500 mt-1 max-w-lg">
+              For each local user with a{" "}
+              <code className="bg-zinc-100 px-1 rounded">metsights_profile_id</code>, fetch MetSights records and
+              create B2C engagements, participants, and assessment instances. FitPrint records and already-imported{" "}
+              <code className="bg-zinc-100 px-1 rounded">metsights_record_id</code> values are skipped.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshEngStats()}
+            disabled={engStatsLoading || isEngSyncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-200 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {engStatsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Refresh stats
+          </button>
+        </div>
+
+        {engStatsError ? (
+          <p className="text-sm text-red-600" role="alert">
+            {engStatsError}
+          </p>
+        ) : null}
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+          {[
+            { label: "Current Total users Engagements", value: engStats?.b2c_engagements_total },
+            { label: "Users with Metsights ID", value: engStats?.users_with_metsights_profile_id },
+          ].map((tile) => (
+            <div key={tile.label} className="rounded-lg border border-zinc-100 bg-zinc-50/80 px-3 py-2.5">
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">{tile.label}</p>
+              <p className="text-lg font-semibold text-zinc-900 mt-0.5 tabular-nums">
+                {engStatsLoading ? "…" : formatCount(tile.value)}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {(isEngSyncing || engSyncPhase === "paused" || engSyncPhase === "completed" || engSyncPhase === "error") &&
+        engProcessedUsers > 0 ? (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-zinc-600">
+              <span>
+                {formatCount(engProcessedUsers)} / {formatCount(engProgressTotal)} users
+              </span>
+              <span>
+                Page {engCurrentPageDisplay}
+                {engTotalPages > 0 ? ` of ~${engTotalPages}` : ""}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+              <div
+                className="h-full bg-zinc-900 transition-all duration-300 ease-out"
+                style={{ width: `${engProgressPct}%` }}
+              />
+            </div>
+            <p className="text-xs text-zinc-600">
+              Created {engSyncTotals.created} · Skipped {engSyncTotals.skipped} · Failed {engSyncTotals.failed}
+            </p>
+          </div>
+        ) : null}
+
+        {engSyncPhase === "completed" ? (
+          <p className="text-sm text-emerald-700">Engagements sync completed.</p>
+        ) : null}
+        {engSyncPhase === "paused" ? (
+          <p className="text-sm text-amber-700">Paused. Resume to continue from page {engNextPage}.</p>
+        ) : null}
+        {engSyncError ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-red-600" role="alert">
+              {engSyncError}
+            </p>
+            {engFailedPage != null ? (
+              <button
+                type="button"
+                onClick={handleEngRetryPage}
+                className="text-xs font-medium text-zinc-700 underline hover:text-zinc-900"
+              >
+                Retry page {engFailedPage}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleEngLoad}
+            disabled={!canEngLoad}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isEngSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+            Load
+          </button>
+          <button
+            type="button"
+            onClick={handleEngPause}
+            disabled={!isEngSyncing}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Pause className="w-4 h-4" />
+            Pause
+          </button>
+          <button
+            type="button"
+            onClick={handleEngResume}
+            disabled={engSyncPhase !== "paused" && engSyncPhase !== "error"}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Play className="w-4 h-4" />
+            Resume
+          </button>
+        </div>
+
+        {engActivityLog.length > 0 ? (
+          <div className="border-t border-zinc-100 pt-3">
+            <button
+              type="button"
+              onClick={() => setEngLogOpen((o) => !o)}
+              className="flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
+            >
+              {engLogOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Activity log ({engActivityLog.length})
+            </button>
+            {engLogOpen ? (
+              <ul className="mt-2 space-y-3 max-h-64 overflow-y-auto text-xs text-zinc-600">
+                {engActivityLog.map((entry) => (
+                  <li key={`${entry.page}-${entry.at}`} className="space-y-1">
+                    <p>
+                      <span className="text-zinc-400">{entry.at}</span> Page {entry.page}: {entry.created} created,{" "}
+                      {entry.skipped} skipped, {entry.failed} failed
+                    </p>
+                    {entry.skippedItems.length > 0 ? (
+                      <ul className="ml-3 pl-2 border-l border-amber-200 space-y-0.5">
+                        {entry.skippedItems.map((item) => (
+                          <li key={`eng-skip-${entry.page}-${item.metsights_profile_id}-${item.reason}`} className="text-amber-800/90">
+                            <span className="font-mono text-[10px] text-amber-700/80">
+                              {shortProfileId(item.metsights_profile_id)}
+                            </span>
+                            {" — "}
+                            {item.reason}
+                          </li>
+                        ))}
+                        {entry.skipped > entry.skippedItems.length ? (
+                          <li className="text-zinc-400 italic">
+                            +{entry.skipped - entry.skippedItems.length} more skipped (not listed)
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+                    {entry.failures.length > 0 ? (
+                      <ul className="ml-3 pl-2 border-l border-red-200 space-y-0.5">
+                        {entry.failures.map((item) => (
+                          <li key={`eng-fail-${entry.page}-${item.metsights_profile_id}-${item.reason}`} className="text-red-700/90">
                             <span className="font-mono text-[10px] text-red-600/80">
                               {shortProfileId(item.metsights_profile_id)}
                             </span>
