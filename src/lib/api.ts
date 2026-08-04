@@ -239,13 +239,16 @@ export const supportApi = {
 };
 
 // Platform settings (employee)
+export interface B2cOnboardingTypeDefaults {
+  assessment_package_id: number;
+  diagnostic_package_id: number;
+  blood_collection_type: BloodCollectionType | null;
+  create_profile_on_metsights: boolean;
+  enroll_for_fitprint_full: boolean;
+}
+
 export interface B2cOnboardingDefaults {
-  b2c_default_assessment_package_id: number;
-  b2c_default_diagnostic_package_id: number;
-  b2c_default_engagement_type: EngagementKind;
-  b2c_default_blood_collection_type: BloodCollectionType | null;
-  b2c_default_create_profile_on_metsights: boolean;
-  b2c_default_enroll_for_fitprint_full: boolean;
+  defaults_by_engagement_type: Partial<Record<EngagementKind, B2cOnboardingTypeDefaults>>;
 }
 
 export interface EngagementNotificationDefaults {
