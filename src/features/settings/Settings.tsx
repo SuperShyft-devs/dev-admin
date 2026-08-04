@@ -108,7 +108,7 @@ const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: s
   { value: "camp_collection", label: "Camp Collection" },
 ];
 
-function emptyTypeDefaults(assessmentId = 1, diagnosticId = 1): B2cOnboardingTypeDefaults {
+function emptyTypeDefaults(assessmentId = 1, diagnosticId: number | null = 1): B2cOnboardingTypeDefaults {
   return {
     assessment_package_id: assessmentId,
     diagnostic_package_id: diagnosticId,
@@ -122,7 +122,7 @@ function buildDefaultsByType(
   typeCodes: string[],
   raw: Record<string, B2cOnboardingTypeDefaults> | undefined,
   fallbackAssessmentId = 1,
-  fallbackDiagnosticId = 1
+  fallbackDiagnosticId: number | null = 1
 ): B2cDefaultsByType {
   const fallback = emptyTypeDefaults(fallbackAssessmentId, fallbackDiagnosticId);
   const result: B2cDefaultsByType = {};
@@ -131,7 +131,7 @@ function buildDefaultsByType(
     result[code] = entry
       ? {
           assessment_package_id: entry.assessment_package_id,
-          diagnostic_package_id: entry.diagnostic_package_id,
+          diagnostic_package_id: entry.diagnostic_package_id ?? null,
           blood_collection_type: entry.blood_collection_type ?? null,
           create_profile_on_metsights: entry.create_profile_on_metsights,
           enroll_for_fitprint_full: entry.enroll_for_fitprint_full,
@@ -899,9 +899,14 @@ export function Settings() {
             <select
               id="b2c-diagnostic"
               className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-              value={activeDefaults.diagnostic_package_id}
-              onChange={(ev) => updateActiveDefaults({ diagnostic_package_id: Number(ev.target.value) })}
+              value={activeDefaults.diagnostic_package_id ?? ""}
+              onChange={(ev) =>
+                updateActiveDefaults({
+                  diagnostic_package_id: ev.target.value ? Number(ev.target.value) : null,
+                })
+              }
             >
+              <option value="">None</option>
               {diagnosticPackages.map((p) => (
                 <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
                   {labelDiagnostic(p)}

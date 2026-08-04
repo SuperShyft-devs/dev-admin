@@ -241,7 +241,7 @@ export const supportApi = {
 // Platform settings (employee)
 export interface B2cOnboardingTypeDefaults {
   assessment_package_id: number;
-  diagnostic_package_id: number;
+  diagnostic_package_id: number | null;
   blood_collection_type: BloodCollectionType | null;
   create_profile_on_metsights: boolean;
   enroll_for_fitprint_full: boolean;
