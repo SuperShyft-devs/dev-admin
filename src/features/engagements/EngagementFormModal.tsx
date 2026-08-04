@@ -302,7 +302,8 @@ export function EngagementFormModal({
           engagement_type_id: selectedTypeId,
         });
         if (cancelled) return;
-        setNotificationEvents(eventsRes.data.data);
+        const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
+        setNotificationEvents(events);
 
         const config: Record<number, string> = {};
 
@@ -312,9 +313,12 @@ export function EngagementFormModal({
             const configRes =
               await engagementNotificationsApi.getForEngagement(engagementId);
             if (!cancelled) {
-              for (const item of configRes.data.data) {
-                config[item.notification_event_id] =
-                  item.notification_services.join(",");
+              const items = Array.isArray(configRes.data.data) ? configRes.data.data : [];
+              for (const item of items) {
+                const services = Array.isArray(item.notification_services)
+                  ? item.notification_services
+                  : [];
+                config[item.notification_event_id] = services.join(",");
               }
             }
           } catch {
@@ -325,9 +329,12 @@ export function EngagementFormModal({
             const defaultsRes =
               await engagementNotificationsApi.getDefaults(selectedTypeId);
             if (!cancelled) {
-              for (const item of defaultsRes.data.data) {
-                config[item.notification_event_id] =
-                  item.notification_services.join(",");
+              const items = Array.isArray(defaultsRes.data.data) ? defaultsRes.data.data : [];
+              for (const item of items) {
+                const services = Array.isArray(item.notification_services)
+                  ? item.notification_services
+                  : [];
+                config[item.notification_event_id] = services.join(",");
               }
             }
           } catch {

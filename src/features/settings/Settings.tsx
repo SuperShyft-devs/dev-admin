@@ -505,12 +505,18 @@ export function Settings() {
       notificationEventsApi.list({ engagement_type_id: activeNotifType }),
       engagementNotificationsApi.getDefaults(activeNotifType),
     ]).then(([eventsRes, defaultsRes]) => {
-      const events = eventsRes.data.data ?? [];
+      const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
       setNotifEvents(events);
       const defaults: Record<number, string> = {};
       for (const ev of events) defaults[ev.notification_event_id] = "";
-      for (const d of (defaultsRes.data.data ?? []) as NotificationDefaultItem[]) {
-        defaults[d.notification_event_id] = (d.notification_services ?? []).join(",");
+      const defaultsList = Array.isArray(defaultsRes.data.data)
+        ? (defaultsRes.data.data as NotificationDefaultItem[])
+        : [];
+      for (const d of defaultsList) {
+        const services = Array.isArray(d.notification_services)
+          ? d.notification_services
+          : [];
+        defaults[d.notification_event_id] = services.join(",");
       }
       setNotifDefaults(defaults);
       setNotifDefaultsOriginal({ ...defaults });
