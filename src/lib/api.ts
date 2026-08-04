@@ -248,7 +248,7 @@ export interface B2cOnboardingTypeDefaults {
 }
 
 export interface B2cOnboardingDefaults {
-  defaults_by_engagement_type: Partial<Record<EngagementKind, B2cOnboardingTypeDefaults>>;
+  defaults_by_engagement_type: Record<string, B2cOnboardingTypeDefaults>;
 }
 
 /** @deprecated Use NotificationDefaultItem[] via engagementNotificationsApi instead */

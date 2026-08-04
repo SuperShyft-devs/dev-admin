@@ -16,7 +16,6 @@ import {
   type DefaultOnboardingAssistantItem,
   type DiagnosticPackageListItem,
   type EmployeeListItem,
-  type EngagementKind,
   type EngagementTypeItem,
   type BloodCollectionType,
   type EngagementsSyncImportPageResult,
@@ -37,7 +36,7 @@ const ENG_SYNC_STORAGE_KEY = "engagements-sync-v1";
 
 type SyncPhase = "idle" | "running" | "paused" | "completed" | "error";
 
-type B2cDefaultsByType = Record<EngagementKind, B2cOnboardingTypeDefaults>;
+type B2cDefaultsByType = Record<string, B2cOnboardingTypeDefaults>;
 
 interface SyncTotals {
   created: number;
@@ -103,14 +102,6 @@ function labelEmployee(emp: EmployeeListItem | DefaultOnboardingAssistantItem) {
 
 const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager"]);
 
-const ENGAGEMENT_TYPE_OPTIONS: { value: EngagementKind; label: string }[] = [
-  { value: "bio_ai", label: "BioAi" },
-  { value: "blood_test", label: "Blood Test" },
-  { value: "consultation", label: "Consultation" },
-  { value: "blood_test_with_consultation", label: "Blood Test with Consultation" },
-  { value: "bio_ai_with_consultation", label: "BioAi with Consultation" },
-];
-
 const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: string }[] = [
   { value: "", label: "None" },
   { value: "home_collection", label: "Home Collection" },
@@ -128,15 +119,16 @@ function emptyTypeDefaults(assessmentId = 1, diagnosticId = 1): B2cOnboardingTyp
 }
 
 function buildDefaultsByType(
-  raw: Partial<Record<EngagementKind, B2cOnboardingTypeDefaults>> | undefined,
+  typeCodes: string[],
+  raw: Record<string, B2cOnboardingTypeDefaults> | undefined,
   fallbackAssessmentId = 1,
   fallbackDiagnosticId = 1
 ): B2cDefaultsByType {
   const fallback = emptyTypeDefaults(fallbackAssessmentId, fallbackDiagnosticId);
-  const result = {} as B2cDefaultsByType;
-  for (const option of ENGAGEMENT_TYPE_OPTIONS) {
-    const entry = raw?.[option.value];
-    result[option.value] = entry
+  const result: B2cDefaultsByType = {};
+  for (const code of typeCodes) {
+    const entry = raw?.[code];
+    result[code] = entry
       ? {
           assessment_package_id: entry.assessment_package_id,
           diagnostic_package_id: entry.diagnostic_package_id,
@@ -149,11 +141,11 @@ function buildDefaultsByType(
   return result;
 }
 
-function needsAssessment(kind: EngagementKind): boolean {
+function needsAssessment(kind: string): boolean {
   return kind === "bio_ai" || kind === "bio_ai_with_consultation";
 }
 
-function needsDiagnostic(kind: EngagementKind): boolean {
+function needsDiagnostic(kind: string): boolean {
   return (
     kind === "blood_test" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation"
   );
@@ -178,10 +170,11 @@ export function Settings() {
   const [assessmentPackages, setAssessmentPackages] = useState<AssessmentPackage[]>([]);
   const [diagnosticPackages, setDiagnosticPackages] = useState<DiagnosticPackageListItem[]>([]);
 
-  const [activeEngagementType, setActiveEngagementType] = useState<EngagementKind>("bio_ai");
-  const [defaultsByType, setDefaultsByType] = useState<B2cDefaultsByType>(() => buildDefaultsByType(undefined));
+  const [b2cEngagementTypes, setB2cEngagementTypes] = useState<EngagementTypeItem[]>([]);
+  const [activeEngagementType, setActiveEngagementType] = useState<string>("bio_ai");
+  const [defaultsByType, setDefaultsByType] = useState<B2cDefaultsByType>(() => buildDefaultsByType(["bio_ai"], undefined));
   const [savedDefaultsByType, setSavedDefaultsByType] = useState<B2cDefaultsByType>(() =>
-    buildDefaultsByType(undefined)
+    buildDefaultsByType(["bio_ai"], undefined)
   );
 
   const [notificationServices, setNotificationServices] = useState<NotificationServiceItem[]>([]);
@@ -252,9 +245,10 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
+      const [defaultsRes, typesRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
         await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
+        engagementTypesApi.list({ is_active: true }),
         platformSettingsApi.getDefaultOnboardingAssistants(),
         platformSettingsApi.getSupportQueryNotification(),
         notificationsApi.listServices(),
@@ -265,8 +259,16 @@ export function Settings() {
         employeesApi.list({ status: "active", limit: 100 }),
       ]);
 
+      const types = typesRes.data.data ?? [];
+      const typeCodes = types.map((t) => t.code);
+      setB2cEngagementTypes(types);
+      setActiveEngagementType((prev) => {
+        if (typeCodes.length === 0 || typeCodes.includes(prev)) return prev;
+        return typeCodes.includes("bio_ai") ? "bio_ai" : typeCodes[0];
+      });
+
       const d = defaultsRes.data.data;
-      const mapped = buildDefaultsByType(d.defaults_by_engagement_type);
+      const mapped = buildDefaultsByType(typeCodes, d.defaults_by_engagement_type);
       setDefaultsByType(mapped);
       setSavedDefaultsByType(mapped);
       setSelectedDefaultAssistantIds(new Set(assistantDefaultsRes.data.data.employee_ids ?? []));
@@ -374,15 +376,15 @@ export function Settings() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    const invalidType = ENGAGEMENT_TYPE_OPTIONS.find((option) => {
-      const entry = defaultsByType[option.value];
-      return entry.enroll_for_fitprint_full && !entry.create_profile_on_metsights;
+    const invalidType = b2cEngagementTypes.find((option) => {
+      const entry = defaultsByType[option.code];
+      return entry?.enroll_for_fitprint_full && !entry.create_profile_on_metsights;
     });
     if (invalidType) {
       setError(
-        `FitPrint Full enrollment requires Metsights profile creation (${invalidType.label}).`
+        `FitPrint Full enrollment requires Metsights profile creation (${invalidType.display_name}).`
       );
-      setActiveEngagementType(invalidType.value);
+      setActiveEngagementType(invalidType.code);
       return;
     }
     setSaving(true);
@@ -392,7 +394,8 @@ export function Settings() {
       const res = await platformSettingsApi.patchB2cOnboarding({
         defaults_by_engagement_type: defaultsByType,
       });
-      const mapped = buildDefaultsByType(res.data.data.defaults_by_engagement_type);
+      const typeCodes = b2cEngagementTypes.map((t) => t.code);
+      const mapped = buildDefaultsByType(typeCodes, res.data.data.defaults_by_engagement_type);
       setDefaultsByType(mapped);
       setSavedDefaultsByType(mapped);
       setSaveOk("Saved. New public B2C onboardings will use these per-type defaults.");
@@ -406,16 +409,16 @@ export function Settings() {
   function updateActiveDefaults(patch: Partial<B2cOnboardingTypeDefaults>) {
     setDefaultsByType((prev) => ({
       ...prev,
-      [activeEngagementType]: { ...prev[activeEngagementType], ...patch },
+      [activeEngagementType]: { ...(prev[activeEngagementType] ?? emptyTypeDefaults()), ...patch },
     }));
   }
 
-  const activeDefaults = defaultsByType[activeEngagementType];
-  const anyTypeHasFitprintWithoutMetsights = ENGAGEMENT_TYPE_OPTIONS.some((option) => {
-    const entry = defaultsByType[option.value];
-    return entry.enroll_for_fitprint_full && !entry.create_profile_on_metsights;
+  const activeDefaults = defaultsByType[activeEngagementType] ?? emptyTypeDefaults();
+  const anyTypeHasFitprintWithoutMetsights = b2cEngagementTypes.some((option) => {
+    const entry = defaultsByType[option.code];
+    return entry?.enroll_for_fitprint_full && !entry.create_profile_on_metsights;
   });
-  const isTypeDirty = (kind: EngagementKind) =>
+  const isTypeDirty = (kind: string) =>
     JSON.stringify(defaultsByType[kind]) !== JSON.stringify(savedDefaultsByType[kind]);
 
   async function handleSaveDefaultAssistants(e: React.FormEvent) {
@@ -844,21 +847,21 @@ export function Settings() {
           </p>
 
           <div className="flex flex-wrap gap-1 border-b border-zinc-200 pb-2">
-            {ENGAGEMENT_TYPE_OPTIONS.map((option) => {
-              const active = activeEngagementType === option.value;
-              const dirty = isTypeDirty(option.value);
+            {b2cEngagementTypes.map((option) => {
+              const active = activeEngagementType === option.code;
+              const dirty = isTypeDirty(option.code);
               return (
                 <button
-                  key={option.value}
+                  key={option.code}
                   type="button"
-                  onClick={() => setActiveEngagementType(option.value)}
+                  onClick={() => setActiveEngagementType(option.code)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     active
                       ? "bg-zinc-900 text-white"
                       : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
                   }`}
                 >
-                  {option.label}
+                  {option.display_name}
                   {dirty ? <span className="ml-1 opacity-70">•</span> : null}
                 </button>
               );
