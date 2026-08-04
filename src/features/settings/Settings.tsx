@@ -190,7 +190,7 @@ export function Settings() {
   const [activeNotifType, setActiveNotifType] = useState<number | null>(null);
   const [notifEvents, setNotifEvents] = useState<NotificationEventItem[]>([]);
   const [notifDefaults, setNotifDefaults] = useState<Record<number, string>>({});
-  const [notifDefaultsOriginal, setNotifDefaultsOriginal] = useState<Record<number, string>>({});
+  const [, setNotifDefaultsOriginal] = useState<Record<number, string>>({});
   const [notifSaving, setNotifSaving] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
   const [notifSuccess, setNotifSuccess] = useState(false);
