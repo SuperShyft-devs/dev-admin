@@ -8,14 +8,18 @@ import { EngagementSearchPicker } from "../../shared/ui/EngagementSearchPicker";
 import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
 import {
   notificationsApi,
+  notificationEventsApi,
+  engagementTypesApi,
   type NotificationItem,
   type NotificationRecipient,
   type NotificationServiceItem,
+  type NotificationEventItem,
+  type EngagementTypeItem,
   getApiError,
 } from "../../lib/api";
 
-type TabKey = "notifications" | "services";
-const TAB_KEYS: TabKey[] = ["notifications", "services"];
+type TabKey = "notifications" | "services" | "events";
+const TAB_KEYS: TabKey[] = ["notifications", "services", "events"];
 
 const STATUS_OPTIONS = ["pending", "sent", "failed"];
 const CHANNEL_OPTIONS = ["email", "whatsapp"];
@@ -951,6 +955,351 @@ function ServicesTab() {
   );
 }
 
+// ── Events Tab ────────────────────────────────────────────────────────
+
+interface EventFormData {
+  event_code: string;
+  display_name: string;
+  description: string;
+  engagement_type_ids: number[];
+}
+
+const EMPTY_EVENT_FORM: EventFormData = {
+  event_code: "",
+  display_name: "",
+  description: "",
+  engagement_type_ids: [],
+};
+
+function EventsTab() {
+  const [data, setData] = useState<NotificationEventItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formData, setFormData] = useState<EventFormData>(EMPTY_EVENT_FORM);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState<NotificationEventItem | null>(null);
+
+  const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await notificationEventsApi.list();
+      setData(res.data.data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
+
+  useEffect(() => {
+    engagementTypesApi.list().then((r) => setEngagementTypes(r.data.data)).catch(() => {});
+  }, []);
+
+  const openAdd = () => {
+    setFormData(EMPTY_EVENT_FORM);
+    setEditingId(null);
+    setModalMode("add");
+    setModalOpen(true);
+    setError(null);
+  };
+
+  const openEdit = (row: NotificationEventItem) => {
+    setFormData({
+      event_code: row.event_code,
+      display_name: row.display_name,
+      description: row.description ?? "",
+      engagement_type_ids: row.engagement_types.map((et) => et.engagement_type_id),
+    });
+    setEditingId(row.notification_event_id);
+    setModalMode("edit");
+    setModalOpen(true);
+    setError(null);
+  };
+
+  const openDetail = (row: NotificationEventItem) => {
+    setDetailItem(row);
+    setDetailModalOpen(true);
+  };
+
+  const handleDelete = async (row: NotificationEventItem) => {
+    if (
+      !window.confirm(
+        `Delete event "${row.display_name}" (${row.event_code})? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await notificationEventsApi.delete(row.notification_event_id);
+      await fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    }
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (modalMode === "add") {
+        await notificationEventsApi.create({
+          event_code: formData.event_code,
+          display_name: formData.display_name,
+          description: formData.description || undefined,
+          engagement_type_ids: formData.engagement_type_ids,
+        });
+      } else if (editingId !== null) {
+        await notificationEventsApi.update(editingId, {
+          display_name: formData.display_name,
+          description: formData.description || undefined,
+          engagement_type_ids: formData.engagement_type_ids,
+        });
+      }
+      setModalOpen(false);
+      fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleEngagementType = (id: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      engagement_type_ids: prev.engagement_type_ids.includes(id)
+        ? prev.engagement_type_ids.filter((x) => x !== id)
+        : [...prev.engagement_type_ids, id],
+    }));
+  };
+
+  const columns: Column<NotificationEventItem>[] = [
+    { key: "event_code", label: "Event Code", sortable: false },
+    { key: "display_name", label: "Display Name", sortable: false },
+    {
+      key: "engagement_types",
+      label: "Engagement Types",
+      sortable: false,
+      hideOnMobile: true,
+      render: (r) =>
+        r.engagement_types.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {r.engagement_types.map((et) => (
+              <span
+                key={et.engagement_type_id}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200"
+              >
+                {et.display_name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-zinc-400">—</span>
+        ),
+    },
+    {
+      key: "description",
+      label: "Description",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (
+        <span className="block max-w-xs truncate" title={r.description ?? ""}>
+          {r.description || "—"}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      {error && !modalOpen && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
+
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={openAdd}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+        >
+          <Plus className="w-4 h-4" />
+          Add Event
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
+        {loading ? (
+          <div className="py-12 flex justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={data}
+            keyExtractor={(r) => r.notification_event_id}
+            onView={openDetail}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            firstColumnClickableView={false}
+          />
+        )}
+      </div>
+
+      {/* Add / Edit Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setError(null); }}
+        title={modalMode === "add" ? "Add Notification Event" : "Edit Notification Event"}
+      >
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}
+          className="space-y-4"
+        >
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Event Code</label>
+            <input
+              type="text"
+              value={formData.event_code}
+              onChange={(e) => setFormData({ ...formData, event_code: e.target.value })}
+              disabled={modalMode === "edit"}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:bg-zinc-100 disabled:text-zinc-500"
+              placeholder="e.g. report_ready"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Display Name</label>
+            <input
+              type="text"
+              value={formData.display_name}
+              onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              placeholder="e.g. Report Ready"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 min-h-[80px]"
+              placeholder="Describe the event..."
+              rows={3}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Types</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {engagementTypes.map((et) => {
+                const selected = formData.engagement_type_ids.includes(et.id);
+                return (
+                  <button
+                    key={et.id}
+                    type="button"
+                    onClick={() => toggleEngagementType(et.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      selected
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400"
+                    }`}
+                  >
+                    {et.display_name}
+                  </button>
+                );
+              })}
+              {engagementTypes.length === 0 && (
+                <span className="text-xs text-zinc-400">No engagement types available</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {submitting ? "Saving..." : modalMode === "add" ? "Create Event" : "Update Event"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setModalOpen(false); setError(null); }}
+              className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Detail Modal (read-only) */}
+      <Modal
+        open={detailModalOpen}
+        onClose={() => setDetailModalOpen(false)}
+        title="Event Details"
+      >
+        {detailItem && (
+          <div className="space-y-4">
+            <div>
+              <span className="block text-xs text-zinc-500 mb-0.5">Event Code</span>
+              <span className="text-sm font-medium text-zinc-900">{detailItem.event_code}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 mb-0.5">Display Name</span>
+              <span className="text-sm text-zinc-900">{detailItem.display_name}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 mb-0.5">Description</span>
+              <span className="text-sm text-zinc-900">{detailItem.description || "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 mb-0.5">Engagement Types</span>
+              {detailItem.engagement_types.length > 0 ? (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {detailItem.engagement_types.map((et) => (
+                    <span
+                      key={et.engagement_type_id}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      {et.display_name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-sm text-zinc-400">—</span>
+              )}
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 mb-0.5">Created</span>
+              <span className="text-sm text-zinc-900">{formatDateTime(detailItem.created_at)}</span>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────
 
 export function Notifications() {
@@ -997,13 +1346,14 @@ export function Notifications() {
                 : "border-transparent text-zinc-500 hover:text-zinc-700"
             }`}
           >
-            {tab === "notifications" ? "Notifications" : "Services"}
+            {tab === "notifications" ? "Notifications" : tab === "services" ? "Services" : "Events"}
           </button>
         ))}
       </div>
 
       {activeTab === "notifications" && <NotificationsTab />}
       {activeTab === "services" && <ServicesTab />}
+      {activeTab === "events" && <EventsTab />}
 
       <IntegrationSyncLogsModal
         open={syncLogsOpen}

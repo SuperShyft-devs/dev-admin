@@ -1,17 +1,23 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   type AssessmentPackage,
   type DiagnosticPackageListItem,
   type EngagementCreate,
   type EngagementKind,
+  type EngagementTypeItem,
   type ExpertTypeItem,
   type GeocodeSuggestion,
+  type NotificationEventItem,
   type NotificationServiceItem,
   type OrganizationListItem,
   engagementsApi,
+  engagementNotificationsApi,
+  engagementTypesApi,
   expertTypesApi,
   getApiError,
+  notificationEventsApi,
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
 import { AddressAutocomplete } from "./AddressAutocomplete";
@@ -21,14 +27,6 @@ const BLOOD_COLLECTION_TYPE_OPTIONS = [
   { value: "home_collection", label: "Home Collection" },
   { value: "camp_collection", label: "Camp Collection" },
 ] as const;
-
-const ENGAGEMENT_KIND_OPTIONS: { value: EngagementKind; label: string }[] = [
-  { value: "bio_ai", label: "BioAi" },
-  { value: "blood_test", label: "BloodTest" },
-  { value: "consultation", label: "Consultation" },
-  { value: "blood_test_with_consultation", label: "BloodTest with Consultation" },
-  { value: "bio_ai_with_consultation", label: "BioAi with Consultation" },
-];
 
 const STEPS = [
   { id: 1, label: "Basics & location" },
@@ -60,6 +58,7 @@ function needsConsultation(kind: EngagementKind): boolean {
 type Props = {
   open: boolean;
   mode: "add" | "edit";
+  engagementId?: number | null;
   initialData: EngagementCreate;
   organizations: OrganizationListItem[];
   assessmentPackages: AssessmentPackage[];
@@ -73,6 +72,7 @@ type Props = {
 export function EngagementFormModal({
   open,
   mode,
+  engagementId,
   initialData,
   organizations,
   assessmentPackages,
@@ -91,6 +91,12 @@ export function EngagementFormModal({
   const [zoneMessage, setZoneMessage] = useState<string | null>(null);
   const [zoneMessageTone, setZoneMessageTone] = useState<"info" | "success" | "error">("info");
 
+  const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
+  const [notificationEvents, setNotificationEvents] = useState<NotificationEventItem[]>([]);
+  const [notificationConfig, setNotificationConfig] = useState<Record<number, string>>({});
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const editConfigLoaded = useRef(false);
+
   useEffect(() => {
     if (!open) return;
     setFormData(initialData);
@@ -98,11 +104,15 @@ export function EngagementFormModal({
     setStepError(null);
     setZoneMessage(null);
     setZoneMessageTone("info");
+    setNotificationEvents([]);
+    setNotificationConfig({});
+    editConfigLoaded.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
     expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
+    engagementTypesApi.list().then((res) => setEngagementTypes(res.data.data)).catch(() => {});
   }, []);
 
   const checkZoneId = useCallback(
@@ -260,6 +270,87 @@ export function EngagementFormModal({
     setStep((s) => Math.max(1, s - 1));
   };
 
+  const selectedTypeId = useMemo((): number | null => {
+    const val = formData.engagement_type;
+    if (typeof val === "number" && val > 0) return val;
+    if (typeof val === "string") {
+      const match = engagementTypes.find((t) => t.code === val);
+      return match?.id ?? null;
+    }
+    return null;
+  }, [formData.engagement_type, engagementTypes]);
+
+  const selectedTypeCode = useMemo((): EngagementKind | null => {
+    if (typeof formData.engagement_type === "string") {
+      return formData.engagement_type as EngagementKind;
+    }
+    const match = engagementTypes.find(
+      (t) => t.id === formData.engagement_type
+    );
+    return (match?.code as EngagementKind) ?? null;
+  }, [formData.engagement_type, engagementTypes]);
+
+  useEffect(() => {
+    if (step !== 3 || !selectedTypeId) return;
+
+    let cancelled = false;
+    setNotificationsLoading(true);
+
+    (async () => {
+      try {
+        const eventsRes = await notificationEventsApi.list({
+          engagement_type_id: selectedTypeId,
+        });
+        if (cancelled) return;
+        setNotificationEvents(eventsRes.data.data);
+
+        const config: Record<number, string> = {};
+
+        if (mode === "edit" && engagementId && !editConfigLoaded.current) {
+          editConfigLoaded.current = true;
+          try {
+            const configRes =
+              await engagementNotificationsApi.getForEngagement(engagementId);
+            if (!cancelled) {
+              for (const item of configRes.data.data) {
+                config[item.notification_event_id] =
+                  item.notification_services.join(",");
+              }
+            }
+          } catch {
+            // fall through with empty config
+          }
+        } else {
+          try {
+            const defaultsRes =
+              await engagementNotificationsApi.getDefaults(selectedTypeId);
+            if (!cancelled) {
+              for (const item of defaultsRes.data.data) {
+                config[item.notification_event_id] =
+                  item.notification_services.join(",");
+              }
+            }
+          } catch {
+            // keep empty config
+          }
+        }
+
+        if (!cancelled) setNotificationConfig(config);
+      } catch {
+        if (!cancelled) {
+          setNotificationEvents([]);
+          setNotificationConfig({});
+        }
+      } finally {
+        if (!cancelled) setNotificationsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, selectedTypeId, mode, engagementId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (step < 3) {
@@ -270,7 +361,18 @@ export function EngagementFormModal({
       setStep(1);
       return;
     }
-    onSubmit(formData);
+
+    const notifications = Object.entries(notificationConfig)
+      .filter(([, value]) => value && value.trim())
+      .map(([eventId, services]) => ({
+        notification_event_id: Number(eventId),
+        notification_services: services
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }));
+
+    onSubmit({ ...formData, notifications });
   };
 
   const submitLabel = (() => {
@@ -281,9 +383,15 @@ export function EngagementFormModal({
     return "Start";
   })();
 
-  const showAssessment = needsAssessment(formData.engagement_type);
-  const showDiagnostic = needsDiagnostic(formData.engagement_type);
-  const showConsultation = needsConsultation(formData.engagement_type);
+  const showAssessment = selectedTypeCode
+    ? needsAssessment(selectedTypeCode)
+    : false;
+  const showDiagnostic = selectedTypeCode
+    ? needsDiagnostic(selectedTypeCode)
+    : false;
+  const showConsultation = selectedTypeCode
+    ? needsConsultation(selectedTypeCode)
+    : false;
 
   return (
     <Modal
@@ -489,16 +597,19 @@ export function EngagementFormModal({
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Type *</label>
               <select
-                value={formData.engagement_type}
+                value={selectedTypeId ?? ""}
                 onChange={(e) =>
-                  setFormData({ ...formData, engagement_type: e.target.value as EngagementKind })
+                  setFormData({ ...formData, engagement_type: Number(e.target.value) })
                 }
                 className={inputClass}
                 required
               >
-                {ENGAGEMENT_KIND_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                <option value="" disabled>
+                  Select type
+                </option>
+                {engagementTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.display_name}
                   </option>
                 ))}
               </select>
@@ -730,59 +841,32 @@ export function EngagementFormModal({
 
         {step === 3 && (
           <div className="grid grid-cols-1 gap-4">
-            <NotificationServiceChipInput
-              label="Onboarding notification"
-              value={formData.onboarding_notification ?? null}
-              onChange={(next) => setFormData({ ...formData, onboarding_notification: next })}
-              services={notificationServices}
-              placeholder="Add onboarding notification services…"
-            />
-            <NotificationServiceChipInput
-              label="Pretest Guidelines Notification"
-              value={formData.pretest_guidelines_notification ?? null}
-              onChange={(next) => setFormData({ ...formData, pretest_guidelines_notification: next })}
-              services={notificationServices}
-            />
-            <NotificationServiceChipInput
-              label="Questionnaire Reminder 1 (day before)"
-              value={formData.questionnaire_reminder_1 ?? null}
-              onChange={(next) => setFormData({ ...formData, questionnaire_reminder_1: next })}
-              services={notificationServices}
-              excludeKeys={
-                formData.questionnaire_reminder_2
-                  ? formData.questionnaire_reminder_2.split(",").map((k) => k.trim()).filter(Boolean)
-                  : []
-              }
-            />
-            <NotificationServiceChipInput
-              label="Questionnaire Reminder 2 (day after)"
-              value={formData.questionnaire_reminder_2 ?? null}
-              onChange={(next) => setFormData({ ...formData, questionnaire_reminder_2: next })}
-              services={notificationServices}
-              excludeKeys={
-                formData.questionnaire_reminder_1
-                  ? formData.questionnaire_reminder_1.split(",").map((k) => k.trim()).filter(Boolean)
-                  : []
-              }
-            />
-            <NotificationServiceChipInput
-              label="Blood Report Notification"
-              value={formData.blood_report_notification ?? null}
-              onChange={(next) => setFormData({ ...formData, blood_report_notification: next })}
-              services={notificationServices}
-            />
-            <NotificationServiceChipInput
-              label="BioAI Report Notification"
-              value={formData.bioai_report_notification ?? null}
-              onChange={(next) => setFormData({ ...formData, bioai_report_notification: next })}
-              services={notificationServices}
-            />
-            <NotificationServiceChipInput
-              label="Notify users for consultation"
-              value={formData.notify_users_for_consultation ?? null}
-              onChange={(next) => setFormData({ ...formData, notify_users_for_consultation: next })}
-              services={notificationServices}
-            />
+            {notificationsLoading ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+              </div>
+            ) : notificationEvents.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                {selectedTypeId
+                  ? "No notification events configured for this engagement type."
+                  : "Select an engagement type in step 2 first."}
+              </p>
+            ) : (
+              notificationEvents.map((event) => (
+                <NotificationServiceChipInput
+                  key={event.notification_event_id}
+                  label={event.display_name}
+                  value={notificationConfig[event.notification_event_id] || null}
+                  onChange={(next) =>
+                    setNotificationConfig((prev) => ({
+                      ...prev,
+                      [event.notification_event_id]: next ?? "",
+                    }))
+                  }
+                  services={notificationServices}
+                />
+              ))
+            )}
           </div>
         )}
 

@@ -251,15 +251,8 @@ export interface B2cOnboardingDefaults {
   defaults_by_engagement_type: Partial<Record<EngagementKind, B2cOnboardingTypeDefaults>>;
 }
 
-export interface EngagementNotificationDefaults {
-  default_onboarding_notification?: string | null;
-  default_pretest_guidelines_notification?: string | null;
-  default_questionnaire_reminder_1?: string | null;
-  default_questionnaire_reminder_2?: string | null;
-  default_blood_report_notification?: string | null;
-  default_bioai_report_notification?: string | null;
-  default_notify_users_for_consultation?: string | null;
-}
+/** @deprecated Use NotificationDefaultItem[] via engagementNotificationsApi instead */
+export type EngagementNotificationDefaults = Record<string, unknown>;
 
 export interface SupportQueryNotification {
   default_support_query_notification?: string | null;
@@ -319,6 +312,15 @@ export interface EngagementsSyncImportPageResult {
   skipped_items: { metsights_profile_id: string; reason: string }[];
 }
 
+export interface NotificationDefaultItem {
+  id: number;
+  engagement_type_id: number;
+  notification_event_id: number;
+  notification_services: string[];
+  event_code?: string;
+  event_display_name?: string;
+}
+
 export const platformSettingsApi = {
   getB2cOnboarding: () =>
     api.get<{ data: B2cOnboardingDefaults; meta: Record<string, unknown> }>("/platform-settings/b2c-onboarding"),
@@ -327,14 +329,15 @@ export const platformSettingsApi = {
       "/platform-settings/b2c-onboarding",
       payload
     ),
-  getEngagementNotificationDefaults: () =>
-    api.get<{ data: EngagementNotificationDefaults; meta: Record<string, unknown> }>(
-      "/platform-settings/engagement-notification-defaults"
-    ),
-  patchEngagementNotificationDefaults: (payload: EngagementNotificationDefaults) =>
-    api.patch<{ data: EngagementNotificationDefaults; meta: Record<string, unknown> }>(
+  getEngagementNotificationDefaults: (engagementTypeId: number) =>
+    api.get<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
       "/platform-settings/engagement-notification-defaults",
-      payload
+      { params: { engagement_type_id: engagementTypeId } }
+    ),
+  patchEngagementNotificationDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: string[] }[]) =>
+    api.put<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
+      "/platform-settings/engagement-notification-defaults",
+      { engagement_type_id: engagementTypeId, defaults }
     ),
   getDefaultOnboardingAssistants: () =>
     api.get<{ data: DefaultOnboardingAssistants; meta: Record<string, unknown> }>(
@@ -1556,7 +1559,7 @@ export interface EngagementCreate {
   metsights_engagement_id?: string | null;
   organization_id?: number | null;
   camp_no?: number | null;
-  engagement_type: EngagementKind;
+  engagement_type: EngagementKind | number;
   consultations?: Record<string, boolean> | null;
   engagement_code?: string | null;
   assessment_package_id?: number | null;
@@ -1578,13 +1581,21 @@ export interface EngagementCreate {
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
+  /** @deprecated Use notifications array instead */
   onboarding_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   pretest_guidelines_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   questionnaire_reminder_1?: string | null;
+  /** @deprecated Use notifications array instead */
   questionnaire_reminder_2?: string | null;
+  /** @deprecated Use notifications array instead */
   blood_report_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   bioai_report_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   notify_users_for_consultation?: string | null;
+  notifications?: { notification_event_id: number; notification_services: string[] }[];
 }
 
 export interface GeocodeSuggestion extends EngagementLocationFields {
@@ -1696,6 +1707,7 @@ export const engagementsApi = {
       timeout: 120_000,
     }),
 };
+
 
 // Assessment packages
 export interface AssessmentPackage {
@@ -3513,3 +3525,84 @@ export const serverHealthApi = {
       { params }
     ),
 };
+
+// --- Engagement Types ---
+
+export interface EngagementTypeItem {
+  id: number;
+  code: string;
+  display_name: string;
+  is_active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export const engagementTypesApi = {
+  list: (params?: { is_active?: boolean }) =>
+    api.get<{ data: EngagementTypeItem[]; meta: Record<string, unknown> }>("/engagement-types", { params }),
+  create: (payload: { code: string; display_name: string; is_active?: boolean }) =>
+    api.post<{ data: EngagementTypeItem; meta: Record<string, unknown> }>("/engagement-types", payload),
+  update: (id: number, payload: { display_name?: string; is_active?: boolean }) =>
+    api.put<{ data: EngagementTypeItem; meta: Record<string, unknown> }>(`/engagement-types/${id}`, payload),
+  delete: (id: number) =>
+    api.delete<{ data: { deleted: boolean }; meta: Record<string, unknown> }>(`/engagement-types/${id}`),
+};
+
+// --- Notification Events ---
+
+export interface NotificationEventItem {
+  notification_event_id: number;
+  engagement_type_ids: number[];
+  engagement_types: { engagement_type_id: number; display_name: string }[];
+  event_code: string;
+  display_name: string;
+  description: string | null;
+  created_at?: string | null;
+}
+
+export const notificationEventsApi = {
+  list: (params?: { engagement_type_id?: number }) =>
+    api.get<{ data: NotificationEventItem[]; meta: Record<string, unknown> }>("/notification-events", { params }),
+  get: (id: number) =>
+    api.get<{ data: NotificationEventItem; meta: Record<string, unknown> }>(`/notification-events/${id}`),
+  create: (payload: { engagement_type_ids: number[]; event_code: string; display_name: string; description?: string }) =>
+    api.post<{ data: NotificationEventItem; meta: Record<string, unknown> }>("/notification-events", payload),
+  update: (id: number, payload: { engagement_type_ids?: number[]; display_name?: string; description?: string }) =>
+    api.put<{ data: NotificationEventItem; meta: Record<string, unknown> }>(`/notification-events/${id}`, payload),
+  delete: (id: number) =>
+    api.delete<{ data: { deleted: boolean }; meta: Record<string, unknown> }>(`/notification-events/${id}`),
+};
+
+// --- Engagement Notifications ---
+
+export interface EngagementNotificationItem {
+  id: number;
+  engagement_id: number;
+  notification_event_id: number;
+  notification_services: string[];
+  event_code?: string;
+  event_display_name?: string;
+}
+
+export const engagementNotificationsApi = {
+  getForEngagement: (engagementId: number) =>
+    api.get<{ data: EngagementNotificationItem[]; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/notifications`
+    ),
+  upsertForEngagement: (engagementId: number, notifications: { notification_event_id: number; notification_services: string[] }[]) =>
+    api.put<{ data: EngagementNotificationItem[]; meta: Record<string, unknown> }>(
+      `/engagements/${engagementId}/notifications`,
+      { notifications }
+    ),
+  getDefaults: (engagementTypeId: number) =>
+    api.get<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
+      "/platform-settings/engagement-notification-defaults",
+      { params: { engagement_type_id: engagementTypeId } }
+    ),
+  upsertDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: string[] }[]) =>
+    api.put<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
+      "/platform-settings/engagement-notification-defaults",
+      { engagement_type_id: engagementTypeId, defaults }
+    ),
+};
+

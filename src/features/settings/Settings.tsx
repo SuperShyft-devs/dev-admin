@@ -6,6 +6,9 @@ import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
   employeesApi,
+  engagementNotificationsApi,
+  engagementTypesApi,
+  notificationEventsApi,
   notificationsApi,
   platformSettingsApi,
   type AssessmentPackage,
@@ -14,12 +17,14 @@ import {
   type DiagnosticPackageListItem,
   type EmployeeListItem,
   type EngagementKind,
-  type EngagementNotificationDefaults,
+  type EngagementTypeItem,
   type BloodCollectionType,
   type EngagementsSyncImportPageResult,
   type EngagementsSyncStats,
   type MetsightsProfilesImportPageResult,
   type MetsightsProfilesStats,
+  type NotificationEventItem,
+  type NotificationDefaultItem,
   type NotificationServiceItem,
   type SupportQueryNotification,
   getApiError,
@@ -180,10 +185,17 @@ export function Settings() {
   );
 
   const [notificationServices, setNotificationServices] = useState<NotificationServiceItem[]>([]);
-  const [notificationDefaults, setNotificationDefaults] = useState<EngagementNotificationDefaults>({});
-  const [savingNotifications, setSavingNotifications] = useState(false);
-  const [notificationError, setNotificationError] = useState<string | null>(null);
-  const [notificationSaveOk, setNotificationSaveOk] = useState<string | null>(null);
+
+  const [notifTypes, setNotifTypes] = useState<EngagementTypeItem[]>([]);
+  const [activeNotifType, setActiveNotifType] = useState<number | null>(null);
+  const [notifEvents, setNotifEvents] = useState<NotificationEventItem[]>([]);
+  const [notifDefaults, setNotifDefaults] = useState<Record<number, string>>({});
+  const [notifDefaultsOriginal, setNotifDefaultsOriginal] = useState<Record<number, string>>({});
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+  const [notifSuccess, setNotifSuccess] = useState(false);
+  const notifDraftsRef = useRef<Record<number, Record<number, string>>>({});
+  const notifOriginalsRef = useRef<Record<number, Record<number, string>>>({});
 
   const [defaultAssistantEmployees, setDefaultAssistantEmployees] = useState<EmployeeListItem[]>([]);
   const [selectedDefaultAssistantIds, setSelectedDefaultAssistantIds] = useState<Set<number>>(new Set());
@@ -240,10 +252,9 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, notifDefaultsRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
+      const [defaultsRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
         await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
-        platformSettingsApi.getEngagementNotificationDefaults(),
         platformSettingsApi.getDefaultOnboardingAssistants(),
         platformSettingsApi.getSupportQueryNotification(),
         notificationsApi.listServices(),
@@ -258,7 +269,6 @@ export function Settings() {
       const mapped = buildDefaultsByType(d.defaults_by_engagement_type);
       setDefaultsByType(mapped);
       setSavedDefaultsByType(mapped);
-      setNotificationDefaults(notifDefaultsRes.data.data ?? {});
       setSelectedDefaultAssistantIds(new Set(assistantDefaultsRes.data.data.employee_ids ?? []));
       setSupportQueryNotification(
         supportQueryRes.data.data?.default_support_query_notification ?? null
@@ -470,20 +480,82 @@ export function Settings() {
     });
   }, [defaultAssistantEmployees, defaultAssistantSearch]);
 
-  async function handleSaveNotificationDefaults(e: React.FormEvent) {
+  useEffect(() => {
+    engagementTypesApi.list({ is_active: true }).then((res) => {
+      const types = res.data.data ?? [];
+      setNotifTypes(types);
+      if (types.length > 0) setActiveNotifType(types[0].id);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeNotifType === null) return;
+    const cached = notifDraftsRef.current[activeNotifType];
+    if (cached) {
+      setNotifDefaults(cached);
+      setNotifDefaultsOriginal(notifOriginalsRef.current[activeNotifType] ?? cached);
+      notificationEventsApi.list({ engagement_type_id: activeNotifType }).then((res) => {
+        setNotifEvents(res.data.data ?? []);
+      }).catch(() => {});
+      return;
+    }
+    setNotifError(null);
+    setNotifSuccess(false);
+    Promise.all([
+      notificationEventsApi.list({ engagement_type_id: activeNotifType }),
+      engagementNotificationsApi.getDefaults(activeNotifType),
+    ]).then(([eventsRes, defaultsRes]) => {
+      const events = eventsRes.data.data ?? [];
+      setNotifEvents(events);
+      const defaults: Record<number, string> = {};
+      for (const ev of events) defaults[ev.notification_event_id] = "";
+      for (const d of (defaultsRes.data.data ?? []) as NotificationDefaultItem[]) {
+        defaults[d.notification_event_id] = (d.notification_services ?? []).join(",");
+      }
+      setNotifDefaults(defaults);
+      setNotifDefaultsOriginal({ ...defaults });
+      notifDraftsRef.current[activeNotifType] = { ...defaults };
+      notifOriginalsRef.current[activeNotifType] = { ...defaults };
+    }).catch((err) => {
+      setNotifError(getApiError(err));
+    });
+  }, [activeNotifType]);
+
+  function isNotifTypeDirty(typeId: number): boolean {
+    const draft = notifDraftsRef.current[typeId];
+    const original = notifOriginalsRef.current[typeId];
+    if (!draft || !original) return false;
+    return JSON.stringify(draft) !== JSON.stringify(original);
+  }
+
+  function updateNotifDefault(eventId: number, value: string | null) {
+    const v = value ?? "";
+    setNotifDefaults((prev) => {
+      const next = { ...prev, [eventId]: v };
+      if (activeNotifType !== null) notifDraftsRef.current[activeNotifType] = next;
+      return next;
+    });
+  }
+
+  async function handleSaveNotifDefaults(e: React.FormEvent) {
     e.preventDefault();
-    setSavingNotifications(true);
-    setNotificationError(null);
-    setNotificationSaveOk(null);
+    if (activeNotifType === null) return;
+    setNotifSaving(true);
+    setNotifError(null);
+    setNotifSuccess(false);
     try {
-      await platformSettingsApi.patchEngagementNotificationDefaults(notificationDefaults);
-      setNotificationSaveOk(
-        "Saved. New engagements and B2C auto-engagements will use these notification defaults."
-      );
+      const payload = Object.entries(notifDefaults).map(([eventId, services]) => ({
+        notification_event_id: Number(eventId),
+        notification_services: services ? services.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      }));
+      await engagementNotificationsApi.upsertDefaults(activeNotifType, payload);
+      setNotifDefaultsOriginal({ ...notifDefaults });
+      notifOriginalsRef.current[activeNotifType] = { ...notifDefaults };
+      setNotifSuccess(true);
     } catch (err) {
-      setNotificationError(getApiError(err));
+      setNotifError(getApiError(err));
     } finally {
-      setSavingNotifications(false);
+      setNotifSaving(false);
     }
   }
 
@@ -1059,110 +1131,77 @@ export function Settings() {
 
       {!loading ? (
         <form
-          onSubmit={(e) => void handleSaveNotificationDefaults(e)}
+          onSubmit={(e) => void handleSaveNotifDefaults(e)}
           className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm"
         >
           <h2 className="text-sm font-semibold text-zinc-900">Engagement notification defaults</h2>
           <p className="text-xs text-zinc-500 -mt-2">
-            Pre-selected when creating engagements in admin or auto B2C engagements.
+            Configure default notification services for each engagement type. These are auto-applied
+            when creating new engagements.
           </p>
 
-          <NotificationServiceChipInput
-            label="Onboarding notification"
-            value={notificationDefaults.default_onboarding_notification ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({ ...prev, default_onboarding_notification: next }))
-            }
-            services={notificationServices}
-          />
-          <NotificationServiceChipInput
-            label="Pretest guidelines notification"
-            value={notificationDefaults.default_pretest_guidelines_notification ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({
-                ...prev,
-                default_pretest_guidelines_notification: next,
-              }))
-            }
-            services={notificationServices}
-          />
-          <NotificationServiceChipInput
-            label="Questionnaire reminder 1"
-            value={notificationDefaults.default_questionnaire_reminder_1 ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({ ...prev, default_questionnaire_reminder_1: next }))
-            }
-            services={notificationServices}
-            excludeKeys={
-              notificationDefaults.default_questionnaire_reminder_2
-                ? notificationDefaults.default_questionnaire_reminder_2
-                    .split(",")
-                    .map((k) => k.trim())
-                    .filter(Boolean)
-                : []
-            }
-          />
-          <NotificationServiceChipInput
-            label="Questionnaire reminder 2"
-            value={notificationDefaults.default_questionnaire_reminder_2 ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({ ...prev, default_questionnaire_reminder_2: next }))
-            }
-            services={notificationServices}
-            excludeKeys={
-              notificationDefaults.default_questionnaire_reminder_1
-                ? notificationDefaults.default_questionnaire_reminder_1
-                    .split(",")
-                    .map((k) => k.trim())
-                    .filter(Boolean)
-                : []
-            }
-          />
-          <NotificationServiceChipInput
-            label="Blood report notification"
-            value={notificationDefaults.default_blood_report_notification ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({ ...prev, default_blood_report_notification: next }))
-            }
-            services={notificationServices}
-          />
-          <NotificationServiceChipInput
-            label="BioAI report notification"
-            value={notificationDefaults.default_bioai_report_notification ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({ ...prev, default_bioai_report_notification: next }))
-            }
-            services={notificationServices}
-          />
-          <NotificationServiceChipInput
-            label="Notify users for consultation"
-            value={notificationDefaults.default_notify_users_for_consultation ?? null}
-            onChange={(next) =>
-              setNotificationDefaults((prev) => ({
-                ...prev,
-                default_notify_users_for_consultation: next,
-              }))
-            }
-            services={notificationServices}
-          />
+          {notifTypes.length > 0 ? (
+            <div className="flex flex-wrap gap-1 border-b border-zinc-200 pb-2">
+              {notifTypes.map((t) => {
+                const active = activeNotifType === t.id;
+                const dirty = isNotifTypeDirty(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveNotifType(t.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      active
+                        ? "bg-zinc-900 text-white"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                    }`}
+                  >
+                    {t.display_name}
+                    {dirty ? <span className="ml-1 opacity-70">•</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-400">Loading engagement types…</p>
+          )}
 
-          {notificationError ? (
+          {activeNotifType !== null && notifEvents.length > 0 ? (
+            <div className="space-y-4">
+              {notifEvents.map((ev) => (
+                <NotificationServiceChipInput
+                  key={ev.notification_event_id}
+                  label={ev.display_name}
+                  value={notifDefaults[ev.notification_event_id] || null}
+                  onChange={(next) => updateNotifDefault(ev.notification_event_id, next)}
+                  services={notificationServices}
+                />
+              ))}
+            </div>
+          ) : activeNotifType !== null ? (
+            <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading events…
+            </div>
+          ) : null}
+
+          {notifError ? (
             <p className="text-sm text-red-600" role="alert">
-              {notificationError}
+              {notifError}
             </p>
           ) : null}
-          {notificationSaveOk ? <p className="text-sm text-emerald-700">{notificationSaveOk}</p> : null}
+          {notifSuccess ? (
+            <p className="text-sm text-emerald-700">
+              Saved. New engagements will use these notification defaults.
+            </p>
+          ) : null}
 
           <button
             type="submit"
-            disabled={savingNotifications}
+            disabled={notifSaving || activeNotifType === null || notifEvents.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
           >
-            {savingNotifications ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
+            {notifSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save notification defaults
           </button>
         </form>

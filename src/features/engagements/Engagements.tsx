@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Pencil,
   ArrowRightLeft,
+  Settings,
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementDrawer } from "./EngagementDrawer";
@@ -27,12 +28,14 @@ import {
   diagnosticPackagesApi,
   employeesApi,
   onboardingAssistantsApi,
+  engagementTypesApi,
   type ChecklistReadiness,
   type EngagementListItem,
   type Engagement,
   type EngagementCreate,
   type EngagementStatus,
   type EngagementKind,
+  type EngagementTypeItem,
   type DiagnosticPackageListItem,
   type OrganizationListItem,
   type AssessmentPackage,
@@ -42,7 +45,6 @@ import {
   checklistTemplatesApi,
   checklistTasksApi,
   notificationsApi,
-  platformSettingsApi,
   type NotificationServiceItem,
   type EngagementChecklist,
   type ChecklistTemplate,
@@ -645,24 +647,287 @@ function EngagementChecklistModal({
   );
 }
 
-const EMPTY_NOTIFICATION_FIELDS: Pick<
-  EngagementCreate,
-  | "onboarding_notification"
-  | "pretest_guidelines_notification"
-  | "questionnaire_reminder_1"
-  | "questionnaire_reminder_2"
-  | "blood_report_notification"
-  | "bioai_report_notification"
-  | "notify_users_for_consultation"
-> = {
-  onboarding_notification: null,
-  pretest_guidelines_notification: null,
-  questionnaire_reminder_1: null,
-  questionnaire_reminder_2: null,
-  blood_report_notification: null,
-  bioai_report_notification: null,
-  notify_users_for_consultation: null,
-};
+function EngagementTypesModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [types, setTypes] = useState<EngagementTypeItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+
+  const loadTypes = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await engagementTypesApi.list();
+      setTypes(res.data.data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setAdding(false);
+      setEditingId(null);
+      void loadTypes();
+    }
+  }, [open, loadTypes]);
+
+  const handleCreate = async () => {
+    const code = newCode.trim();
+    const displayName = newDisplayName.trim();
+    if (!code || !displayName) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await engagementTypesApi.create({ code, display_name: displayName });
+      setNewCode("");
+      setNewDisplayName("");
+      setAdding(false);
+      await loadTypes();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateName = async (item: EngagementTypeItem) => {
+    const displayName = editDisplayName.trim();
+    if (!displayName || displayName === item.display_name) {
+      setEditingId(null);
+      return;
+    }
+    setEditSaving(true);
+    setError(null);
+    try {
+      await engagementTypesApi.update(item.id, { display_name: displayName });
+      setEditingId(null);
+      await loadTypes();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (item: EngagementTypeItem) => {
+    if (item.is_active) {
+      const confirmed = window.confirm(
+        `Deactivate engagement type "${item.display_name}"? It will no longer appear in selectors.`
+      );
+      if (!confirmed) return;
+    }
+    setTogglingId(item.id);
+    setError(null);
+    try {
+      await engagementTypesApi.update(item.id, { is_active: !item.is_active });
+      await loadTypes();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Manage Engagement Types"
+      maxWidthClassName="max-w-lg"
+    >
+      <div className="space-y-4">
+        {error && (
+          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-zinc-700">
+            Types ({types.length})
+          </p>
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => {
+                setAdding(true);
+                setNewCode("");
+                setNewDisplayName("");
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Type
+            </button>
+          )}
+        </div>
+
+        {adding && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs font-medium text-zinc-600 mb-1">Code</label>
+                <input
+                  type="text"
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                  placeholder="e.g. bio_ai"
+                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs font-medium text-zinc-600 mb-1">Display Name</label>
+                <input
+                  type="text"
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  placeholder="e.g. Bio AI"
+                  className="w-full border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!newCode.trim() || !newDisplayName.trim() || saving}
+                onClick={() => void handleCreate()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg border border-zinc-200 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-8 flex justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+          </div>
+        ) : types.length === 0 ? (
+          <div className="py-8 text-center text-sm text-zinc-500">
+            No engagement types defined yet.
+          </div>
+        ) : (
+          <div className="border border-zinc-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-zinc-200">
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 uppercase tracking-wider">Code</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 uppercase tracking-wider">Display Name</th>
+                  <th className="text-center px-4 py-2.5 text-xs font-semibold text-zinc-600 uppercase tracking-wider">Active</th>
+                  <th className="px-4 py-2.5 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {types.map((item) => (
+                  <tr key={item.id} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3 text-zinc-900 font-mono text-xs">{item.code}</td>
+                    <td className="px-4 py-3">
+                      {editingId === item.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editDisplayName}
+                            onChange={(e) => setEditDisplayName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void handleUpdateName(item);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            autoFocus
+                            className="flex-1 min-w-0 border border-zinc-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                          />
+                          <button
+                            type="button"
+                            disabled={editSaving}
+                            onClick={() => void handleUpdateName(item)}
+                            className="p-1 rounded text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                            title="Save"
+                          >
+                            {editSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="p-1 rounded text-zinc-400 hover:bg-zinc-100"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-zinc-900">{item.display_name}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        disabled={togglingId === item.id}
+                        onClick={() => void handleToggleActive(item)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 disabled:opacity-50 ${
+                          item.is_active ? "bg-emerald-500" : "bg-zinc-300"
+                        }`}
+                        role="switch"
+                        aria-checked={item.is_active}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform ${
+                            item.is_active ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      {editingId !== item.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(item.id);
+                            setEditDisplayName(item.display_name);
+                          }}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                          title="Edit display name"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 export function Engagements({
   asModalForEngagementId,
@@ -717,7 +982,7 @@ export function Engagements({
     engagement_name: "",
     metsights_engagement_id: "",
     organization_id: 0,
-    engagement_type: "bio_ai",
+    engagement_type: 0,
     engagement_code: "",
     assessment_package_id: 0,
     diagnostic_package_id: undefined,
@@ -737,7 +1002,6 @@ export function Engagements({
     external_camp_id: undefined,
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
-    ...EMPTY_NOTIFICATION_FIELDS,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -774,6 +1038,8 @@ export function Engagements({
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+
+  const [typesModalOpen, setTypesModalOpen] = useState(false);
 
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [checklistEngagement, setChecklistEngagement] = useState<EngagementListItem | null>(null);
@@ -961,7 +1227,7 @@ export function Engagements({
     if (onCloseModal) onCloseModal();
   };
 
-  const openAdd = async (preset?: Partial<EngagementCreate>) => {
+  const openAdd = (preset?: Partial<EngagementCreate>) => {
     setSelected(null);
     const today = new Date().toISOString().slice(0, 10);
     const nextOrganizationId =
@@ -969,28 +1235,11 @@ export function Engagements({
     const nextAssessmentPackageId =
       preset?.assessment_package_id ?? assessmentPackages[0]?.package_id ?? 0;
 
-    let notificationDefaults = { ...EMPTY_NOTIFICATION_FIELDS };
-    try {
-      const res = await platformSettingsApi.getEngagementNotificationDefaults();
-      const d = res.data.data;
-      notificationDefaults = {
-        onboarding_notification: d.default_onboarding_notification ?? null,
-        pretest_guidelines_notification: d.default_pretest_guidelines_notification ?? null,
-        questionnaire_reminder_1: d.default_questionnaire_reminder_1 ?? null,
-        questionnaire_reminder_2: d.default_questionnaire_reminder_2 ?? null,
-        blood_report_notification: d.default_blood_report_notification ?? null,
-        bioai_report_notification: d.default_bioai_report_notification ?? null,
-        notify_users_for_consultation: d.default_notify_users_for_consultation ?? null,
-      };
-    } catch {
-      // keep empty defaults
-    }
-
     setFormData({
       engagement_name: preset?.engagement_name ?? "",
       metsights_engagement_id: preset?.metsights_engagement_id ?? "",
       organization_id: nextOrganizationId,
-      engagement_type: (preset?.engagement_type as EngagementKind | undefined) ?? "bio_ai",
+      engagement_type: preset?.engagement_type ?? 0,
       engagement_code: preset?.engagement_code ?? "",
       assessment_package_id: nextAssessmentPackageId,
       diagnostic_package_id: undefined,
@@ -1011,22 +1260,6 @@ export function Engagements({
       blood_collection_type: preset?.blood_collection_type ?? undefined,
       create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
-      onboarding_notification:
-        preset?.onboarding_notification ?? notificationDefaults.onboarding_notification,
-      pretest_guidelines_notification:
-        preset?.pretest_guidelines_notification ??
-        notificationDefaults.pretest_guidelines_notification,
-      questionnaire_reminder_1:
-        preset?.questionnaire_reminder_1 ?? notificationDefaults.questionnaire_reminder_1,
-      questionnaire_reminder_2:
-        preset?.questionnaire_reminder_2 ?? notificationDefaults.questionnaire_reminder_2,
-      blood_report_notification:
-        preset?.blood_report_notification ?? notificationDefaults.blood_report_notification,
-      bioai_report_notification:
-        preset?.bioai_report_notification ?? notificationDefaults.bioai_report_notification,
-      notify_users_for_consultation:
-        preset?.notify_users_for_consultation ??
-        notificationDefaults.notify_users_for_consultation,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1075,13 +1308,6 @@ export function Engagements({
         blood_collection_type: e.blood_collection_type ?? undefined,
         create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
-        onboarding_notification: e.onboarding_notification ?? null,
-        pretest_guidelines_notification: e.pretest_guidelines_notification ?? null,
-        questionnaire_reminder_1: e.questionnaire_reminder_1 ?? null,
-        questionnaire_reminder_2: e.questionnaire_reminder_2 ?? null,
-        blood_report_notification: e.blood_report_notification ?? null,
-        bioai_report_notification: e.bioai_report_notification ?? null,
-        notify_users_for_consultation: e.notify_users_for_consultation ?? null,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1152,20 +1378,12 @@ export function Engagements({
           blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
-          onboarding_notification: data.onboarding_notification || null,
-          pretest_guidelines_notification: data.pretest_guidelines_notification || null,
-          questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
-          questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
-          blood_report_notification: data.blood_report_notification || null,
-          bioai_report_notification: data.bioai_report_notification || null,
-          notify_users_for_consultation: data.notify_users_for_consultation || null,
+          notifications: data.notifications ?? [],
           camp_no: computeCampNo(orgId, data.start_date),
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
         setAddChecklistPromptEngagementId(engagementId);
-        // Remember this ID so the Onboarding Assistants panel can auto-open
-        // once the checklist prompt flow (Yes → checklist modal, or No) finishes.
         setPendingAssistantsEngagementId(engagementId);
         setAddChecklistPromptOpen(true);
         setModalOpen(false);
@@ -1196,13 +1414,7 @@ export function Engagements({
           blood_collection_type: data.blood_collection_type || null,
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
-          onboarding_notification: data.onboarding_notification || null,
-          pretest_guidelines_notification: data.pretest_guidelines_notification || null,
-          questionnaire_reminder_1: data.questionnaire_reminder_1 || null,
-          questionnaire_reminder_2: data.questionnaire_reminder_2 || null,
-          blood_report_notification: data.blood_report_notification || null,
-          bioai_report_notification: data.bioai_report_notification || null,
-          notify_users_for_consultation: data.notify_users_for_consultation || null,
+          notifications: data.notifications ?? [],
         };
 
         if (orgId && nextCampNo != null && currentCampNo !== nextCampNo) {
@@ -1585,15 +1797,24 @@ export function Engagements({
       <div className={asModalForEngagementId ? "hidden" : ""}>
         <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
-        {listTab === "organizations" ? (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => void openAdd()}
-            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+            onClick={() => setTypesModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
           >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Add Engagement</span>
+            <Settings className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Manage Types</span>
           </button>
-        ) : null}
+          {listTab === "organizations" ? (
+            <button
+              onClick={() => void openAdd()}
+              className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Add Engagement</span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
@@ -1757,6 +1978,7 @@ export function Engagements({
       <EngagementFormModal
         open={modalOpen && (modalMode === "add" || modalMode === "edit")}
         mode={modalMode === "edit" ? "edit" : "add"}
+        engagementId={selected?.engagement_id ?? null}
         initialData={formData}
         organizations={organizations}
         assessmentPackages={assessmentPackages}
@@ -2028,6 +2250,11 @@ export function Engagements({
         onClose={closeChecklistModal}
         engagement={checklistEngagement}
         onChanged={() => void fetchList()}
+      />
+
+      <EngagementTypesModal
+        open={typesModalOpen}
+        onClose={() => setTypesModalOpen(false)}
       />
 
       {/* ── Onboarding Assistants Modal ─────────────────────── */}
