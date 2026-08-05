@@ -182,6 +182,7 @@ export function Settings() {
   const [notifTypes, setNotifTypes] = useState<EngagementTypeItem[]>([]);
   const [activeNotifType, setActiveNotifType] = useState<number | null>(null);
   const [notifEvents, setNotifEvents] = useState<NotificationEventItem[]>([]);
+  const [notifEventsLoading, setNotifEventsLoading] = useState(false);
   const [notifDefaults, setNotifDefaults] = useState<Record<number, string>>({});
   const [, setNotifDefaultsOriginal] = useState<Record<number, string>>({});
   const [notifSaving, setNotifSaving] = useState(false);
@@ -493,41 +494,69 @@ export function Settings() {
 
   useEffect(() => {
     if (activeNotifType === null) return;
+    let cancelled = false;
+    setNotifEvents([]);
+    setNotifEventsLoading(true);
+    setNotifError(null);
+    setNotifSuccess(false);
+
     const cached = notifDraftsRef.current[activeNotifType];
     if (cached) {
       setNotifDefaults(cached);
       setNotifDefaultsOriginal(notifOriginalsRef.current[activeNotifType] ?? cached);
-      notificationEventsApi.list({ engagement_type_id: activeNotifType }).then((res) => {
-        setNotifEvents(res.data.data ?? []);
-      }).catch(() => {});
-      return;
+      notificationEventsApi
+        .list({ engagement_type_id: activeNotifType })
+        .then((res) => {
+          if (cancelled) return;
+          setNotifEvents(res.data.data ?? []);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setNotifError(getApiError(err));
+        })
+        .finally(() => {
+          if (!cancelled) setNotifEventsLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-    setNotifError(null);
-    setNotifSuccess(false);
+
     Promise.all([
       notificationEventsApi.list({ engagement_type_id: activeNotifType }),
       engagementNotificationsApi.getDefaults(activeNotifType),
-    ]).then(([eventsRes, defaultsRes]) => {
-      const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
-      setNotifEvents(events);
-      const defaults: Record<number, string> = {};
-      for (const ev of events) defaults[ev.notification_event_id] = "";
-      const defaultsList = Array.isArray(defaultsRes.data.data)
-        ? (defaultsRes.data.data as NotificationDefaultItem[])
-        : [];
-      for (const d of defaultsList) {
-        const services = Array.isArray(d.notification_services)
-          ? d.notification_services
+    ])
+      .then(([eventsRes, defaultsRes]) => {
+        if (cancelled) return;
+        const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
+        setNotifEvents(events);
+        const defaults: Record<number, string> = {};
+        for (const ev of events) defaults[ev.notification_event_id] = "";
+        const defaultsList = Array.isArray(defaultsRes.data.data)
+          ? (defaultsRes.data.data as NotificationDefaultItem[])
           : [];
-        defaults[d.notification_event_id] = services.join(",");
-      }
-      setNotifDefaults(defaults);
-      setNotifDefaultsOriginal({ ...defaults });
-      notifDraftsRef.current[activeNotifType] = { ...defaults };
-      notifOriginalsRef.current[activeNotifType] = { ...defaults };
-    }).catch((err) => {
-      setNotifError(getApiError(err));
-    });
+        for (const d of defaultsList) {
+          const services = Array.isArray(d.notification_services)
+            ? d.notification_services
+            : [];
+          defaults[d.notification_event_id] = services.join(",");
+        }
+        setNotifDefaults(defaults);
+        setNotifDefaultsOriginal({ ...defaults });
+        notifDraftsRef.current[activeNotifType] = { ...defaults };
+        notifOriginalsRef.current[activeNotifType] = { ...defaults };
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setNotifError(getApiError(err));
+      })
+      .finally(() => {
+        if (!cancelled) setNotifEventsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeNotifType]);
 
   function isNotifTypeDirty(typeId: number): boolean {
@@ -1180,7 +1209,12 @@ export function Settings() {
             <p className="text-xs text-zinc-400">Loading engagement types…</p>
           )}
 
-          {activeNotifType !== null && notifEvents.length > 0 ? (
+          {activeNotifType !== null && notifEventsLoading ? (
+            <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading events…
+            </div>
+          ) : activeNotifType !== null && notifEvents.length > 0 ? (
             <div className="space-y-4">
               {notifEvents.map((ev) => (
                 <NotificationServiceChipInput
@@ -1193,10 +1227,10 @@ export function Settings() {
               ))}
             </div>
           ) : activeNotifType !== null ? (
-            <div className="flex items-center gap-2 text-zinc-500 text-sm py-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading events…
-            </div>
+            <p className="text-sm text-zinc-500 py-2">
+              No notification events are linked to this engagement type. Add or update events under
+              Library → Notifications → Events, then return here to set defaults.
+            </p>
           ) : null}
 
           {notifError ? (
@@ -1212,7 +1246,7 @@ export function Settings() {
 
           <button
             type="submit"
-            disabled={notifSaving || activeNotifType === null || notifEvents.length === 0}
+            disabled={notifSaving || notifEventsLoading || activeNotifType === null || notifEvents.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 disabled:pointer-events-none"
           >
             {notifSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
