@@ -1397,6 +1397,7 @@ export function Engagements({
           metsights_engagement_id: data.metsights_engagement_id?.trim() || null,
           organization_id: orgId,
           engagement_type: data.engagement_type,
+          consultations: data.consultations ?? null,
           assessment_package_id:
             data.assessment_package_id && data.assessment_package_id > 0
               ? data.assessment_package_id

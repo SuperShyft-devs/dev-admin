@@ -379,7 +379,16 @@ export function EngagementFormModal({
           .filter(Boolean),
       }));
 
-    onSubmit({ ...formData, notifications });
+    let consultations = formData.consultations ?? null;
+    if (selectedTypeCode && !needsConsultation(selectedTypeCode)) {
+      consultations = null;
+    } else if (selectedTypeCode && expertTypes.length > 0) {
+      consultations = Object.fromEntries(
+        expertTypes.map((et) => [et.type_key, !!(formData.consultations ?? {})[et.type_key]])
+      );
+    }
+
+    onSubmit({ ...formData, consultations, notifications });
   };
 
   const submitLabel = (() => {
