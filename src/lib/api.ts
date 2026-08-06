@@ -2175,6 +2175,7 @@ export interface ConsoleEngagementListItem {
   end_date?: string | null;
   status?: string | null;
   participant_count?: number | null;
+  blood_collection_type?: string | null;
 }
 
 export interface ConsoleParticipantBookResponse {
@@ -2313,6 +2314,37 @@ export const consoleApi = {
     api.post<{ data: Record<string, unknown> }>(
       `/engagements/${engagementId}/console/participants/${userId}/assessments/${assessmentInstanceId}/submit`,
       payload
+    ),
+  checkHomeCollectionServiceAvailability: (
+    engagementId: number,
+    userId: number,
+    payload: { address_line: string; landmark?: string; city: string; pincode: string }
+  ) =>
+    api.post<{ data: { status: string; message: string; zone_id?: string | number | null; engagement_id: number; user_id: number } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/book-home-collection/check-service-availability`,
+      payload
+    ),
+  getHomeCollectionAvailableSlots: (
+    engagementId: number,
+    userId: number,
+    payload: { blood_collection_date: string }
+  ) =>
+    api.post<{ data: { status: string; slots: { end_time?: string; slot_date?: string; slot_time?: string; stm_id?: string }[]; engagement_id: number; user_id: number } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/book-home-collection/available-slots`,
+      payload
+    ),
+  lockHomeCollectionSlot: (
+    engagementId: number,
+    userId: number,
+    payload: { blood_collection_date: string; blood_collection_time_slot_id: string; blood_collection_time_slot: string }
+  ) =>
+    api.post<{ data: { status: string; message: string; slot_id?: string; freeze_time?: string | null; engagement_id: number; user_id: number } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/book-home-collection/lock`,
+      payload
+    ),
+  bookHomeCollection: (engagementId: number, userId: number) =>
+    api.post<{ data: { status?: boolean; message?: string; booking_id?: string; lead_id?: number | null; resCode?: string; engagement_participant_id?: number; user_id: number; engagement_id: number } }>(
+      `/engagements/${engagementId}/console/participants/${userId}/book-home-collection/book`
     ),
 };
 

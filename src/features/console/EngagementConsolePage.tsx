@@ -15,6 +15,7 @@ import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
 import { PortalMenu } from "../../shared/ui/PortalMenu";
 import { BarcodeScannerModal } from "./BarcodeScannerModal";
+import { HomeCollectionBookingModal } from "./HomeCollectionBookingModal";
 import { ParticipantQuestionnaireModal } from "./ParticipantQuestionnaireModal";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -56,7 +57,7 @@ function applyBookingToParticipant(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type ModalMode = "detail" | "book" | "cancel_confirm" | "cancel" | "questionnaires" | null;
+type ModalMode = "detail" | "book" | "book_home_collection" | "cancel_confirm" | "cancel" | "questionnaires" | null;
 
 export function EngagementConsolePage() {
   const { engagementId } = useParams<{ engagementId: string }>();
@@ -211,7 +212,13 @@ export function EngagementConsolePage() {
     setModalMode("questionnaires");
   };
 
+  const isHomeCollection = engagement?.blood_collection_type === "home_collection";
+
   const openBookModal = () => {
+    if (isHomeCollection) {
+      setModalMode("book_home_collection");
+      return;
+    }
     setBarcode("");
     setBookingError(null);
     setModalMode("book");
@@ -758,6 +765,34 @@ export function EngagementConsolePage() {
           setBookingError(null);
         }}
       />
+
+      {selectedParticipant && (
+        <HomeCollectionBookingModal
+          open={modalMode === "book_home_collection"}
+          onClose={closeModal}
+          engagementId={engId}
+          participant={selectedParticipant}
+          onBooked={(bid) => {
+            const userId = selectedParticipant.user_id;
+            setParticipants((prev) =>
+              prev.map((p) =>
+                p.user_id === userId ? { ...p, booking_id: bid } : p
+              )
+            );
+            setSelectedParticipant((prev) =>
+              prev ? { ...prev, booking_id: bid } : prev
+            );
+            void fetchAllPages<Participant>(
+              (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+              100
+            ).then((parts) => {
+              setParticipants(parts);
+              const updated = parts.find((p) => p.user_id === userId);
+              if (updated) setSelectedParticipant(updated);
+            });
+          }}
+        />
+      )}
 
       {selectedParticipant && (
         <ParticipantQuestionnaireModal
