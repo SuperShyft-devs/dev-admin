@@ -38,6 +38,7 @@ import {
   type EngagementTypeItem,
   type DiagnosticPackageListItem,
   type OrganizationListItem,
+  type Organization,
   type AssessmentPackage,
   type EmployeeListItem,
   type OnboardingAssistant,
@@ -948,7 +949,12 @@ export function Engagements({
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
+  const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
   const [cityOptions, setCityOptions] = useState<string[]>([]);
+  const [orgViewOpen, setOrgViewOpen] = useState(false);
+  const [orgViewLoading, setOrgViewLoading] = useState(false);
+  const [orgViewError, setOrgViewError] = useState<string | null>(null);
+  const [orgViewData, setOrgViewData] = useState<Organization | null>(null);
   const [sortKey, setSortKey] = useState<string>("engagement_id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [listTab, setListTab] = useState<"organizations" | "users">("organizations");
@@ -1146,6 +1152,13 @@ export function Engagements({
         setTypeOptions([]);
         setCityOptions([]);
       });
+  }, []);
+
+  useEffect(() => {
+    engagementTypesApi
+      .list()
+      .then((res) => setEngagementTypes(res.data.data ?? []))
+      .catch(() => setEngagementTypes([]));
   }, []);
 
   useEffect(() => {
@@ -1530,6 +1543,37 @@ export function Engagements({
 
   const getOrgName = (id: number) => organizations.find((o) => o.organization_id === id)?.name ?? String(id);
 
+  const getTypeDisplayName = useCallback(
+    (type: string | number | null | undefined) => {
+      if (type == null || type === "") return "—";
+      const asNumber = typeof type === "number" ? type : /^\d+$/.test(String(type)) ? Number(type) : null;
+      if (asNumber != null) {
+        const byId = engagementTypes.find((t) => t.id === asNumber);
+        if (byId) return byId.display_name;
+      }
+      const code = String(type);
+      const byCode = engagementTypes.find((t) => t.code === code);
+      return byCode?.display_name ?? code;
+    },
+    [engagementTypes]
+  );
+
+  const openOrgView = useCallback((organizationId: number) => {
+    if (!organizationId) return;
+    setOrgViewOpen(true);
+    setOrgViewLoading(true);
+    setOrgViewError(null);
+    setOrgViewData(null);
+    organizationsApi
+      .get(organizationId)
+      .then((res) => {
+        setOrgViewData(res.data.data);
+        void ensureOrgInList(organizationId);
+      })
+      .catch((err) => setOrgViewError(getApiError(err)))
+      .finally(() => setOrgViewLoading(false));
+  }, [ensureOrgInList]);
+
   // ── Onboarding Assistants handlers ───────────────────────────
   const fetchAssistants = useCallback(async (engagementId: number) => {
     setAssistantsLoading(true);
@@ -1693,7 +1737,25 @@ export function Engagements({
         key: "organization_id",
         label: "Organisation",
         sortable: true,
-        render: (r) => getOrgName(r.organization_id ?? 0),
+        className: "max-w-[10rem] sm:max-w-[12rem]",
+        render: (r) => {
+          const orgId = r.organization_id;
+          if (!orgId) return "—";
+          const name = getOrgName(orgId);
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openOrgView(orgId);
+              }}
+              className="block w-full max-w-[10rem] sm:max-w-[12rem] truncate text-left text-zinc-900 hover:underline focus:outline-none focus:underline"
+              title={name}
+            >
+              {name}
+            </button>
+          );
+        },
         hideOnMobile: true,
       });
     } else {
@@ -1707,7 +1769,13 @@ export function Engagements({
     }
 
     base.push(
-      { key: "engagement_type", label: "Type", sortable: true, hideOnTablet: true },
+      {
+        key: "engagement_type",
+        label: "Type",
+        sortable: true,
+        hideOnTablet: true,
+        render: (r) => getTypeDisplayName(r.engagement_type as string | number | null | undefined),
+      },
       { key: "city", label: "City", sortable: true, hideOnTablet: true },
       { key: "start_date", label: "Start", sortable: true, hideOnMobile: true, render: (r) => formatDate(r.start_date) },
       { key: "end_date", label: "End", sortable: true, hideOnTablet: true, render: (r) => formatDate(r.end_date) },
@@ -1785,7 +1853,7 @@ export function Engagements({
     );
 
     return base;
-  }, [listTab, organizations, fetchList, openStatusChange]);
+  }, [listTab, organizations, fetchList, openStatusChange, getTypeDisplayName, openOrgView]);
 
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
@@ -1869,7 +1937,7 @@ export function Engagements({
             <option value="">All types</option>
             {typeOptions.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {getTypeDisplayName(type)}
               </option>
             ))}
           </select>
@@ -2255,8 +2323,97 @@ export function Engagements({
 
       <EngagementTypesModal
         open={typesModalOpen}
-        onClose={() => setTypesModalOpen(false)}
+        onClose={() => {
+          setTypesModalOpen(false);
+          engagementTypesApi
+            .list()
+            .then((res) => setEngagementTypes(res.data.data ?? []))
+            .catch(() => {});
+        }}
       />
+
+      <Modal
+        open={orgViewOpen}
+        onClose={() => {
+          setOrgViewOpen(false);
+          setOrgViewData(null);
+          setOrgViewError(null);
+        }}
+        title="View Organisation"
+        maxWidthClassName="max-w-xl"
+      >
+        {orgViewLoading ? (
+          <div className="py-10 flex justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+          </div>
+        ) : orgViewError ? (
+          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">{orgViewError}</div>
+        ) : orgViewData ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-zinc-500">Name:</span> {orgViewData.name ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Type:</span> {orgViewData.organization_type ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Industry:</span> {orgViewData.industry ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Website:</span>{" "}
+              {orgViewData.website_url ? (
+                <a
+                  href={orgViewData.website_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-zinc-900 underline break-all"
+                >
+                  {orgViewData.website_url}
+                </a>
+              ) : (
+                "—"
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-zinc-500">Departments:</span>{" "}
+              {(orgViewData.departments ?? []).length > 0 ? (
+                <span className="inline-flex flex-wrap gap-1.5 mt-1">
+                  {(orgViewData.departments ?? []).map((d) => (
+                    <span
+                      key={d.slug}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-xs"
+                    >
+                      {d.department}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                "—"
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-zinc-500">Address:</span> {orgViewData.address ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Pin Code:</span> {orgViewData.pin_code ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">City:</span> {orgViewData.city ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">State:</span> {orgViewData.state ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Country:</span> {orgViewData.country ?? "—"}
+            </div>
+            <div>
+              <span className="text-zinc-500">Status:</span> {orgViewData.status ?? "—"}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">No organisation details available.</p>
+        )}
+      </Modal>
 
       {/* ── Onboarding Assistants Modal ─────────────────────── */}
       <Modal
