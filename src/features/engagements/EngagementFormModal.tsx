@@ -55,6 +55,27 @@ function needsConsultation(kind: EngagementKind): boolean {
   return kind === "consultation" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation";
 }
 
+function needsBloodCollection(kind: EngagementKind): boolean {
+  return (
+    kind === "bio_ai" ||
+    kind === "blood_test" ||
+    kind === "blood_test_with_consultation" ||
+    kind === "bio_ai_with_consultation"
+  );
+}
+
+function needsHealthiansZone(kind: EngagementKind): boolean {
+  return needsBloodCollection(kind);
+}
+
+function needsSlotDuration(kind: EngagementKind): boolean {
+  return needsBloodCollection(kind);
+}
+
+function needsMetsightsFields(kind: EngagementKind): boolean {
+  return kind === "bio_ai" || kind === "bio_ai_with_consultation";
+}
+
 type Props = {
   open: boolean;
   mode: "add" | "edit";
@@ -176,15 +197,6 @@ export function EngagementFormModal({
     [diagnosticPackages]
   );
 
-  const selectedDiagnosticPkg = useMemo(() => {
-    const pkgId = formData.diagnostic_package_id;
-    if (!pkgId || pkgId <= 0) return undefined;
-    return diagnosticPackages.find((p) => p.diagnostic_package_id === pkgId);
-  }, [diagnosticPackages, formData.diagnostic_package_id]);
-
-  const isHealthiansDiagnosticPkg =
-    (selectedDiagnosticPkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
-
   useEffect(() => {
     if (!open || mode !== "edit") return;
     if (!initialData.diagnostic_package_id || initialData.healthians_zone_id?.trim()) return;
@@ -251,25 +263,6 @@ export function EngagementFormModal({
     [diagnosticPackages]
   );
 
-  const goNext = () => {
-    if (step === 1 && !validateStep1()) return;
-    const nextStep = Math.min(3, step + 1);
-    setStep(nextStep);
-    if (nextStep === 2 && formData.diagnostic_package_id) {
-      void checkZoneId(
-        formData.diagnostic_package_id,
-        formData.latitude,
-        formData.longitude,
-        formData.pincode
-      );
-    }
-  };
-
-  const goBack = () => {
-    setStepError(null);
-    setStep((s) => Math.max(1, s - 1));
-  };
-
   const selectedTypeId = useMemo((): number | null => {
     const val = formData.engagement_type;
     if (typeof val === "number" && val > 0) return val;
@@ -289,6 +282,48 @@ export function EngagementFormModal({
     );
     return (match?.code as EngagementKind) ?? null;
   }, [formData.engagement_type, engagementTypes]);
+
+  const validateStep2 = () => {
+    if (!selectedTypeId) {
+      setStepError("Please select an engagement type");
+      return false;
+    }
+    if (
+      selectedTypeCode &&
+      needsConsultation(selectedTypeCode) &&
+      expertTypes.length > 0
+    ) {
+      const selected = expertTypes.some(
+        (et) => !!(formData.consultations ?? {})[et.type_key]
+      );
+      if (!selected) {
+        setStepError("Select at least 1 Expert Type");
+        return false;
+      }
+    }
+    setStepError(null);
+    return true;
+  };
+
+  const goNext = () => {
+    if (step === 1 && !validateStep1()) return;
+    if (step === 2 && !validateStep2()) return;
+    const nextStep = Math.min(3, step + 1);
+    setStep(nextStep);
+    if (nextStep === 2 && formData.diagnostic_package_id) {
+      void checkZoneId(
+        formData.diagnostic_package_id,
+        formData.latitude,
+        formData.longitude,
+        formData.pincode
+      );
+    }
+  };
+
+  const goBack = () => {
+    setStepError(null);
+    setStep((s) => Math.max(1, s - 1));
+  };
 
   useEffect(() => {
     if (step !== 3 || !selectedTypeId) return;
@@ -368,6 +403,10 @@ export function EngagementFormModal({
       setStep(1);
       return;
     }
+    if (!validateStep2()) {
+      setStep(2);
+      return;
+    }
 
     const notifications = Object.entries(notificationConfig)
       .filter(([, value]) => value && value.trim())
@@ -388,7 +427,38 @@ export function EngagementFormModal({
       );
     }
 
-    onSubmit({ ...formData, consultations, notifications });
+    const kind = selectedTypeCode;
+    const showBlood = kind ? needsBloodCollection(kind) : false;
+    const showCamp =
+      showBlood && formData.blood_collection_type === "camp_collection";
+    const showZone = kind ? needsHealthiansZone(kind) : false;
+    const showMetsights = kind ? needsMetsightsFields(kind) : false;
+    const showSlot = kind ? needsSlotDuration(kind) : false;
+
+    onSubmit({
+      ...formData,
+      consultations,
+      notifications,
+      assessment_package_id:
+        kind && needsAssessment(kind) ? formData.assessment_package_id ?? null : null,
+      diagnostic_package_id:
+        kind && needsDiagnostic(kind) ? formData.diagnostic_package_id ?? null : null,
+      blood_collection_type: showBlood
+        ? formData.blood_collection_type || null
+        : null,
+      external_camp_id: showCamp ? formData.external_camp_id ?? null : null,
+      healthians_zone_id: showZone ? formData.healthians_zone_id ?? null : null,
+      slot_duration: showSlot ? formData.slot_duration : formData.slot_duration || 60,
+      metsights_engagement_id: showMetsights
+        ? formData.metsights_engagement_id ?? null
+        : null,
+      create_profile_on_metsights: showMetsights
+        ? Boolean(formData.create_profile_on_metsights)
+        : false,
+      enroll_for_fitprint_full: showMetsights
+        ? Boolean(formData.enroll_for_fitprint_full)
+        : false,
+    });
   };
 
   const submitLabel = (() => {
@@ -407,6 +477,20 @@ export function EngagementFormModal({
     : false;
   const showConsultation = selectedTypeCode
     ? needsConsultation(selectedTypeCode)
+    : false;
+  const showBloodCollection = selectedTypeCode
+    ? needsBloodCollection(selectedTypeCode)
+    : false;
+  const showCampId =
+    showBloodCollection && formData.blood_collection_type === "camp_collection";
+  const showHealthiansZone = selectedTypeCode
+    ? needsHealthiansZone(selectedTypeCode)
+    : false;
+  const showSlotDuration = selectedTypeCode
+    ? needsSlotDuration(selectedTypeCode)
+    : false;
+  const showMetsightsFields = selectedTypeCode
+    ? needsMetsightsFields(selectedTypeCode)
     : false;
 
   return (
@@ -658,13 +742,9 @@ export function EngagementFormModal({
                   value={formData.diagnostic_package_id ?? 0}
                   onChange={(e) => {
                     const next = Number(e.target.value);
-                    const pkg =
-                      next > 0 ? diagnosticPackages.find((p) => p.diagnostic_package_id === next) : undefined;
-                    const isHealthians = (pkg?.diagnostic_provider ?? "").toLowerCase() === "healthians";
                     setFormData({
                       ...formData,
                       diagnostic_package_id: next > 0 ? next : undefined,
-                      external_camp_id: isHealthians ? formData.external_camp_id : undefined,
                     });
                     void checkZoneId(
                       next > 0 ? next : undefined,
@@ -691,6 +771,7 @@ export function EngagementFormModal({
             {showConsultation && expertTypes.length > 0 && (
               <div className="md:col-span-2 space-y-2">
                 <label className="block text-sm font-medium text-zinc-700">Consultations</label>
+                <p className="text-xs text-zinc-500">Select at least 1 Expert Type</p>
                 <div className="flex flex-wrap gap-3">
                   {expertTypes.map((et) => (
                     <label key={et.type_key} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 bg-zinc-50 text-sm cursor-pointer hover:bg-zinc-100 transition-colors">
@@ -715,7 +796,32 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {isHealthiansDiagnosticPkg && (
+            {showBloodCollection && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Blood Collection Type</label>
+                <select
+                  value={formData.blood_collection_type ?? ""}
+                  onChange={(e) => {
+                    const next = e.target.value || undefined;
+                    setFormData({
+                      ...formData,
+                      blood_collection_type: next,
+                      external_camp_id:
+                        next === "camp_collection" ? formData.external_camp_id : undefined,
+                    });
+                  }}
+                  className={inputClass}
+                >
+                  {BLOOD_COLLECTION_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {showCampId && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Camp ID</label>
                 <input
@@ -729,129 +835,124 @@ export function EngagementFormModal({
                 />
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Blood Collection Type</label>
-              <select
-                value={formData.blood_collection_type ?? ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, blood_collection_type: e.target.value || undefined })
-                }
-                className={inputClass}
-              >
-                {BLOOD_COLLECTION_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Healthians Zone ID {zoneLoading && <span className="text-xs text-zinc-400">(loading...)</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.healthians_zone_id ?? ""}
-                onChange={(e) => setFormData({ ...formData, healthians_zone_id: e.target.value || undefined })}
-                className={inputClass}
-                placeholder="Auto-filled for Healthians packages"
-              />
-              {zoneMessage && (
-                <p
-                  className={`mt-1 text-xs ${
-                    zoneMessageTone === "success"
-                      ? "text-green-700"
-                      : zoneMessageTone === "error"
-                        ? "text-red-600"
-                        : "text-amber-700"
-                  }`}
-                >
-                  {zoneMessage}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
-              <input
-                type="number"
-                min={1}
-                max={480}
-                value={formData.slot_duration}
-                onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Metsights Engagement ID
-              </label>
-              <input
-                type="text"
-                value={formData.metsights_engagement_id ?? ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, metsights_engagement_id: e.target.value })
-                }
-                className={inputClass}
-                placeholder="Optional external Metsights ID"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Create Profile On Metsights
-              </label>
-              <div className="flex gap-5 py-2">
-                <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="create_profile_on_metsights"
-                    checked={Boolean(formData.create_profile_on_metsights)}
-                    onChange={() => setFormData({ ...formData, create_profile_on_metsights: true })}
-                  />
-                  Yes
+
+            {showHealthiansZone && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Healthians Zone ID {zoneLoading && <span className="text-xs text-zinc-400">(loading...)</span>}
                 </label>
-                <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="create_profile_on_metsights"
-                    checked={!formData.create_profile_on_metsights}
-                    onChange={() => setFormData({ ...formData, create_profile_on_metsights: false })}
-                  />
-                  No
-                </label>
+                <input
+                  type="text"
+                  value={formData.healthians_zone_id ?? ""}
+                  onChange={(e) => setFormData({ ...formData, healthians_zone_id: e.target.value || undefined })}
+                  className={inputClass}
+                  placeholder="Auto-filled for Healthians packages"
+                />
+                {zoneMessage && (
+                  <p
+                    className={`mt-1 text-xs ${
+                      zoneMessageTone === "success"
+                        ? "text-green-700"
+                        : zoneMessageTone === "error"
+                          ? "text-red-600"
+                          : "text-amber-700"
+                    }`}
+                  >
+                    {zoneMessage}
+                  </p>
+                )}
               </div>
-              {Boolean(formData.create_profile_on_metsights) && (
-                <p className="text-xs text-zinc-500 mt-1">
-                  {(formData.metsights_engagement_id ?? "").trim()
-                    ? "Users will be registered to the Metsights engagement on onboarding."
-                    : "A standalone Metsights profile will be created for each user on onboarding (no engagement registration)."}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">
-                Enroll For FitPrint Full
-              </label>
-              <div className="flex gap-5 py-2">
-                <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="enroll_for_fitprint_full"
-                    checked={Boolean(formData.enroll_for_fitprint_full)}
-                    onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
-                  />
-                  Yes
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="enroll_for_fitprint_full"
-                    checked={!formData.enroll_for_fitprint_full}
-                    onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
-                  />
-                  No
-                </label>
+            )}
+
+            {showSlotDuration && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={480}
+                  value={formData.slot_duration}
+                  onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
+                  className={inputClass}
+                />
               </div>
-            </div>
+            )}
+
+            {showMetsightsFields && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">
+                    Metsights Engagement ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.metsights_engagement_id ?? ""}
+                    onChange={(e) =>
+                      setFormData({ ...formData, metsights_engagement_id: e.target.value })
+                    }
+                    className={inputClass}
+                    placeholder="Optional external Metsights ID"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">
+                    Create Profile On Metsights
+                  </label>
+                  <div className="flex gap-5 py-2">
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="radio"
+                        name="create_profile_on_metsights"
+                        checked={Boolean(formData.create_profile_on_metsights)}
+                        onChange={() => setFormData({ ...formData, create_profile_on_metsights: true })}
+                      />
+                      Yes
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="radio"
+                        name="create_profile_on_metsights"
+                        checked={!formData.create_profile_on_metsights}
+                        onChange={() => setFormData({ ...formData, create_profile_on_metsights: false })}
+                      />
+                      No
+                    </label>
+                  </div>
+                  {Boolean(formData.create_profile_on_metsights) && (
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {(formData.metsights_engagement_id ?? "").trim()
+                        ? "Users will be registered to the Metsights engagement on onboarding."
+                        : "A standalone Metsights profile will be created for each user on onboarding (no engagement registration)."}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">
+                    Enroll For FitPrint Full
+                  </label>
+                  <div className="flex gap-5 py-2">
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="radio"
+                        name="enroll_for_fitprint_full"
+                        checked={Boolean(formData.enroll_for_fitprint_full)}
+                        onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
+                      />
+                      Yes
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="radio"
+                        name="enroll_for_fitprint_full"
+                        checked={!formData.enroll_for_fitprint_full}
+                        onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
+                      />
+                      No
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

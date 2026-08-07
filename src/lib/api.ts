@@ -1458,7 +1458,7 @@ export interface ChecklistReadiness {
 }
 
 // Engagements
-export type EngagementKind = "bio_ai" | "blood_test" | "consultation" | "blood_test_with_consultation" | "bio_ai_with_consultation";
+export type EngagementKind = "bio_ai" | "blood_test" | "consultation" | "blood_test_with_consultation" | "bio_ai_with_consultation" | "vifc";
 export type EngagementStatus = "draft" | "scheduled" | "running" | "completed" | "cancelled";
 export type BloodCollectionType = "home_collection" | "camp_collection";
 
