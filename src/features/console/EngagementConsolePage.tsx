@@ -10,6 +10,8 @@ import {
   ClipboardList,
   AlertTriangle,
   Camera,
+  CalendarPlus,
+  Ban,
 } from "lucide-react";
 import { ConsoleLayout } from "../../layouts/ConsoleLayout";
 import { Modal } from "../../shared/ui/Modal";
@@ -232,6 +234,45 @@ export function EngagementConsolePage() {
 
   const canCancelBooking = (p: Participant | null) =>
     Boolean(p && isEngagementRunning && isParticipantBooked(p));
+
+  const closeActionMenu = () => {
+    setActionMenuRow(null);
+    actionMenuAnchorRef.current = null;
+  };
+
+  const actionMenuParticipant =
+    actionMenuRow !== null
+      ? filtered.find(
+          (row) =>
+            (row.engagement_participant_id ?? row.user_id) === actionMenuRow
+        ) ?? null
+      : null;
+
+  const openQuestionnairesFor = (p: Participant) => {
+    setSelectedParticipant(p);
+    setModalMode("questionnaires");
+    closeActionMenu();
+  };
+
+  const openBookFor = (p: Participant) => {
+    setSelectedParticipant(p);
+    closeActionMenu();
+    if (isHomeCollection) {
+      setModalMode("book_home_collection");
+      return;
+    }
+    setBarcode("");
+    setBookingError(null);
+    setModalMode("book");
+  };
+
+  const openCancelFor = (p: Participant) => {
+    setSelectedParticipant(p);
+    setCancelRemarks("");
+    setCancelError(null);
+    setModalMode("cancel_confirm");
+    closeActionMenu();
+  };
 
   const handleCreateBooking = async () => {
     if (!selectedParticipant || !engId) return;
@@ -549,30 +590,64 @@ export function EngagementConsolePage() {
           <PortalMenu
             open={actionMenuRow !== null}
             anchorRef={actionMenuAnchorRef}
-            onClose={() => {
-              setActionMenuRow(null);
-              actionMenuAnchorRef.current = null;
-            }}
-            width={144}
+            onClose={closeActionMenu}
+            width={180}
           >
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                const participant = filtered.find(
-                  (row) =>
-                    (row.engagement_participant_id ?? row.user_id) ===
-                    actionMenuRow
-                );
-                if (participant) openDetail(participant);
-                setActionMenuRow(null);
-                actionMenuAnchorRef.current = null;
+                if (actionMenuParticipant) openDetail(actionMenuParticipant);
+                closeActionMenu();
               }}
               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
             >
               <Eye className="w-4 h-4" />
               View
             </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (actionMenuParticipant) {
+                  openQuestionnairesFor(actionMenuParticipant);
+                }
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              <ClipboardList className="w-4 h-4" />
+              Questionnaires
+            </button>
+            {canBookParticipant(actionMenuParticipant) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (actionMenuParticipant) {
+                    openBookFor(actionMenuParticipant);
+                  }
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                Book
+              </button>
+            )}
+            {canCancelBooking(actionMenuParticipant) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (actionMenuParticipant) {
+                    openCancelFor(actionMenuParticipant);
+                  }
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+              >
+                <Ban className="w-4 h-4" />
+                Cancel booking
+              </button>
+            )}
           </PortalMenu>
         </div>
       )}
