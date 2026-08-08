@@ -6,7 +6,6 @@ import {
   MoreVertical,
   Eye,
   Users,
-  CheckCircle2,
   ClipboardList,
   AlertTriangle,
   Camera,
@@ -538,18 +537,6 @@ export function EngagementConsolePage() {
                       </td>
                       <td className="px-2 sm:px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {isParticipantBooked(p) && (
-                            <span
-                              title="Booking complete"
-                              aria-label="Booking complete"
-                              className="inline-flex"
-                            >
-                              <CheckCircle2
-                                className="w-4 h-4 text-emerald-600 shrink-0"
-                                aria-hidden="true"
-                              />
-                            </span>
-                          )}
                           <button
                             ref={
                               actionMenuRow ===
