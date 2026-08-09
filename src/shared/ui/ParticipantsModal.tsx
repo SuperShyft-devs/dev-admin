@@ -339,6 +339,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
   const [consultationUpdateLoading, setConsultationUpdateLoading] = useState<string | null>(null);
   const [consultationUpdateError, setConsultationUpdateError] = useState<string | null>(null);
+  const [bookingIdEditMode, setBookingIdEditMode] = useState(false);
+  const [bookingIdUpdateLoading, setBookingIdUpdateLoading] = useState<number | null>(null);
+  const [bookingIdUpdateError, setBookingIdUpdateError] = useState<string | null>(null);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -444,6 +447,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setConsultationEditMode(new Set());
       setConsultationUpdateLoading(null);
       setConsultationUpdateError(null);
+      setBookingIdEditMode(false);
+      setBookingIdUpdateLoading(null);
+      setBookingIdUpdateError(null);
       fetchParticipants();
       void fetchOrganizationDepartments();
     }
@@ -489,6 +495,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     source.kind === "engagement-id" && organizationId != null && orgDepartments.length > 0;
 
   const canEditConsultation = source.kind === "engagement-id";
+  const canEditBookingId = source.kind === "engagement-id";
 
   const afterColumnFilters = useMemo(
     () => applyColumnFilters(participants, columnFilters),
@@ -593,6 +600,34 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setConsultationUpdateError(getApiError(err));
     } finally {
       setConsultationUpdateLoading(null);
+    }
+  };
+
+  const handleBookingIdUpdate = async (participant: Participant, nextValue: string) => {
+    if (!engagementIdForDepartment || !participant.user_id) return;
+
+    const normalized = nextValue.trim() || null;
+    const current = (participant.booking_id ?? "").trim() || null;
+    if (normalized === current) return;
+
+    try {
+      setBookingIdUpdateLoading(participant.user_id);
+      setBookingIdUpdateError(null);
+      const res = await participantsApi.updateParticipant(
+        engagementIdForDepartment,
+        participant.user_id,
+        { booking_id: normalized }
+      );
+      const saved = res.data.data.booking_id ?? normalized;
+      setParticipants((prevRows) =>
+        prevRows.map((row) =>
+          row.user_id === participant.user_id ? { ...row, booking_id: saved } : row
+        )
+      );
+    } catch (err) {
+      setBookingIdUpdateError(getApiError(err));
+    } finally {
+      setBookingIdUpdateLoading(null);
     }
   };
 
@@ -955,6 +990,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             {consultationUpdateError && (
               <p className="text-sm text-red-600 mb-3">{consultationUpdateError}</p>
             )}
+            {bookingIdUpdateError && (
+              <p className="text-sm text-red-600 mb-3">{bookingIdUpdateError}</p>
+            )}
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
@@ -992,7 +1030,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       Email
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Engagement ID
+                      <EditableColumnHeader
+                        label="Booking Id"
+                        editable={canEditBookingId}
+                        isEditing={bookingIdEditMode}
+                        onToggleEdit={() => setBookingIdEditMode((v) => !v)}
+                        editTitle="booking id"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Engagement Date
@@ -1088,8 +1132,34 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.email || "—"}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {p.engagement_id ?? "—"}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (bookingIdEditMode && canEditBookingId) ev.stopPropagation();
+                          }}
+                        >
+                          {bookingIdEditMode && canEditBookingId ? (
+                            <input
+                              key={`${p.user_id}-${p.booking_id ?? ""}`}
+                              type="text"
+                              defaultValue={p.booking_id ?? ""}
+                              disabled={bookingIdUpdateLoading === p.user_id}
+                              placeholder="—"
+                              onBlur={(e) => {
+                                void handleBookingIdUpdate(p, e.target.value);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                              aria-label={`Booking Id for ${fullName(p)}`}
+                            />
+                          ) : (
+                            p.booking_id || "—"
+                          )}
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.engagement_date || "—"}

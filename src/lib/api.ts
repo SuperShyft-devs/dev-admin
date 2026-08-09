@@ -2032,6 +2032,7 @@ export interface Participant {
 export interface EngagementParticipantUpdatePayload {
   participant_department?: string | null;
   consultations?: Record<string, ConsultationPreference | boolean | null> | null;
+  booking_id?: string | null;
 }
 
 export interface EngagementParticipantUpdateResponse {
@@ -2039,6 +2040,7 @@ export interface EngagementParticipantUpdateResponse {
   user_id: number;
   participant_department?: string | null;
   consultations?: Record<string, ConsultationPreference | boolean | null> | null;
+  booking_id?: string | null;
 }
 
 export const participantsApi = {
