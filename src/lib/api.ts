@@ -513,14 +513,15 @@ export interface ParticipantJourneyCategoryProgress {
   category_id: number;
   display_name?: string | null;
   category_key?: string | null;
+  category_of?: string | null;
   status: string;
+  is_submitted: boolean;
+  has_responses: boolean;
   completed_at?: string | null;
 }
 
 export interface ParticipantJourneyQuestionnaireRollup {
   response_count: number;
-  draft_count: number;
-  submitted_count: number;
   categories_touched: number;
 }
 
@@ -557,7 +558,6 @@ export interface ParticipantJourneyQuestionRow {
   question_type?: string | null;
   question_key?: string | null;
   answer: unknown;
-  submitted_at?: string | null;
   answer_state: ParticipantJourneyAnswerState;
   options?: unknown;
   help_text?: string | null;
@@ -2109,11 +2109,12 @@ export const participantsApi = {
 };
 
 // Engagement Questionnaire Status
-export interface EngagementQuestionnaireStatusPackage {
-  package_code?: string | null;
-  package_display_name?: string | null;
-  questionnaire_state: "drafted" | "submitted" | "not_started";
-  responses_count: number;
+export interface EngagementQuestionnaireCategoryStatus {
+  status: string;
+  is_submitted: boolean;
+  has_responses: boolean;
+  assigned: boolean;
+  unanswered_required?: Array<{ question_id: number; question_text?: string | null }>;
 }
 
 export interface EngagementQuestionnaireStatusParticipant {
@@ -2122,15 +2123,14 @@ export interface EngagementQuestionnaireStatusParticipant {
   last_name?: string | null;
   phone?: string | null;
   email?: string | null;
-  questionnaire_state: "drafted" | "submitted" | "not_started";
-  total_responses: number;
-  packages: EngagementQuestionnaireStatusPackage[];
+  questionnaire_state: "filled" | "partially_filled" | "not_started";
+  categories: Record<string, EngagementQuestionnaireCategoryStatus>;
 }
 
 export interface EngagementQuestionnaireStatusResponse {
   summary: {
-    drafted: number;
-    submitted: number;
+    filled: number;
+    partially_filled: number;
     not_started: number;
   };
   participants: EngagementQuestionnaireStatusParticipant[];

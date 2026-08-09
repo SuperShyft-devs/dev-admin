@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Loader2, Save } from "lucide-react";
+import { ArrowLeft, CheckCheck, CheckCircle2, ChevronDown, ChevronRight, Circle, CircleDot, Clock, Download, Loader2, Minus, Save } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   assessmentPackagesApi,
@@ -8,6 +8,7 @@ import {
   participantJourneyApi,
   usersApi,
   getApiError,
+  type ParticipantJourneyCategoryProgress,
   type ParticipantJourneyDetail,
   type ParticipantJourneyInstanceSummary,
   type UserDetail,
@@ -23,6 +24,65 @@ function formatAnswer(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+const METSIGHTS_CATEGORY_COLUMNS = [
+  { key: "physical-measurement", label: "Anthropometry" },
+  { key: "diet-lifestyle-parameters", label: "Diet & Lifestyle" },
+  { key: "vitals", label: "Vitals" },
+  { key: "fitness-parameters", label: "Fitness Parameters" },
+] as const;
+
+function CategoryStatusIcon({ progress, assigned }: { progress?: ParticipantJourneyCategoryProgress; assigned: boolean }) {
+  if (!assigned) {
+    return <Clock className="w-4 h-4 text-zinc-400" />;
+  }
+  if (!progress || (progress.status !== "complete" && !progress.has_responses)) {
+    return <Minus className="w-4 h-4 text-zinc-400" />;
+  }
+  if (progress.status !== "complete" && progress.has_responses) {
+    return <CircleDot className="w-4 h-4 text-amber-500" />;
+  }
+  if (progress.status === "complete" && progress.is_submitted) {
+    return <CheckCheck className="w-4 h-4 text-emerald-600" />;
+  }
+  return <CheckCheck className="w-4 h-4 text-zinc-900" />;
+}
+
+function CategoryLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+      <span className="font-medium text-zinc-600">Legend:</span>
+      <span className="inline-flex items-center gap-1"><CheckCheck className="w-3.5 h-3.5 text-zinc-900" /> Filled</span>
+      <span className="inline-flex items-center gap-1"><CheckCheck className="w-3.5 h-3.5 text-emerald-600" /> Submitted</span>
+      <span className="inline-flex items-center gap-1"><CircleDot className="w-3.5 h-3.5 text-amber-500" /> Partial</span>
+      <span className="inline-flex items-center gap-1"><Minus className="w-3.5 h-3.5 text-zinc-400" /> Not started</span>
+      <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-zinc-400" /> Not assigned</span>
+    </div>
+  );
+}
+
+function getCategoryProgress(
+  progressList: ParticipantJourneyCategoryProgress[],
+  categoryKey: string,
+): ParticipantJourneyCategoryProgress | undefined {
+  return progressList.find(
+    (p) => p.category_key === categoryKey && p.category_of === "metsights",
+  );
+}
+
+function isCategoryAssigned(
+  progressList: ParticipantJourneyCategoryProgress[],
+  categoryKey: string,
+  assessmentTypeCode?: string | null,
+): boolean {
+  if (categoryKey === "fitness-parameters") {
+    return assessmentTypeCode === "7";
+  }
+  if (["physical-measurement", "diet-lifestyle-parameters", "vitals"].includes(categoryKey)) {
+    return assessmentTypeCode === "1" || assessmentTypeCode === "2" || assessmentTypeCode === "7";
+  }
+  return progressList.some((p) => p.category_key === categoryKey);
 }
 
 function AnswerStateBadge({ state }: { state: string }) {
@@ -474,13 +534,17 @@ export function ParticipantJourneyPage() {
                       {formatStatusLabel(row.status)}
                     </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700">
-                      Drafts: {row.questionnaire.draft_count}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800">
-                      Submitted: {row.questionnaire.submitted_count}
-                    </span>
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                    {METSIGHTS_CATEGORY_COLUMNS.map((col) => {
+                      const assigned = isCategoryAssigned(row.category_progress, col.key, row.assessment_type_code);
+                      const progress = getCategoryProgress(row.category_progress, col.key);
+                      return (
+                        <span key={col.key} className="inline-flex items-center gap-1 text-zinc-600" title={col.label}>
+                          <CategoryStatusIcon progress={progress} assigned={assigned} />
+                          <span className="truncate max-w-[5rem]">{col.label}</span>
+                        </span>
+                      );
+                    })}
                   </div>
                   </button>
                   <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center justify-end">
@@ -492,63 +556,77 @@ export function ParticipantJourneyPage() {
           </div>
 
           {/* md+: table */}
-          <div className="hidden md:block bg-white rounded-xl border border-zinc-200 overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead>
-                <tr className="border-b border-zinc-200 text-left text-zinc-500">
-                  <th className="px-4 py-3 font-medium">Package</th>
-                  <th className="px-4 py-3 font-medium">Engagement</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Questionnaire</th>
-                  <th className="px-4 py-3 font-medium w-36"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {instances.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
-                      No assessments found for this user.
-                    </td>
+          <div className="hidden md:block">
+            <div className="mb-2">
+              <CategoryLegend />
+            </div>
+            <div className="bg-white rounded-xl border border-zinc-200 overflow-x-auto">
+              <table className="w-full text-sm min-w-[800px]">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-zinc-500">
+                    <th className="px-4 py-3 font-medium">Package</th>
+                    <th className="px-4 py-3 font-medium">Engagement</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    {METSIGHTS_CATEGORY_COLUMNS.map((col) => (
+                      <th key={col.key} className="px-3 py-3 font-medium text-center whitespace-nowrap">{col.label}</th>
+                    ))}
+                    <th className="px-4 py-3 font-medium w-28"> </th>
                   </tr>
-                ) : (
-                  instances.map((row) => (
-                    <tr key={row.assessment_instance_id} className="border-b border-zinc-100 last:border-0">
-                      <td className="px-4 py-3 text-zinc-900">
-                        <div className="font-medium">
-                          {row.package_display_name || row.package_code || `Package #${row.package_id}`}
-                        </div>
-                        <div className="text-xs text-zinc-500">#{row.assessment_instance_id}</div>
-                      </td>
-                      <td className="px-4 py-3 text-zinc-700">
-                        {row.engagement_name || row.engagement_code || `—`}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-700">
-                        <div className="flex items-center gap-2 capitalize">
-                          {renderStatusToggle(row)}
-                          <span>{formatStatusLabel(row.status)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 text-xs">
-                        {row.questionnaire.response_count} responses · {row.questionnaire.draft_count} draft ·{" "}
-                        {row.questionnaire.submitted_count} submitted
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          {renderImportButton(row)}
-                          <button
-                            type="button"
-                            onClick={() => void openDetail(row.assessment_instance_id)}
-                            className="text-zinc-900 font-medium text-xs hover:underline px-1.5 py-1"
-                          >
-                            View detail
-                          </button>
-                        </div>
+                </thead>
+                <tbody>
+                  {instances.length === 0 ? (
+                    <tr>
+                      <td colSpan={4 + METSIGHTS_CATEGORY_COLUMNS.length} className="px-4 py-8 text-center text-zinc-500">
+                        No assessments found for this user.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    instances.map((row) => (
+                      <tr key={row.assessment_instance_id} className="border-b border-zinc-100 last:border-0">
+                        <td className="px-4 py-3 text-zinc-900">
+                          <div className="font-medium">
+                            {row.package_display_name || row.package_code || `Package #${row.package_id}`}
+                          </div>
+                          <div className="text-xs text-zinc-500">#{row.assessment_instance_id}</div>
+                        </td>
+                        <td className="px-4 py-3 text-zinc-700">
+                          {row.engagement_name || row.engagement_code || `—`}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-700">
+                          <div className="flex items-center gap-2 capitalize">
+                            {renderStatusToggle(row)}
+                            <span>{formatStatusLabel(row.status)}</span>
+                          </div>
+                        </td>
+                        {METSIGHTS_CATEGORY_COLUMNS.map((col) => {
+                          const assigned = isCategoryAssigned(row.category_progress, col.key, row.assessment_type_code);
+                          const progress = getCategoryProgress(row.category_progress, col.key);
+                          return (
+                            <td key={col.key} className="px-3 py-3 text-center">
+                              <div className="flex justify-center">
+                                <CategoryStatusIcon progress={progress} assigned={assigned} />
+                              </div>
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            {renderImportButton(row)}
+                            <button
+                              type="button"
+                              onClick={() => void openDetail(row.assessment_instance_id)}
+                              className="text-zinc-900 font-medium text-xs hover:underline px-1.5 py-1"
+                            >
+                              View
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}
