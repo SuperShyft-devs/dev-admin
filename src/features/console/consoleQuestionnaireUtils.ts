@@ -74,6 +74,23 @@ const ROUTE_ORDER = [
   "fitness-parameters",
 ];
 
+/** Categories shown in the engagement console questionnaire modal. */
+const CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS = [
+  "physical-measurement",
+  "vitals",
+] as const;
+
+export function filterConsoleQuestionnaireCategories<
+  T extends { category_key?: string | null },
+>(categories: T[]): T[] {
+  return categories.filter((category) => {
+    const key = String(category.category_key ?? "").toLowerCase();
+    return CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS.some(
+      (allowed) => key.includes(allowed) || allowed.includes(key)
+    );
+  });
+}
+
 export function sortCategories<T extends { category_key?: string | null; category_id: number }>(
   categories: T[]
 ): T[] {
