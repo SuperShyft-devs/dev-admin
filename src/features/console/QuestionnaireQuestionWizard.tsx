@@ -23,6 +23,20 @@ type QuestionnaireQuestionWizardProps = {
   onSubmitted: () => void;
 };
 
+function initialStepIndex(
+  questions: ConsoleQuestionnaireQuestion[],
+  answers: Record<number, unknown>
+): number {
+  const firstUnansweredRequired = questions.findIndex((q) => {
+    if (!q.is_required) return false;
+    const normalized = normalizeAnswerForQuestion(q, answers[q.question_id]);
+    return isAnswerEmpty(normalized);
+  });
+  // All required answered → land on submit step (index === questions.length)
+  if (firstUnansweredRequired === -1) return questions.length;
+  return firstUnansweredRequired;
+}
+
 export function QuestionnaireQuestionWizard({
   engagementId,
   userId,
@@ -45,7 +59,7 @@ export function QuestionnaireQuestionWizard({
     setLoading(true);
     setError(null);
     setStepIndex(0);
-  void consoleApi
+    void consoleApi
       .getParticipantQuestionnaire(
         engagementId,
         userId,
@@ -56,14 +70,15 @@ export function QuestionnaireQuestionWizard({
         if (cancelled) return;
         const payload = res.data.data;
         const visible = getVisibleQuestions(payload.questions ?? []);
-        setQuestions(visible);
         const initial: Record<number, unknown> = {};
         visible.forEach((q) => {
           if (q.answer !== undefined && q.answer !== null) {
             initial[q.question_id] = q.answer;
           }
         });
+        setQuestions(visible);
         setAnswers(initial);
+        setStepIndex(initialStepIndex(visible, initial));
       })
       .catch((err) => {
         if (!cancelled) setError(getApiError(err));
@@ -76,10 +91,12 @@ export function QuestionnaireQuestionWizard({
     };
   }, [engagementId, userId, assessmentInstanceId, category.category_id]);
 
-  const currentQuestion = questions[stepIndex] ?? null;
-  const isLast = stepIndex >= questions.length - 1;
+  const isSubmitStep = questions.length > 0 && stepIndex >= questions.length;
+  const currentQuestion = isSubmitStep ? null : questions[stepIndex] ?? null;
   const progressPct =
-    questions.length > 0 ? Math.round(((stepIndex + 1) / questions.length) * 100) : 0;
+    questions.length > 0
+      ? Math.round((Math.min(stepIndex + 1, questions.length) / questions.length) * 100)
+      : 0;
 
   const currentAnswer = useMemo(() => {
     if (!currentQuestion) return undefined;
@@ -118,26 +135,45 @@ export function QuestionnaireQuestionWizard({
     );
   };
 
+  const goToNextStep = () => {
+    setValidationError(null);
+    setStepIndex((prev) => Math.min(prev + 1, questions.length));
+  };
+
   const handleNext = async () => {
     if (!validateCurrent()) return;
     setSaving(true);
     setError(null);
     try {
       await saveCurrentAnswer();
-      if (isLast) {
-        await consoleApi.submitParticipantAssessment(
-          engagementId,
-          userId,
-          assessmentInstanceId,
-          {
-            category: String(category.category_key ?? "").trim(),
-            category_of: String(category.category_of ?? "metsights").trim() || "metsights",
-          }
-        );
-        onSubmitted();
-      } else {
-        setStepIndex((prev) => prev + 1);
-      }
+      goToNextStep();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSkip = () => {
+    if (!currentQuestion || currentQuestion.is_required) return;
+    goToNextStep();
+  };
+
+  const handleSubmitCategory = async () => {
+    if (readOnly) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await consoleApi.submitParticipantAssessment(
+        engagementId,
+        userId,
+        assessmentInstanceId,
+        {
+          category: String(category.category_key ?? "").trim(),
+          category_of: String(category.category_of ?? "metsights").trim() || "metsights",
+        }
+      );
+      onSubmitted();
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -190,6 +226,51 @@ export function QuestionnaireQuestionWizard({
           <ArrowLeft className="w-4 h-4" />
           Back to categories
         </button>
+      </div>
+    );
+  }
+
+  if (isSubmitStep) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="inline-flex items-center gap-2 text-sm text-zinc-600 hover:text-zinc-900"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Previous
+          </button>
+          <span className="text-xs text-zinc-500">Ready to submit</span>
+        </div>
+
+        <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
+          <div className="h-full bg-zinc-900 transition-all duration-300" style={{ width: "100%" }} />
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            {category.display_name}
+          </p>
+          <h3 className="text-lg font-semibold text-zinc-900">Submit category</h3>
+          <p className="text-sm text-zinc-500">
+            All required questions are ready. Submit to mark this category complete.
+          </p>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => void handleSubmitCategory()}
+            disabled={readOnly || saving}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Submit category
+          </button>
+        </div>
       </div>
     );
   }
@@ -247,7 +328,17 @@ export function QuestionnaireQuestionWizard({
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {currentQuestion && !currentQuestion.is_required && (
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={readOnly || saving}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-zinc-200 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Skip
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void handleNext()}
@@ -255,7 +346,7 @@ export function QuestionnaireQuestionWizard({
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-          {isLast ? "Submit category" : "Next"}
+          Next
         </button>
       </div>
     </div>
