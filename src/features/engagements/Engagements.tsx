@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementDrawer } from "./EngagementDrawer";
+import { ManageEngagementParticipantsModal } from "./ManageEngagementParticipantsModal";
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -1046,6 +1047,7 @@ export function Engagements({
   const [employeeSearch, setEmployeeSearch] = useState("");
 
   const [typesModalOpen, setTypesModalOpen] = useState(false);
+  const [manageParticipantsOpen, setManageParticipantsOpen] = useState(false);
 
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [checklistEngagement, setChecklistEngagement] = useState<EngagementListItem | null>(null);
@@ -1868,6 +1870,13 @@ export function Engagements({
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setManageParticipantsOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
+          >
+            <ArrowRightLeft className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Manage Engagement Participants</span>
+          </button>
+          <button
             onClick={() => setTypesModalOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
           >
@@ -2318,6 +2327,12 @@ export function Engagements({
         open={checklistModalOpen}
         onClose={closeChecklistModal}
         engagement={checklistEngagement}
+        onChanged={() => void fetchList()}
+      />
+
+      <ManageEngagementParticipantsModal
+        open={manageParticipantsOpen}
+        onClose={() => setManageParticipantsOpen(false)}
         onChanged={() => void fetchList()}
       />
 

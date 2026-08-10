@@ -2106,6 +2106,17 @@ export const participantsApi = {
       `/engagements/${engagementId}/participants/${userId}`,
       { participant_department }
     ),
+  moveToEngagement: (sourceEngagementId: number, userId: number, targetEngagementId: number) =>
+    api.post<{
+      data: {
+        source_engagement_id: number;
+        target_engagement_id: number;
+        user_id: number;
+        source_remaining_participant_count: number;
+      };
+    }>(`/engagements/${sourceEngagementId}/participants/${userId}/move`, {
+      target_engagement_id: targetEngagementId,
+    }),
 };
 
 // Engagement Questionnaire Status
