@@ -27,6 +27,10 @@ function participantDisplayName(p: Participant): string {
   return name || p.phone || p.email || `User #${p.user_id}`;
 }
 
+function participantSecondary(p: Participant): string {
+  return [p.phone, p.email].filter(Boolean).join(" · ") || `User #${p.user_id}`;
+}
+
 function matchesEngagementQuery(engagement: EngagementListItem, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -104,7 +108,7 @@ export function ManageEngagementParticipantsModal({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participantsError, setParticipantsError] = useState<string | null>(null);
-  const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<Set<number>>(new Set());
 
   const [targetQuery, setTargetQuery] = useState("");
   const [targetEngagement, setTargetEngagement] = useState<EngagementListItem | null>(null);
@@ -125,7 +129,7 @@ export function ManageEngagementParticipantsModal({
     setSourceEngagement(null);
     setParticipants([]);
     setParticipantsError(null);
-    setSelectedParticipant(null);
+    setSelectedParticipantIds(new Set());
     setTargetQuery("");
     setTargetEngagement(null);
     setMoveConfirmOpen(false);
@@ -177,6 +181,14 @@ export function ManageEngagementParticipantsModal({
     );
   }, [allEngagements, sourceEngagement, targetQuery]);
 
+  const selectedParticipants = useMemo(
+    () => participants.filter((p) => selectedParticipantIds.has(p.user_id)),
+    [participants, selectedParticipantIds]
+  );
+
+  const allParticipantsSelected =
+    participants.length > 0 && selectedParticipantIds.size === participants.length;
+
   const loadParticipants = useCallback(async (engagementId: number) => {
     setParticipantsLoading(true);
     setParticipantsError(null);
@@ -193,7 +205,7 @@ export function ManageEngagementParticipantsModal({
 
   const handleSelectSource = (engagement: EngagementListItem) => {
     setSourceEngagement(engagement);
-    setSelectedParticipant(null);
+    setSelectedParticipantIds(new Set());
     setTargetEngagement(null);
     setTargetQuery("");
     setMoveConfirmOpen(false);
@@ -201,16 +213,29 @@ export function ManageEngagementParticipantsModal({
     void loadParticipants(engagement.engagement_id);
   };
 
-  const handleSelectParticipant = (participant: Participant) => {
-    setSelectedParticipant(participant);
-    setTargetEngagement(null);
-    setTargetQuery("");
+  const toggleParticipant = (participant: Participant) => {
+    setSelectedParticipantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(participant.user_id)) next.delete(participant.user_id);
+      else next.add(participant.user_id);
+      return next;
+    });
+    setMoveConfirmOpen(false);
+    setMoveError(null);
+  };
+
+  const toggleSelectAllParticipants = () => {
+    if (allParticipantsSelected) {
+      setSelectedParticipantIds(new Set());
+    } else {
+      setSelectedParticipantIds(new Set(participants.map((p) => p.user_id)));
+    }
     setMoveConfirmOpen(false);
     setMoveError(null);
   };
 
   const openMoveConfirm = () => {
-    if (!sourceEngagement || !selectedParticipant || !targetEngagement || moving) return;
+    if (!sourceEngagement || selectedParticipants.length === 0 || !targetEngagement || moving) return;
     setMoveError(null);
     setMoveConfirmOpen(true);
   };
@@ -221,20 +246,20 @@ export function ManageEngagementParticipantsModal({
   };
 
   const handleConfirmMove = async () => {
-    if (!sourceEngagement || !selectedParticipant || !targetEngagement) return;
+    if (!sourceEngagement || selectedParticipants.length === 0 || !targetEngagement) return;
     setMoving(true);
     setMoveError(null);
     try {
-      const res = await participantsApi.moveToEngagement(
+      const res = await participantsApi.moveManyToEngagement(
         sourceEngagement.engagement_id,
-        selectedParticipant.user_id,
+        selectedParticipants.map((p) => p.user_id),
         targetEngagement.engagement_id
       );
       const remaining = res.data.data.source_remaining_participant_count;
       onChanged?.();
 
       setMoveConfirmOpen(false);
-      setSelectedParticipant(null);
+      setSelectedParticipantIds(new Set());
       setTargetEngagement(null);
 
       if (remaining === 0) {
@@ -280,8 +305,9 @@ export function ManageEngagementParticipantsModal({
     onClose();
   };
 
-  const showTargetSection = !!selectedParticipant && !!sourceEngagement;
-  const canMove = !!sourceEngagement && !!selectedParticipant && !!targetEngagement && !moving;
+  const showTargetSection = selectedParticipants.length > 0 && !!sourceEngagement;
+  const canMove =
+    !!sourceEngagement && selectedParticipants.length > 0 && !!targetEngagement && !moving;
 
   return (
     <>
@@ -293,7 +319,8 @@ export function ManageEngagementParticipantsModal({
       >
         <div className="space-y-4">
           <p className="text-sm text-zinc-600">
-            Select a source engagement, pick one participant, choose a target engagement, then move.
+            Select a source engagement, select one or more participants, choose a target
+            engagement, then move.
           </p>
 
           <div className="flex flex-col lg:flex-row gap-4 items-stretch">
@@ -346,15 +373,26 @@ export function ManageEngagementParticipantsModal({
             </section>
 
             <section className="flex-1 min-w-0 space-y-3 rounded-lg border border-zinc-200 p-3">
-              <h3 className="text-sm font-medium text-zinc-900">
-                2. Participants
-                {sourceEngagement ? (
-                  <span className="font-normal text-zinc-500">
-                    {" "}
-                    — {formatEngagementLabel(sourceEngagement)}
-                  </span>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-medium text-zinc-900">
+                  2. Participants
+                  {sourceEngagement ? (
+                    <span className="font-normal text-zinc-500">
+                      {" "}
+                      — {formatEngagementLabel(sourceEngagement)}
+                    </span>
+                  ) : null}
+                </h3>
+                {sourceEngagement && participants.length > 0 && !participantsLoading ? (
+                  <button
+                    type="button"
+                    onClick={toggleSelectAllParticipants}
+                    className="text-xs font-medium text-zinc-600 hover:text-zinc-900"
+                  >
+                    {allParticipantsSelected ? "Clear all" : "Select all"}
+                  </button>
                 ) : null}
-              </h3>
+              </div>
               {!sourceEngagement ? (
                 <p className="text-sm text-zinc-500 py-8 text-center">
                   Select a source engagement to list participants.
@@ -362,6 +400,11 @@ export function ManageEngagementParticipantsModal({
               ) : (
                 <>
                   {participantsError ? <p className="text-sm text-red-600">{participantsError}</p> : null}
+                  {selectedParticipants.length > 0 ? (
+                    <p className="text-xs text-zinc-500">
+                      {selectedParticipants.length} selected
+                    </p>
+                  ) : null}
                   <ul className="max-h-72 overflow-y-auto rounded-lg border border-zinc-200 divide-y divide-zinc-100">
                     {participantsLoading ? (
                       <li className="px-3 py-4 text-sm text-zinc-500 flex items-center gap-2">
@@ -371,24 +414,29 @@ export function ManageEngagementParticipantsModal({
                       <li className="px-3 py-4 text-sm text-zinc-500">No participants in this engagement</li>
                     ) : (
                       participants.map((participant) => {
-                        const selected = selectedParticipant?.user_id === participant.user_id;
+                        const selected = selectedParticipantIds.has(participant.user_id);
                         return (
                           <li key={`${participant.user_id}-${participant.engagement_participant_id ?? ""}`}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectParticipant(participant)}
-                              className={`w-full px-3 py-2.5 text-left hover:bg-zinc-50 ${
+                            <label
+                              className={`flex items-start gap-3 w-full px-3 py-2.5 text-left cursor-pointer hover:bg-zinc-50 ${
                                 selected ? "bg-zinc-50 ring-1 ring-inset ring-zinc-300" : ""
                               }`}
                             >
-                              <div className="text-sm text-zinc-900">
-                                {participantDisplayName(participant)}
-                              </div>
-                              <div className="text-xs text-zinc-500 truncate">
-                                {[participant.phone, participant.email].filter(Boolean).join(" · ") ||
-                                  `User #${participant.user_id}`}
-                              </div>
-                            </button>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleParticipant(participant)}
+                                className="mt-1 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm text-zinc-900">
+                                  {participantDisplayName(participant)}
+                                </span>
+                                <span className="block text-xs text-zinc-500 truncate">
+                                  {participantSecondary(participant)}
+                                </span>
+                              </span>
+                            </label>
                           </li>
                         );
                       })
@@ -404,8 +452,8 @@ export function ManageEngagementParticipantsModal({
                 disabled={!canMove}
                 onClick={openMoveConfirm}
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Move participant to selected engagement"
-                title="Move participant"
+                aria-label="Move selected participants to selected engagement"
+                title="Move participants"
               >
                 <ArrowRight className="w-4 h-4 lg:rotate-0 rotate-90" />
               </button>
@@ -415,7 +463,7 @@ export function ManageEngagementParticipantsModal({
               <h3 className="text-sm font-medium text-zinc-900">3. Target engagement</h3>
               {!showTargetSection ? (
                 <p className="text-sm text-zinc-500 py-8 text-center">
-                  Click a participant to choose a target engagement.
+                  Select one or more participants to choose a target engagement.
                 </p>
               ) : (
                 <>
@@ -469,41 +517,50 @@ export function ManageEngagementParticipantsModal({
             </section>
           </div>
 
-          {moveError ? <p className="text-sm text-red-600">{moveError}</p> : null}
+          {moveError && !moveConfirmOpen ? <p className="text-sm text-red-600">{moveError}</p> : null}
         </div>
       </Modal>
 
       <Modal
-        open={moveConfirmOpen && !!selectedParticipant && !!targetEngagement && !!sourceEngagement}
+        open={
+          moveConfirmOpen &&
+          selectedParticipants.length > 0 &&
+          !!targetEngagement &&
+          !!sourceEngagement
+        }
         onClose={closeMoveConfirm}
         title="Confirm move"
         maxWidthClassName="max-w-md"
       >
         <div className="space-y-4">
           <p className="text-sm text-zinc-700">
-            Are you sure you want to move the selected participant to the selected engagement?
+            Are you sure you want to move the selected participant
+            {selectedParticipants.length === 1 ? "" : "s"} to the selected engagement?
           </p>
 
-          {selectedParticipant ? (
-            <div className="rounded-lg border border-zinc-200 p-3 space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Participant</p>
-              <p className="text-sm font-medium text-zinc-900">
-                {participantDisplayName(selectedParticipant)}
+          <div className="rounded-lg border border-zinc-200 p-3 space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Participant{selectedParticipants.length === 1 ? "" : "s"} ({selectedParticipants.length})
+            </p>
+            <ul className="max-h-40 overflow-y-auto divide-y divide-zinc-100">
+              {selectedParticipants.map((participant) => (
+                <li key={participant.user_id} className="py-2 first:pt-0 last:pb-0">
+                  <p className="text-sm font-medium text-zinc-900">
+                    {participantDisplayName(participant)}
+                  </p>
+                  <p className="text-xs text-zinc-500">{participantSecondary(participant)}</p>
+                </li>
+              ))}
+            </ul>
+            {sourceEngagement ? (
+              <p className="text-xs text-zinc-500 pt-1 border-t border-zinc-100">
+                From: {formatEngagementLabel(sourceEngagement)}
+                {formatEngagementSecondary(sourceEngagement)
+                  ? ` · ${formatEngagementSecondary(sourceEngagement)}`
+                  : ""}
               </p>
-              <p className="text-xs text-zinc-500">
-                {[selectedParticipant.phone, selectedParticipant.email].filter(Boolean).join(" · ") ||
-                  `User #${selectedParticipant.user_id}`}
-              </p>
-              {sourceEngagement ? (
-                <p className="text-xs text-zinc-500">
-                  From: {formatEngagementLabel(sourceEngagement)}
-                  {formatEngagementSecondary(sourceEngagement)
-                    ? ` · ${formatEngagementSecondary(sourceEngagement)}`
-                    : ""}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+          </div>
 
           {targetEngagement ? (
             <div className="rounded-lg border border-zinc-200 p-3 space-y-1">

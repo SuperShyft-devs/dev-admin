@@ -2111,11 +2111,29 @@ export const participantsApi = {
       data: {
         source_engagement_id: number;
         target_engagement_id: number;
-        user_id: number;
+        user_ids: number[];
+        moved_count: number;
         source_remaining_participant_count: number;
       };
     }>(`/engagements/${sourceEngagementId}/participants/${userId}/move`, {
       target_engagement_id: targetEngagementId,
+    }),
+  moveManyToEngagement: (
+    sourceEngagementId: number,
+    userIds: number[],
+    targetEngagementId: number
+  ) =>
+    api.post<{
+      data: {
+        source_engagement_id: number;
+        target_engagement_id: number;
+        user_ids: number[];
+        moved_count: number;
+        source_remaining_participant_count: number;
+      };
+    }>(`/engagements/${sourceEngagementId}/participants/move`, {
+      target_engagement_id: targetEngagementId,
+      user_ids: userIds,
     }),
 };
 
