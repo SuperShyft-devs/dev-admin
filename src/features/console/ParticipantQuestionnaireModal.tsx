@@ -9,6 +9,7 @@ import {
   type Participant,
 } from "../../lib/api";
 import {
+  filterConsoleQuestionnaireCategories,
   pickLatestMetsightsAssessment,
   sortCategories,
 } from "./consoleQuestionnaireUtils";
@@ -71,7 +72,9 @@ export function ParticipantQuestionnaireModal({
         picked.assessment_instance_id,
         { category_of: "metsights" }
       );
-      setCategories(sortCategories(statusRes.data.data ?? []));
+      setCategories(
+        sortCategories(filterConsoleQuestionnaireCategories(statusRes.data.data ?? []))
+      );
     } catch (err) {
       setError(getApiError(err));
       setAssessment(null);
