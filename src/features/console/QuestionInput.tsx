@@ -15,6 +15,29 @@ function optionLabel(opt: { display_name?: string | null; option_value?: string 
   return String(opt.display_name || opt.option_value || "").trim() || "—";
 }
 
+function isInchUnit(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized === "in" ||
+    normalized === "inch" ||
+    normalized === "inches" ||
+    normalized === '"'
+  );
+}
+
+function defaultScaleUnit(
+  options?: Array<{ option_value?: string | null; display_name?: string | null }> | null
+): string {
+  const list = options ?? [];
+  const inch = list.find((opt) => {
+    const value = String(opt.option_value ?? "").trim();
+    const label = String(opt.display_name ?? "").trim();
+    return isInchUnit(value) || isInchUnit(label);
+  });
+  if (inch) return String(inch.option_value ?? "").trim();
+  return String(list[0]?.option_value ?? "").trim();
+}
+
 export function QuestionInput({ question, value, onChange, disabled }: QuestionInputProps) {
   const questionType = normalizeType(question.question_type);
 
@@ -101,12 +124,14 @@ export function QuestionInput({ question, value, onChange, disabled }: QuestionI
   }
 
   if (questionType === "scale") {
+    const fallbackUnit = defaultScaleUnit(question.options);
     const scaleValue =
       value != null && typeof value === "object" && !Array.isArray(value)
         ? (value as { value?: unknown; unit?: unknown })
-        : { value: value, unit: question.options?.[0]?.option_value };
+        : { value: value, unit: fallbackUnit };
     const num = scaleValue.value ?? "";
-    const unit = String(scaleValue.unit ?? question.options?.[0]?.option_value ?? "");
+    const rawUnit = String(scaleValue.unit ?? "").trim();
+    const unit = rawUnit || fallbackUnit;
     return (
       <div className="flex flex-col sm:flex-row gap-3">
         <input

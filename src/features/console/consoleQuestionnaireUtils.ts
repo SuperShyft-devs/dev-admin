@@ -174,8 +174,22 @@ export function normalizeAnswerForQuestion(
     const primitive = Array.isArray(rawAnswer) ? rawAnswer[0] : rawAnswer;
     const coerced = Number(primitive);
     if (!Number.isFinite(coerced)) return null;
-    const firstOpt = Array.isArray(question.options) ? question.options[0] : null;
-    const unitCode = String(firstOpt?.option_value ?? "").trim();
+    const options = Array.isArray(question.options) ? question.options : [];
+    const inchOpt = options.find((opt) => {
+      const value = String(opt.option_value ?? "").trim().toLowerCase();
+      const label = String(opt.display_name ?? "").trim().toLowerCase();
+      return (
+        value === "in" ||
+        value === "inch" ||
+        value === "inches" ||
+        label === "in" ||
+        label === "inch" ||
+        label === "inches"
+      );
+    });
+    const unitCode = String(
+      (inchOpt ?? options[0])?.option_value ?? ""
+    ).trim();
     if (!unitCode) return null;
     return { value: coerced, unit: unitCode };
   }
