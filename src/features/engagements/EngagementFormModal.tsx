@@ -44,11 +44,16 @@ function toNumberOrNull(value: string): number | null {
 }
 
 function needsAssessment(kind: EngagementKind): boolean {
-  return kind === "bio_ai" || kind === "bio_ai_with_consultation";
+  return kind === "bio_ai" || kind === "bio_ai_with_consultation" || kind === "vifc";
 }
 
 function needsDiagnostic(kind: EngagementKind): boolean {
-  return kind === "blood_test" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation";
+  return (
+    kind === "bio_ai" ||
+    kind === "blood_test" ||
+    kind === "blood_test_with_consultation" ||
+    kind === "bio_ai_with_consultation"
+  );
 }
 
 function needsConsultation(kind: EngagementKind): boolean {
@@ -74,6 +79,10 @@ function needsSlotDuration(kind: EngagementKind): boolean {
 
 function needsMetsightsFields(kind: EngagementKind): boolean {
   return kind === "bio_ai" || kind === "bio_ai_with_consultation";
+}
+
+function needsFitPrint(kind: EngagementKind): boolean {
+  return kind === "bio_ai" || kind === "bio_ai_with_consultation" || kind === "vifc";
 }
 
 type Props = {
@@ -133,8 +142,15 @@ export function EngagementFormModal({
 
   useEffect(() => {
     expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
-    engagementTypesApi.list().then((res) => setEngagementTypes(res.data.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    engagementTypesApi
+      .list()
+      .then((res) => setEngagementTypes(res.data.data ?? []))
+      .catch(() => setEngagementTypes([]));
+  }, [open]);
 
   const checkZoneId = useCallback(
     async (
@@ -433,6 +449,7 @@ export function EngagementFormModal({
       showBlood && formData.blood_collection_type === "camp_collection";
     const showZone = kind ? needsHealthiansZone(kind) : false;
     const showMetsights = kind ? needsMetsightsFields(kind) : false;
+    const showFitPrint = kind ? needsFitPrint(kind) : false;
     const showSlot = kind ? needsSlotDuration(kind) : false;
 
     onSubmit({
@@ -455,7 +472,7 @@ export function EngagementFormModal({
       create_profile_on_metsights: showMetsights
         ? Boolean(formData.create_profile_on_metsights)
         : false,
-      enroll_for_fitprint_full: showMetsights
+      enroll_for_fitprint_full: showFitPrint
         ? Boolean(formData.enroll_for_fitprint_full)
         : false,
     });
@@ -491,6 +508,9 @@ export function EngagementFormModal({
     : false;
   const showMetsightsFields = selectedTypeCode
     ? needsMetsightsFields(selectedTypeCode)
+    : false;
+  const showFitPrint = selectedTypeCode
+    ? needsFitPrint(selectedTypeCode)
     : false;
 
   return (
@@ -707,11 +727,13 @@ export function EngagementFormModal({
                 <option value="" disabled>
                   Select type
                 </option>
-                {engagementTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.display_name}
-                  </option>
-                ))}
+                {engagementTypes
+                  .filter((t) => t.is_active)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.display_name}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -926,32 +948,35 @@ export function EngagementFormModal({
                     </p>
                   )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">
-                    Enroll For FitPrint Full
-                  </label>
-                  <div className="flex gap-5 py-2">
-                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                      <input
-                        type="radio"
-                        name="enroll_for_fitprint_full"
-                        checked={Boolean(formData.enroll_for_fitprint_full)}
-                        onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
-                      />
-                      Yes
-                    </label>
-                    <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
-                      <input
-                        type="radio"
-                        name="enroll_for_fitprint_full"
-                        checked={!formData.enroll_for_fitprint_full}
-                        onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
-                      />
-                      No
-                    </label>
-                  </div>
-                </div>
               </>
+            )}
+
+            {showFitPrint && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Enroll For FitPrint Full
+                </label>
+                <div className="flex gap-5 py-2">
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="enroll_for_fitprint_full"
+                      checked={Boolean(formData.enroll_for_fitprint_full)}
+                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: true })}
+                    />
+                    Yes
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="enroll_for_fitprint_full"
+                      checked={!formData.enroll_for_fitprint_full}
+                      onChange={() => setFormData({ ...formData, enroll_for_fitprint_full: false })}
+                    />
+                    No
+                  </label>
+                </div>
+              </div>
             )}
           </div>
         )}

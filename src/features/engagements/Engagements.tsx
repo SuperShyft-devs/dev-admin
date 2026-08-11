@@ -949,7 +949,6 @@ export function Engagements({
   const statusFilterRef = useRef<HTMLDivElement>(null);
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
-  const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
   const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [orgViewOpen, setOrgViewOpen] = useState(false);
@@ -1147,11 +1146,9 @@ export function Engagements({
     engagementsApi
       .filterOptions()
       .then((res) => {
-        setTypeOptions(res.data.data.engagement_types);
         setCityOptions(res.data.data.cities);
       })
       .catch(() => {
-        setTypeOptions([]);
         setCityOptions([]);
       });
   }, []);
@@ -1944,11 +1941,13 @@ export function Engagements({
             className="flex-1 sm:flex-none sm:w-auto px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
           >
             <option value="">All types</option>
-            {typeOptions.map((type) => (
-              <option key={type} value={type}>
-                {getTypeDisplayName(type)}
-              </option>
-            ))}
+            {engagementTypes
+              .filter((t) => t.is_active)
+              .map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.display_name}
+                </option>
+              ))}
           </select>
           <select
             value={cityFilter}
