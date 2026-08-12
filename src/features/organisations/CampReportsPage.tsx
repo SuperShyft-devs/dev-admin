@@ -82,7 +82,19 @@ function formatFieldLabel(key: string): string {
     return `People in ${key.slice("enrolled.".length)}`;
   }
   if (key.startsWith("percent.")) {
-    return `Share in ${key.slice("percent.".length)} (%)`;
+    const band = key.slice("percent.".length);
+    if (
+      band === "optimal" ||
+      band === "low_risk" ||
+      band === "increased_risk" ||
+      band === "high_risk"
+    ) {
+      return `Share in ${band.replace(/_/g, " ")} (%)`;
+    }
+    return `Share in ${band} (%)`;
+  }
+  if (key.startsWith("count.")) {
+    return `People in ${key.slice("count.".length).replace(/_/g, " ")}`;
   }
   const labels: Record<string, string> = {
     employees_enrolled: "People enrolled",
@@ -102,6 +114,10 @@ function formatFieldLabel(key: string): string {
     total_enrolled: "Total people enrolled",
     age_group: "Age groups",
     buckets_sum: "Age-group counts add up",
+    group: "Risk groups",
+    elevated_metabolic_score: "Elevated metabolic score (%)",
+    counts_sum: "Risk-group counts add up",
+    elevated_consistency: "Elevated % matches Increased + High",
   };
   if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
@@ -150,6 +166,8 @@ function BtsModalBody({
   data: Record<string, unknown> | null;
 }) {
   const [openAgeGroups, setOpenAgeGroups] = useState<Record<string, boolean>>({});
+  const [openOrsBands, setOpenOrsBands] = useState<Record<string, boolean>>({});
+  const [openOrsExcluded, setOpenOrsExcluded] = useState(false);
   const [openRiskPeople, setOpenRiskPeople] = useState(false);
   const [openQuestionnaireByEngagement, setOpenQuestionnaireByEngagement] = useState(false);
   const [openBioAiMismatch, setOpenBioAiMismatch] = useState(false);
@@ -218,12 +236,41 @@ function BtsModalBody({
   const bioAiMismatchPeople = Array.isArray(bioAiMismatch?.people)
     ? (bioAiMismatch.people as Record<string, unknown>[])
     : [];
+  const elevatedMath =
+    details?.elevated_math && typeof details.elevated_math === "object"
+      ? (details.elevated_math as Record<string, unknown>)
+      : null;
+  const elevatedMathSteps = Array.isArray(elevatedMath?.steps)
+    ? elevatedMath.steps.filter((s): s is string => typeof s === "string")
+    : [];
+  const orsBands =
+    details?.bands && typeof details.bands === "object"
+      ? (details.bands as Record<string, unknown>)
+      : null;
+  const orsExcluded =
+    details?.excluded && typeof details.excluded === "object"
+      ? (details.excluded as Record<string, unknown>)
+      : null;
+  const orsExcludedPeople = Array.isArray(orsExcluded?.people)
+    ? (orsExcluded.people as Record<string, unknown>[])
+    : [];
+  const orsBandRules = Array.isArray(method?.band_rules)
+    ? (method.band_rules as Record<string, unknown>[])
+    : [];
 
   function formatRiskGroupLabel(value: unknown): string {
     if (value === "high") return "High";
     if (value === "caution") return "Caution";
     if (value === "good") return "Good";
     return value == null ? "—" : String(value);
+  }
+
+  function formatOrsBandLabel(band: string): string {
+    if (band === "optimal") return "Optimal";
+    if (band === "low_risk") return "Low Risk";
+    if (band === "increased_risk") return "Increased Risk";
+    if (band === "high_risk") return "High Risk";
+    return band.replace(/_/g, " ");
   }
 
   if (fields || status === "ok" || status === "mismatch") {
@@ -266,6 +313,16 @@ function BtsModalBody({
             {typeof method.counting_rule === "string" && (
               <p className="text-[12px] text-zinc-600">{method.counting_rule}</p>
             )}
+            {typeof method.who_is_included === "string" && (
+              <p className="text-[12px] text-zinc-600">
+                Included: {method.who_is_included}
+              </p>
+            )}
+            {typeof method.who_is_excluded === "string" && (
+              <p className="text-[12px] text-zinc-600">
+                Not included: {method.who_is_excluded}
+              </p>
+            )}
             {typeof method.reference_date === "string" && (
               <p className="text-[12px] text-zinc-600">
                 Age as of{" "}
@@ -274,6 +331,23 @@ function BtsModalBody({
                   : "camp start"}{" "}
                 ({method.reference_date}).
               </p>
+            )}
+            {orsBandRules.length > 0 && (
+              <ul className="space-y-0.5 pt-1">
+                {orsBandRules.map((rule, idx) => {
+                  const band = typeof rule.band === "string" ? rule.band : "";
+                  const range =
+                    typeof rule.score_range_label === "string"
+                      ? rule.score_range_label
+                      : "";
+                  if (!band) return null;
+                  return (
+                    <li key={`${band}-${idx}`} className="text-[11px] text-zinc-600">
+                      {formatOrsBandLabel(band)}: metabolic score {range}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
             <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 pt-1">
               {(
@@ -284,6 +358,11 @@ function BtsModalBody({
                   { key: "age_from_date_of_birth", label: "Age from date of birth" },
                   { key: "age_from_profile", label: "Age from profile" },
                   { key: "under_18_count", label: "Under 18" },
+                  { key: "total_enrolled", label: "People enrolled" },
+                  { key: "bio_ai_reports", label: "Bio AI reports" },
+                  { key: "with_metabolic_score", label: "With metabolic score" },
+                  { key: "missing_metabolic_score", label: "Missing metabolic score" },
+                  { key: "excluded_people_count", label: "Not in this chart" },
                 ] as const
               ).map((item) =>
                 method[item.key] == null ? null : (
@@ -308,6 +387,29 @@ function BtsModalBody({
                 ))}
               </ul>
             )}
+          </div>
+        )}
+
+        {elevatedMathSteps.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
+            <p className="text-xs font-medium text-zinc-800">
+              Elevated metabolic score — step by step
+            </p>
+            {typeof elevatedMath?.result_percent === "number" && (
+              <p className="text-[12px] text-zinc-600">
+                Result:{" "}
+                <span className="font-medium text-zinc-800 tabular-nums">
+                  {elevatedMath.result_percent}%
+                </span>
+              </p>
+            )}
+            <ol className="space-y-1.5 list-none">
+              {elevatedMathSteps.map((step) => (
+                <li key={step} className="text-[12px] text-zinc-700 leading-relaxed">
+                  {step}
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 
@@ -514,6 +616,147 @@ function BtsModalBody({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {orsBands && Object.keys(orsBands).length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Who is in each risk group
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {Object.entries(orsBands).map(([band, raw]) => {
+                const groupData =
+                  raw && typeof raw === "object"
+                    ? (raw as Record<string, unknown>)
+                    : null;
+                const count =
+                  groupData && typeof groupData.count === "number"
+                    ? groupData.count
+                    : null;
+                const rangeLabel =
+                  groupData && typeof groupData.score_range_label === "string"
+                    ? groupData.score_range_label
+                    : null;
+                const people = Array.isArray(groupData?.people)
+                  ? (groupData.people as Record<string, unknown>[])
+                  : [];
+                const open = openOrsBands[band] ?? false;
+                return (
+                  <div key={band}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenOrsBands((prev) => ({
+                          ...prev,
+                          [band]: !open,
+                        }))
+                      }
+                    >
+                      {open ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">
+                        {formatOrsBandLabel(band)}
+                      </span>
+                      {rangeLabel && (
+                        <span className="text-[11px] text-zinc-500">score {rangeLabel}</span>
+                      )}
+                      <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                        {count == null ? "—" : `${count} people`}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="px-3 pb-3 overflow-x-auto">
+                        {people.length === 0 ? (
+                          <p className="text-[11px] text-zinc-500 px-1">No one in this group.</p>
+                        ) : (
+                          <table className="w-full text-[11px] text-left">
+                            <thead>
+                              <tr className="text-zinc-500 border-b border-zinc-100">
+                                <th className="py-1.5 pr-3 font-medium">Name</th>
+                                <th className="py-1.5 pr-3 font-medium">User ID</th>
+                                <th className="py-1.5 font-medium">Metabolic score</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-50">
+                              {people.map((person, idx) => (
+                                <tr key={`${String(person.user_id)}-${idx}`}>
+                                  <td className="py-1.5 pr-3 text-zinc-800">
+                                    {person.name == null ? "—" : String(person.name)}
+                                  </td>
+                                  <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                                    {person.user_id == null ? "—" : String(person.user_id)}
+                                  </td>
+                                  <td className="py-1.5 text-zinc-700 tabular-nums">
+                                    {person.metabolic_score == null
+                                      ? "—"
+                                      : String(person.metabolic_score)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {orsExcludedPeople.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenOrsExcluded((prev) => !prev)}
+            >
+              {openOrsExcluded ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                Not included in this chart
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {orsExcludedPeople.length} people
+              </span>
+            </button>
+            {openOrsExcluded && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100">
+                <table className="w-full text-[11px] text-left">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-100">
+                      <th className="py-1.5 pr-3 font-medium">Name</th>
+                      <th className="py-1.5 pr-3 font-medium">User ID</th>
+                      <th className="py-1.5 font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {orsExcludedPeople.map((person, idx) => (
+                      <tr key={`${String(person.user_id)}-${idx}`}>
+                        <td className="py-1.5 pr-3 text-zinc-800">
+                          {person.name == null ? "—" : String(person.name)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {person.user_id == null ? "—" : String(person.user_id)}
+                        </td>
+                        <td className="py-1.5 text-zinc-700">
+                          {person.reason == null ? "—" : String(person.reason)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
