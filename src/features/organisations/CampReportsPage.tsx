@@ -91,6 +91,11 @@ function formatFieldLabel(key: string): string {
     total_blood_test: "Blood tests completed",
     blood_test_percent: "Blood-test coverage (%)",
     high_risk_group: "High-risk group",
+    caution_risk_group: "Caution-risk group",
+    good_risk_group: "Good-risk group",
+    questionnaire_completed: "Questionnaire completed",
+    bio_ai_report_generated: "Bio AI reports generated",
+    risk_groups_sum: "Risk groups add up to Bio AI",
     doctor_consultation: "Doctor consultations",
     nutritionist_consultation: "Nutritionist consultations",
     doctor_and_nutritionist_consultation: "Doctor and nutritionist consultations",
@@ -145,6 +150,9 @@ function BtsModalBody({
   data: Record<string, unknown> | null;
 }) {
   const [openAgeGroups, setOpenAgeGroups] = useState<Record<string, boolean>>({});
+  const [openRiskPeople, setOpenRiskPeople] = useState(false);
+  const [openQuestionnaireByEngagement, setOpenQuestionnaireByEngagement] = useState(false);
+  const [openBioAiMismatch, setOpenBioAiMismatch] = useState(false);
 
   if (data == null) {
     return (
@@ -189,6 +197,34 @@ function BtsModalBody({
   const notes = Array.isArray(details?.notes)
     ? details.notes.filter((n): n is string => typeof n === "string")
     : [];
+  const riskGroups =
+    details?.risk_groups && typeof details.risk_groups === "object"
+      ? (details.risk_groups as Record<string, unknown>)
+      : null;
+  const riskPeople = Array.isArray(riskGroups?.people)
+    ? (riskGroups.people as Record<string, unknown>[])
+    : [];
+  const questionnaireDetails =
+    details?.questionnaire && typeof details.questionnaire === "object"
+      ? (details.questionnaire as Record<string, unknown>)
+      : null;
+  const questionnaireByEngagement = Array.isArray(questionnaireDetails?.by_engagement)
+    ? (questionnaireDetails.by_engagement as Record<string, unknown>[])
+    : [];
+  const bioAiMismatch =
+    details?.bio_ai_mismatch && typeof details.bio_ai_mismatch === "object"
+      ? (details.bio_ai_mismatch as Record<string, unknown>)
+      : null;
+  const bioAiMismatchPeople = Array.isArray(bioAiMismatch?.people)
+    ? (bioAiMismatch.people as Record<string, unknown>[])
+    : [];
+
+  function formatRiskGroupLabel(value: unknown): string {
+    if (value === "high") return "High";
+    if (value === "caution") return "Caution";
+    if (value === "good") return "Good";
+    return value == null ? "—" : String(value);
+  }
 
   if (fields || status === "ok" || status === "mismatch") {
     const statusClass =
@@ -478,6 +514,185 @@ function BtsModalBody({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {riskPeople.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenRiskPeople((prev) => !prev)}
+            >
+              {openRiskPeople ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                People by risk group (body age vs actual age)
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {riskPeople.length} people
+              </span>
+            </button>
+            {openRiskPeople && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100">
+                <table className="w-full text-[11px] text-left">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-100">
+                      <th className="py-1.5 pr-3 font-medium">Name</th>
+                      <th className="py-1.5 pr-3 font-medium">Actual age</th>
+                      <th className="py-1.5 pr-3 font-medium">Body age</th>
+                      <th className="py-1.5 pr-3 font-medium">Difference</th>
+                      <th className="py-1.5 font-medium">Group</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {riskPeople.map((person, idx) => (
+                      <tr key={`${String(person.user_id)}-${idx}`}>
+                        <td className="py-1.5 pr-3 text-zinc-800">
+                          {person.name == null ? "—" : String(person.name)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {person.actual_age == null ? "—" : String(person.actual_age)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {person.metabolic_age == null ? "—" : String(person.metabolic_age)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {person.gap_years == null ? "—" : String(person.gap_years)}
+                        </td>
+                        <td className="py-1.5 text-zinc-700">
+                          {formatRiskGroupLabel(person.risk_group)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {questionnaireByEngagement.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenQuestionnaireByEngagement((prev) => !prev)}
+            >
+              {openQuestionnaireByEngagement ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                Questionnaire filled by session
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {questionnaireDetails?.sum_filled_cards == null
+                  ? `${questionnaireByEngagement.length} sessions`
+                  : `Sum ${String(questionnaireDetails.sum_filled_cards)}`}
+              </span>
+            </button>
+            {openQuestionnaireByEngagement && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100">
+                <table className="w-full text-[11px] text-left">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-100">
+                      <th className="py-1.5 pr-3 font-medium">Session</th>
+                      <th className="py-1.5 pr-3 font-medium">Filled</th>
+                      <th className="py-1.5 pr-3 font-medium">Partial</th>
+                      <th className="py-1.5 pr-3 font-medium">Not started</th>
+                      <th className="py-1.5 font-medium">Enrolled</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {questionnaireByEngagement.map((row, idx) => (
+                      <tr key={`${String(row.engagement_id)}-${idx}`}>
+                        <td className="py-1.5 pr-3 text-zinc-800">
+                          {row.engagement_name == null
+                            ? `Session ${String(row.engagement_id ?? "—")}`
+                            : String(row.engagement_name)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {row.filled == null ? "—" : String(row.filled)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {row.partially_filled == null ? "—" : String(row.partially_filled)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {row.not_started == null ? "—" : String(row.not_started)}
+                        </td>
+                        <td className="py-1.5 text-zinc-700 tabular-nums">
+                          {row.enrolled == null ? "—" : String(row.enrolled)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {bioAiMismatchPeople.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenBioAiMismatch((prev) => !prev)}
+            >
+              {openBioAiMismatch ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                Questionnaire vs Bio AI mismatches
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {bioAiMismatchPeople.length} people
+              </span>
+            </button>
+            {openBioAiMismatch && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100">
+                <table className="w-full text-[11px] text-left">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-100">
+                      <th className="py-1.5 pr-3 font-medium">Name</th>
+                      <th className="py-1.5 pr-3 font-medium">Questionnaire</th>
+                      <th className="py-1.5 pr-3 font-medium">Bio AI</th>
+                      <th className="py-1.5 font-medium">Why</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {bioAiMismatchPeople.map((person, idx) => {
+                      const reasons = Array.isArray(person.reasons)
+                        ? person.reasons.filter((r): r is string => typeof r === "string")
+                        : [];
+                      return (
+                        <tr key={`${String(person.user_id)}-${idx}`}>
+                          <td className="py-1.5 pr-3 text-zinc-800 align-top">
+                            {person.name == null ? "—" : String(person.name)}
+                          </td>
+                          <td className="py-1.5 pr-3 text-zinc-700 align-top">
+                            {person.questionnaire_completed ? "Completed" : "Not completed"}
+                          </td>
+                          <td className="py-1.5 pr-3 text-zinc-700 align-top">
+                            {person.bio_ai_report_generated ? "Generated" : "Missing"}
+                          </td>
+                          <td className="py-1.5 text-zinc-700 align-top">
+                            {reasons.length === 0 ? "—" : reasons.join(" ")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
