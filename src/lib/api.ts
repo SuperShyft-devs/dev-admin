@@ -2028,7 +2028,14 @@ export interface Participant {
   participants_employee_id?: string | null;
   participant_department?: string | null;
   participant_blood_group?: string | null;
-  consultations?: Record<string, ConsultationPreference | boolean | null> | null;
+  consultations?: Record<string, ConsultationPreference | boolean | null> | boolean | null;
+  questionnaires?: Record<string, boolean>;
+  reports?: {
+    blood_report_generated?: boolean;
+    blood_report_sent?: boolean;
+    bio_ai_report_generated?: boolean;
+    bio_ai_report_sent?: boolean;
+  };
   is_profile_created_on_metsights?: boolean | null;
   is_primary_record_id_synced?: boolean | null;
   is_fitprint_record_id_synced?: boolean | null;
