@@ -194,6 +194,7 @@ export function Organisations() {
         search: campsSearch.trim() || undefined,
         sort_by: campsSortKey,
         sort_dir: campsSortDir,
+        initialized_only: false,
       });
       const rows = res.data.data;
       setCampsData(rows);

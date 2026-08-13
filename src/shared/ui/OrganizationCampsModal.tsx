@@ -42,7 +42,11 @@ export function OrganizationCampsModal({
       let total = 0;
 
       while (true) {
-        const res = await organizationsApi.listCampsByOrganization(orgId, { page, limit: pageSize });
+        const res = await organizationsApi.listCampsByOrganization(orgId, {
+          page,
+          limit: pageSize,
+          initialized_only: false,
+        });
         const chunk = res.data.data ?? [];
         total = res.data.meta?.total ?? chunk.length;
         all = [...all, ...chunk];

@@ -878,6 +878,8 @@ export const organizationsApi = {
     search?: string;
     sort_by?: string;
     sort_dir?: "asc" | "desc";
+    /** When false, include camps that have not initialized camp reports (admin default). */
+    initialized_only?: boolean;
   }) =>
     api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/organizations/camps",
@@ -891,6 +893,7 @@ export const organizationsApi = {
       search?: string;
       sort_by?: string;
       sort_dir?: "asc" | "desc";
+      initialized_only?: boolean;
     }
   ) =>
     api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
