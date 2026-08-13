@@ -1478,6 +1478,29 @@ export interface EngagementLocationFields {
   longitude?: number | null;
 }
 
+export interface CabinBreak {
+  start_time: string;
+  end_time: string;
+}
+
+export interface CabinSlotConfig {
+  cabin_name: string;
+  cabin_key: string;
+  start_time: string;
+  end_time: string;
+  slot_duration: number;
+  capacity_per_slot: number;
+  breaks: CabinBreak[];
+  is_active: boolean;
+}
+
+export type SlotDetailSection = Record<string, CabinSlotConfig[]>;
+
+export interface SlotDetail {
+  blood_collection?: SlotDetailSection | null;
+  consultation?: SlotDetailSection | null;
+}
+
 export interface Engagement {
   engagement_id: number;
   engagement_name?: string | null;
@@ -1485,8 +1508,9 @@ export interface Engagement {
   organization_id?: number | null;
   camp_no?: number | null;
   engagement_code?: string | null;
-  engagement_type?: EngagementKind | string | null;
+  engagement_type?: EngagementKind | string | number | null;
   consultations?: Record<string, boolean> | null;
+  slot_detail?: SlotDetail | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
@@ -1524,8 +1548,9 @@ export interface EngagementListItem {
   organization_id?: number | null;
   camp_no?: number | null;
   engagement_code?: string | null;
-  engagement_type?: EngagementKind | string | null;
+  engagement_type?: EngagementKind | string | number | null;
   consultations?: Record<string, boolean> | null;
+  slot_detail?: SlotDetail | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
@@ -1565,6 +1590,7 @@ export interface EngagementCreate {
   camp_no?: number | null;
   engagement_type: EngagementKind | number;
   consultations?: Record<string, boolean> | null;
+  slot_detail?: SlotDetail | null;
   engagement_code?: string | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
