@@ -586,7 +586,7 @@ export function Organisations() {
     setCampActionError(null);
     try {
       await campReportsApi.deleteCamp(row.camp_no);
-      setCampActionMessage("Camp reports deleted successfully");
+      setCampActionMessage("All camp reports deleted successfully (main, department, city, and city × department)");
       setCampReportDeleteConfirm(null);
       fetchCamps();
     } catch (err) {
@@ -1451,8 +1451,9 @@ export function Organisations() {
           title="Delete Camp Reports"
         >
           <p className="text-zinc-600 text-sm mb-4">
-            This will delete the overall camp report and all department reports for camp &quot;
-            {campReportDeleteConfirm.camp_name}&quot;.
+            This will delete all reports for camp &quot;{campReportDeleteConfirm.camp_name}&quot;:
+            the main camp report, all department reports, all city reports, and all
+            city × department reports.
           </p>
           <div className="flex flex-col-reverse sm:flex-row gap-3">
             <button
