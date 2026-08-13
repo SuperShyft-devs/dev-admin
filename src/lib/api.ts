@@ -509,6 +509,13 @@ export const usersApi = {
 };
 
 // Participant journey (employee: per-user assessments + questionnaire)
+export interface ParticipantJourneyUnansweredQuestion {
+  question_id: number;
+  question_key?: string | null;
+  question_text?: string | null;
+  is_required: boolean;
+}
+
 export interface ParticipantJourneyCategoryProgress {
   category_id: number;
   display_name?: string | null;
@@ -518,6 +525,7 @@ export interface ParticipantJourneyCategoryProgress {
   is_submitted: boolean;
   has_responses: boolean;
   completed_at?: string | null;
+  unanswered?: ParticipantJourneyUnansweredQuestion[];
 }
 
 export interface ParticipantJourneyQuestionnaireRollup {
