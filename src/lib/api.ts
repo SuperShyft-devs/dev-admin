@@ -918,12 +918,13 @@ export const organizationsApi = {
 export interface CampListItem {
   camp_no: number;
   camp_name: string;
-  organization_id: number;
-  organization_name: string;
   start_date: string;
-  engagement_count: number;
-  department_count: number;
-  report_count: number;
+  year: number;
+  engagement_ids: number[];
+  departments: {
+    count: number;
+    departments: { name: string; slug: string }[];
+  };
 }
 
 export interface CampReportSection {

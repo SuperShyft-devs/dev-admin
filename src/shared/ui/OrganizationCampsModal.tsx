@@ -142,10 +142,10 @@ export function OrganizationCampsModal({
                 <tr className="border-b border-zinc-200 bg-zinc-50">
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">Camp No</th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">Camp name</th>
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">Year</th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">Start date</th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">Engagements</th>
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap hidden sm:table-cell">Departments</th>
-                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap hidden sm:table-cell">Reports</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,10 +153,10 @@ export function OrganizationCampsModal({
                   <tr key={c.camp_no} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50">
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">{c.camp_no}</td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-800 font-medium">{c.camp_name || "—"}</td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">{c.year}</td>
                     <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">{formatDate(c.start_date)}</td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">{c.engagement_count}</td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">{c.department_count}</td>
-                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">{c.report_count}</td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">{c.engagement_ids.length}</td>
+                    <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">{c.departments.count}</td>
                   </tr>
                 ))}
               </tbody>

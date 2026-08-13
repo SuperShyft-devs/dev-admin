@@ -11,7 +11,8 @@ import { listAllEngagementsForCamp } from "./listAllEngagementsForCamp";
 
 interface CampReportInitMenuProps {
   campNo: number;
-  organizationId: number;
+  /** Optional; resolved from camp engagements when omitted. */
+  organizationId?: number;
   variant?: "standalone" | "menu";
   onClose?: () => void;
   onFeedback?: (message: string, isError?: boolean) => void;
@@ -22,6 +23,16 @@ function isAlreadyExistsError(err: unknown): boolean {
   if (!axios.isAxiosError(err)) return false;
   const code = err.response?.data?.error_code;
   return err.response?.status === 409 || code === "CAMP_REPORT_EXISTS";
+}
+
+async function resolveOrganizationId(campNo: number, organizationId?: number): Promise<number> {
+  if (organizationId != null) return organizationId;
+  const engagements = await listAllEngagementsForCamp(campNo);
+  const resolved = engagements[0]?.organization_id;
+  if (resolved == null) {
+    throw new Error("Could not resolve organization for this camp");
+  }
+  return resolved;
 }
 
 async function fetchDepartmentSlugs(organizationId: number): Promise<string[]> {
@@ -111,8 +122,9 @@ export function CampReportInitMenu({
 
   const handleInitAllCitiesAndDepartments = () =>
     runAction(async () => {
+      const organizationIdResolved = await resolveOrganizationId(campNo, organizationId);
       const [slugs, cities] = await Promise.all([
-        fetchDepartmentSlugs(organizationId),
+        fetchDepartmentSlugs(organizationIdResolved),
         fetchCampCities(campNo),
       ]);
       const tasks: Array<Promise<unknown>> = [campReportsApi.initCamp(campNo)];
