@@ -3210,6 +3210,108 @@ export const paymentsApi = {
     api.get<BookingDetail>(`/payments/booking/${bookingId}/status`),
 };
 
+export type DiscountScopeMode = "general" | "organization" | "camp" | "engagement";
+export type DiscountType = "percentage" | "fixed" | "percentage_capped";
+export type PackageApplyMode = "all" | "include" | "exclude";
+
+export interface DiscountCodePayload {
+  code: string;
+  name: string;
+  description?: string | null;
+  status?: string;
+  discount_type: DiscountType;
+  percent_value?: number | null;
+  fixed_amount_paise?: number | null;
+  max_discount_paise?: number | null;
+  hard_ceiling_paise?: number | null;
+  min_bill_paise?: number | null;
+  combine_with_others?: boolean;
+  auto_apply?: boolean;
+  audience?: string;
+  first_purchase_only?: boolean;
+  scope_mode: DiscountScopeMode;
+  scope_keys?: string[];
+  package_apply_mode: PackageApplyMode;
+  package_ids?: number[];
+  include_addons?: boolean;
+  cities?: string[];
+  valid_from?: string | null;
+  valid_to?: string | null;
+  time_of_day_start?: string | null;
+  time_of_day_end?: string | null;
+  days_of_week?: number[] | null;
+  camp_valid_days_after?: number | null;
+  max_total_uses?: number | null;
+  max_uses_per_user?: number | null;
+  per_user_frequency?: string;
+  max_uses_per_camp?: number | null;
+  max_uses_per_order?: number | null;
+  max_total_discount_paise?: number | null;
+  code_kind?: string;
+  referral_user_id?: number | null;
+  min_price_protection?: boolean;
+}
+
+export interface DiscountCodeRow extends DiscountCodePayload {
+  discount_code_id: number;
+  total_discount_given_paise?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DiscountOption {
+  id: string | number;
+  label: string;
+  package_for?: string;
+  organization_id?: number | null;
+  camp_no?: string | null;
+  price?: number | null;
+}
+
+export const discountsApi = {
+  list: (params?: { status?: string; search?: string; limit?: number; offset?: number }) =>
+    api.get<{ data: { items: DiscountCodeRow[]; total: number } }>("/discounts", { params }),
+
+  get: (id: number) => api.get<{ data: DiscountCodeRow }>(`/discounts/${id}`),
+
+  create: (payload: DiscountCodePayload) =>
+    api.post<{ data: DiscountCodeRow }>("/discounts", payload),
+
+  update: (id: number, payload: Partial<DiscountCodePayload>) =>
+    api.patch<{ data: DiscountCodeRow }>(`/discounts/${id}`, payload),
+
+  setStatus: (id: number, action: "activate" | "pause" | "disable" | "draft") =>
+    api.post<{ data: DiscountCodeRow }>(`/discounts/${id}/status`, { action }),
+
+  report: (id: number) => api.get<{ data: Record<string, unknown> }>(`/discounts/${id}/report`),
+
+  reportsSummary: () =>
+    api.get<{ data: { total_codes: number; abuse_events_24h: number; items: unknown[] } }>(
+      "/discounts/reports/summary"
+    ),
+
+  supportLookup: (params: { code: string; phone?: string }) =>
+    api.get<{ data: Record<string, unknown> }>("/discounts/support-lookup", { params }),
+
+  bulkInstances: (id: number, payload: { count: number; prefix?: string }) =>
+    api.post<{ data: { count: number; codes: string[] } }>(`/discounts/${id}/instances/bulk`, payload),
+
+  allowlist: (id: number, entries: Array<{ phone?: string; email?: string }>) =>
+    api.post<{ data: { added: number } }>(`/discounts/${id}/allowlist`, { entries }),
+
+  optionsPackages: (params?: { package_for?: string; search?: string }) =>
+    api.get<{ data: DiscountOption[] }>("/discounts/options/packages", { params }),
+
+  optionsOrganizations: (params?: { search?: string }) =>
+    api.get<{ data: DiscountOption[] }>("/discounts/options/organizations", { params }),
+
+  optionsCamps: (params?: { search?: string; organization_id?: number }) =>
+    api.get<{ data: DiscountOption[] }>("/discounts/options/camps", { params }),
+
+  optionsEngagements: (params?: { search?: string; organization_id?: number }) =>
+    api.get<{ data: DiscountOption[] }>("/discounts/options/engagements", { params }),
+};
+
 // Checklist templates & tasks (extends ChecklistReadiness above)
 export interface ChecklistTemplateItem {
   item_id: number;
