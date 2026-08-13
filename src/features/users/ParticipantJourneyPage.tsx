@@ -31,6 +31,8 @@ const METSIGHTS_CATEGORY_COLUMNS = [
   { key: "diet-lifestyle-parameters", label: "Diet & Lifestyle" },
   { key: "vitals", label: "Vitals" },
   { key: "fitness-parameters", label: "Fitness Parameters" },
+  { key: "blood-parameters", label: "Blood Parameters" },
+  { key: "advanced-blood-parameters", label: "Advanced Blood" },
 ] as const;
 
 function CategoryStatusIcon({ progress, assigned }: { progress?: ParticipantJourneyCategoryProgress; assigned: boolean }) {
@@ -76,13 +78,19 @@ function isCategoryAssigned(
   categoryKey: string,
   assessmentTypeCode?: string | null,
 ): boolean {
+  if (progressList.some((p) => p.category_key === categoryKey && p.category_of === "metsights")) {
+    return true;
+  }
   if (categoryKey === "fitness-parameters") {
     return assessmentTypeCode === "7";
   }
   if (["physical-measurement", "diet-lifestyle-parameters", "vitals"].includes(categoryKey)) {
     return assessmentTypeCode === "1" || assessmentTypeCode === "2" || assessmentTypeCode === "7";
   }
-  return progressList.some((p) => p.category_key === categoryKey);
+  if (["blood-parameters", "advanced-blood-parameters"].includes(categoryKey)) {
+    return assessmentTypeCode === "1" || assessmentTypeCode === "2";
+  }
+  return false;
 }
 
 function AnswerStateBadge({ state }: { state: string }) {
@@ -192,6 +200,7 @@ export function ParticipantJourneyPage() {
 
       let totalImported = 0;
       let categoriesSkipped = 0;
+      const importedByCategory: string[] = [];
       const errors: string[] = [];
 
       for (const cat of metsightsCategories) {
@@ -205,7 +214,11 @@ export function ParticipantJourneyPage() {
           if (result.status === "skipped") {
             categoriesSkipped += 1;
           } else {
-            totalImported += result.responses_imported ?? 0;
+            const n = result.responses_imported ?? 0;
+            totalImported += n;
+            if (n > 0) {
+              importedByCategory.push(`${cat.category_key}: ${n}`);
+            }
           }
         } catch (err) {
           errors.push(`${cat.category_key}: ${getApiError(err)}`);
@@ -223,6 +236,9 @@ export function ParticipantJourneyPage() {
       const parts: string[] = [
         `Imported ${totalImported} answer${totalImported === 1 ? "" : "s"} from Metsights`,
       ];
+      if (importedByCategory.length > 0) {
+        parts.push(`(${importedByCategory.join(", ")})`);
+      }
       if (categoriesSkipped > 0) {
         parts.push(
           `${categoriesSkipped} categor${categoriesSkipped === 1 ? "y" : "ies"} already had responses`
@@ -561,7 +577,7 @@ export function ParticipantJourneyPage() {
               <CategoryLegend />
             </div>
             <div className="bg-white rounded-xl border border-zinc-200 overflow-x-auto">
-              <table className="w-full text-sm min-w-[800px]">
+              <table className="w-full text-sm min-w-[1080px]">
                 <thead>
                   <tr className="border-b border-zinc-200 text-left text-zinc-500">
                     <th className="px-4 py-3 font-medium">Package</th>
