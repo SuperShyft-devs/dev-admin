@@ -920,6 +920,9 @@ export interface CampListItem {
   camp_name: string;
   start_date: string;
   year: number;
+  organization_id: number;
+  organization_name: string;
+  organization_logo: string | null;
   engagement_ids: number[];
   departments: {
     count: number;
