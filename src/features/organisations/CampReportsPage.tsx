@@ -97,6 +97,9 @@ function formatFieldLabel(key: string): string {
     ) {
       return `Share in ${band.replace(/_/g, " ")} (%)`;
     }
+    if (band === "low" || band === "moderate" || band === "high" || band === "very_high") {
+      return `Share in ${band.replace(/_/g, " ")} (%)`;
+    }
     return `Share in ${band} (%)`;
   }
   if (key.startsWith("count.")) {
@@ -135,8 +138,10 @@ function formatFieldLabel(key: string): string {
     buckets_sum: "Age-group counts add up",
     group: "Risk groups",
     elevated_metabolic_score: "Elevated metabolic score (%)",
+    elevated_oxidative_stress_percent: "Elevated oxidative stress (%)",
+    total_employees: "People with a score",
     counts_sum: "Risk-group counts add up",
-    elevated_consistency: "Elevated % matches Increased + High",
+    elevated_consistency: "Elevated % matches High + Very High",
     answered_vs_questionnaire_completed: "Answered vs questionnaire completed",
     unknown_answers: "Unrecognized answers",
     unknown_gender: "Gender not male or female",
@@ -281,6 +286,18 @@ function BtsModalBody({
   const orsBandRules = Array.isArray(method?.band_rules)
     ? (method.band_rules as Record<string, unknown>[])
     : [];
+  const isOxidativeStressBts =
+    elevatedMath?.kind === "oxidative_stress" ||
+    method?.with_oxidative_stress_score != null;
+  const scoreBandLabel = isOxidativeStressBts
+    ? "oxidative stress score"
+    : "metabolic score";
+  const elevatedMathTitle = isOxidativeStressBts
+    ? "Elevated oxidative stress — step by step"
+    : "Elevated metabolic score — step by step";
+  const bandsSectionTitle = isOxidativeStressBts
+    ? "Who is in each group"
+    : "Who is in each risk group";
   const qgdGroups =
     details?.groups && typeof details.groups === "object"
       ? (details.groups as Record<string, Record<string, unknown>>)
@@ -333,6 +350,10 @@ function BtsModalBody({
     if (band === "low_risk") return "Low Risk";
     if (band === "increased_risk") return "Increased Risk";
     if (band === "high_risk") return "High Risk";
+    if (band === "low") return "Low";
+    if (band === "moderate") return "Moderate";
+    if (band === "high") return "High";
+    if (band === "very_high") return "Very High";
     return band.replace(/_/g, " ");
   }
 
@@ -415,7 +436,7 @@ function BtsModalBody({
                   if (!band) return null;
                   return (
                     <li key={`${band}-${idx}`} className="text-[11px] text-zinc-600">
-                      {formatOrsBandLabel(band)}: metabolic score {range}
+                      {formatOrsBandLabel(band)}: {scoreBandLabel} {range}
                     </li>
                   );
                 })}
@@ -434,6 +455,8 @@ function BtsModalBody({
                   { key: "bio_ai_reports", label: "Bio AI reports" },
                   { key: "with_metabolic_score", label: "With metabolic score" },
                   { key: "missing_metabolic_score", label: "Missing metabolic score" },
+                  { key: "with_oxidative_stress_score", label: "With oxidative stress score" },
+                  { key: "missing_oxidative_stress_score", label: "Missing oxidative stress score" },
                   { key: "excluded_people_count", label: "Not in this chart" },
                   { key: "enrolled", label: "People enrolled" },
                   { key: "questionnaire_completed", label: "Questionnaire completed" },
@@ -470,7 +493,7 @@ function BtsModalBody({
         {elevatedMathSteps.length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
             <p className="text-xs font-medium text-zinc-800">
-              Elevated metabolic score — step by step
+              {elevatedMathTitle}
             </p>
             {typeof elevatedMath?.result_percent === "number" && (
               <p className="text-[12px] text-zinc-600">
@@ -699,7 +722,7 @@ function BtsModalBody({
         {orsBands && Object.keys(orsBands).length > 0 && (
           <div className="rounded-lg border border-zinc-200 overflow-hidden">
             <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
-              Who is in each risk group
+              {bandsSectionTitle}
             </div>
             <div className="divide-y divide-zinc-100">
               {Object.entries(orsBands).map(([band, raw]) => {
@@ -740,7 +763,9 @@ function BtsModalBody({
                         {formatOrsBandLabel(band)}
                       </span>
                       {rangeLabel && (
-                        <span className="text-[11px] text-zinc-500">score {rangeLabel}</span>
+                        <span className="text-[11px] text-zinc-500">
+                          {scoreBandLabel} {rangeLabel}
+                        </span>
                       )}
                       <span className="text-xs text-zinc-500 tabular-nums ml-auto">
                         {count == null ? "—" : `${count} people`}
@@ -756,7 +781,11 @@ function BtsModalBody({
                               <tr className="text-zinc-500 border-b border-zinc-100">
                                 <th className="py-1.5 pr-3 font-medium">Name</th>
                                 <th className="py-1.5 pr-3 font-medium">User ID</th>
-                                <th className="py-1.5 font-medium">Metabolic score</th>
+                                <th className="py-1.5 font-medium">
+                                  {isOxidativeStressBts
+                                    ? "Oxidative stress score"
+                                    : "Metabolic score"}
+                                </th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-50">
@@ -769,9 +798,11 @@ function BtsModalBody({
                                     {person.user_id == null ? "—" : String(person.user_id)}
                                   </td>
                                   <td className="py-1.5 text-zinc-700 tabular-nums">
-                                    {person.metabolic_score == null
-                                      ? "—"
-                                      : String(person.metabolic_score)}
+                                    {person.oxidative_stress_score != null
+                                      ? String(person.oxidative_stress_score)
+                                      : person.metabolic_score == null
+                                        ? "—"
+                                        : String(person.metabolic_score)}
                                   </td>
                                 </tr>
                               ))}
