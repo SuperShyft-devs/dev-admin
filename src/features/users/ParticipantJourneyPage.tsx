@@ -35,6 +35,11 @@ const METSIGHTS_CATEGORY_COLUMNS = [
   { key: "advanced-blood-parameters", label: "Advanced Blood" },
 ] as const;
 
+function unansweredLabel(q: { question_text?: string | null; question_key?: string | null; question_id: number; is_required?: boolean }) {
+  const name = (q.question_text || q.question_key || `Question #${q.question_id}`).trim();
+  return q.is_required ? `${name} (required)` : name;
+}
+
 function CategoryStatusIcon({ progress, assigned }: { progress?: ParticipantJourneyCategoryProgress; assigned: boolean }) {
   if (!assigned) {
     return <Clock className="w-4 h-4 text-zinc-400" />;
@@ -43,12 +48,62 @@ function CategoryStatusIcon({ progress, assigned }: { progress?: ParticipantJour
     return <Minus className="w-4 h-4 text-zinc-400" />;
   }
   if (progress.status !== "complete" && progress.has_responses) {
-    return <CircleDot className="w-4 h-4 text-amber-500" />;
+    return <PartialStatusIcon unanswered={progress.unanswered ?? []} />;
   }
   if (progress.status === "complete" && progress.is_submitted) {
     return <CheckCheck className="w-4 h-4 text-emerald-600" />;
   }
   return <CheckCheck className="w-4 h-4 text-zinc-900" />;
+}
+
+function PartialStatusIcon({
+  unanswered,
+}: {
+  unanswered: NonNullable<ParticipantJourneyCategoryProgress["unanswered"]>;
+}) {
+  const [tip, setTip] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const heading =
+    unanswered.length > 0 ? `Unanswered (${unanswered.length})` : "Partially filled";
+
+  return (
+    <span
+      className="inline-flex"
+      onMouseEnter={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const below = rect.top < 220;
+        setTip({
+          left: rect.left + rect.width / 2,
+          top: below ? rect.bottom : rect.top,
+          below,
+        });
+      }}
+      onMouseLeave={() => setTip(null)}
+    >
+      <CircleDot className="w-4 h-4 text-amber-500" />
+      {tip ? (
+        <span
+          role="tooltip"
+          className="fixed z-50 w-72 max-h-64 overflow-y-auto rounded-md bg-zinc-900 px-2.5 py-1.5 text-left text-[11px] leading-snug text-white shadow-lg"
+          style={{
+            left: tip.left,
+            top: tip.top,
+            transform: tip.below
+              ? "translate(-50%, 4px)"
+              : "translate(-50%, -100%)",
+          }}
+        >
+          <span className="block font-medium mb-1">{heading}</span>
+          {unanswered.length > 0 ? (
+            <ul className="space-y-0.5">
+              {unanswered.map((q) => (
+                <li key={q.question_id}>• {unansweredLabel(q)}</li>
+              ))}
+            </ul>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function CategoryLegend() {

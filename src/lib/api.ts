@@ -509,6 +509,13 @@ export const usersApi = {
 };
 
 // Participant journey (employee: per-user assessments + questionnaire)
+export interface ParticipantJourneyUnansweredQuestion {
+  question_id: number;
+  question_key?: string | null;
+  question_text?: string | null;
+  is_required: boolean;
+}
+
 export interface ParticipantJourneyCategoryProgress {
   category_id: number;
   display_name?: string | null;
@@ -518,6 +525,7 @@ export interface ParticipantJourneyCategoryProgress {
   is_submitted: boolean;
   has_responses: boolean;
   completed_at?: string | null;
+  unanswered?: ParticipantJourneyUnansweredQuestion[];
 }
 
 export interface ParticipantJourneyQuestionnaireRollup {
@@ -870,6 +878,8 @@ export const organizationsApi = {
     search?: string;
     sort_by?: string;
     sort_dir?: "asc" | "desc";
+    /** When false, include camps that have not initialized camp reports (admin default). */
+    initialized_only?: boolean;
   }) =>
     api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/organizations/camps",
@@ -883,6 +893,7 @@ export const organizationsApi = {
       search?: string;
       sort_by?: string;
       sort_dir?: "asc" | "desc";
+      initialized_only?: boolean;
     }
   ) =>
     api.get<{ data: CampListItem[]; meta: { page: number; limit: number; total: number } }>(
@@ -907,12 +918,13 @@ export const organizationsApi = {
 export interface CampListItem {
   camp_no: number;
   camp_name: string;
-  organization_id: number;
-  organization_name: string;
   start_date: string;
-  engagement_count: number;
-  department_count: number;
-  report_count: number;
+  year: number;
+  engagement_ids: number[];
+  departments: {
+    count: number;
+    departments: { name: string; slug: string }[];
+  };
 }
 
 export interface CampReportSection {
@@ -2042,7 +2054,14 @@ export interface Participant {
   participants_employee_id?: string | null;
   participant_department?: string | null;
   participant_blood_group?: string | null;
-  consultations?: Record<string, ConsultationPreference | boolean | null> | null;
+  consultations?: Record<string, ConsultationPreference | boolean | null> | boolean | null;
+  questionnaires?: Record<string, boolean>;
+  reports?: {
+    blood_report_generated?: boolean;
+    blood_report_sent?: boolean;
+    bio_ai_report_generated?: boolean;
+    bio_ai_report_sent?: boolean;
+  };
   is_profile_created_on_metsights?: boolean | null;
   is_primary_record_id_synced?: boolean | null;
   is_fitprint_record_id_synced?: boolean | null;

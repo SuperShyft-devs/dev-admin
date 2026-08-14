@@ -57,30 +57,40 @@ function allCabinKeys(slotDetail: SlotDetail): Set<string> {
   return keys;
 }
 
-export function nextCabinKey(slotDetail: SlotDetail, section: CabinSectionKey): string {
-  const prefix = section === "blood_collection" ? "btc" : "cc";
-  const existing = allCabinKeys(slotDetail);
-  let n = 1;
-  while (existing.has(`${prefix}-${String(n).padStart(3, "0")}`)) n += 1;
-  return `${prefix}-${String(n).padStart(3, "0")}`;
+/** "Cabin Name 123" → "cabin_name123" */
+export function cabinKeyFromName(name: string): string {
+  let out = "";
+  for (const ch of name.toLowerCase().trim()) {
+    if (/[a-z]/.test(ch)) {
+      out += ch;
+    } else if (/[0-9]/.test(ch)) {
+      if (out.endsWith("_")) out = out.slice(0, -1);
+      out += ch;
+    } else if (out.length && /[a-z]$/.test(out)) {
+      out += "_";
+    }
+  }
+  return out.replace(/^_+|_+$/g, "");
 }
 
-export function defaultCabinName(section: CabinSectionKey, slotDetail: SlotDetail, date: string): string {
-  const sectionData = slotDetail[section] ?? {};
-  const count = (sectionData[date] ?? []).length + 1;
-  return section === "blood_collection"
-    ? `Blood Test Cabin ${count}`
-    : `Consultation Cabin ${count}`;
-}
-
-export function createEmptyCabin(
+export function uniqueCabinKey(
   slotDetail: SlotDetail,
-  section: CabinSectionKey,
-  date: string
-): CabinSlotConfig {
+  slug: string,
+  excludeKey?: string
+): string {
+  if (!slug) return "";
+  const existing = allCabinKeys(slotDetail);
+  if (excludeKey) existing.delete(excludeKey);
+  if (!existing.has(slug)) return slug;
+  let n = 2;
+  while (existing.has(`${slug}_${n}`)) n += 1;
+  return `${slug}_${n}`;
+}
+
+export function createEmptyCabin(section: CabinSectionKey): CabinSlotConfig {
   return {
-    cabin_name: defaultCabinName(section, slotDetail, date),
-    cabin_key: nextCabinKey(slotDetail, section),
+    cabin_name: "",
+    cabin_key: "",
     start_time: "09:00",
     end_time: "17:00",
     slot_duration: 30,
@@ -102,11 +112,13 @@ export function upsertCabin(
   slotDetail: SlotDetail,
   section: CabinSectionKey,
   date: string,
-  cabin: CabinSlotConfig
+  cabin: CabinSlotConfig,
+  originalKey?: string
 ): SlotDetail {
   const sectionData: SlotDetailSection = { ...(slotDetail[section] ?? {}) };
   const list = [...(sectionData[date] ?? [])];
-  const idx = list.findIndex((c) => c.cabin_key === cabin.cabin_key);
+  const matchKey = originalKey || cabin.cabin_key;
+  const idx = matchKey ? list.findIndex((c) => c.cabin_key === matchKey) : -1;
   if (idx >= 0) list[idx] = cabin;
   else list.push(cabin);
   sectionData[date] = list;
@@ -192,6 +204,7 @@ export function validateCabin(cabin: CabinSlotConfig): string | null {
   const start = normalizeTime(cabin.start_time);
   const end = normalizeTime(cabin.end_time);
   if (!cabin.cabin_name.trim()) return "Cabin name is required";
+  if (!cabin.cabin_key.trim()) return "Cabin key could not be generated from the cabin name";
   if (!start || !end) return "Start and end time are required";
   if (end <= start) return "End time must be after start time";
   if (!(cabin.slot_duration > 0)) return "Slot duration must be at least 1 minute";

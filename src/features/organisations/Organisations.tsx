@@ -11,6 +11,7 @@ import { CampEngagementsModal } from "../../shared/ui/CampEngagementsModal";
 import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
 import { CampCitiesModal } from "../../shared/ui/CampCitiesModal";
 import { CampReportInitMenu } from "../../shared/ui/CampReportInitMenu";
+import { listAllEngagementsForCamp } from "../../shared/ui/listAllEngagementsForCamp";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import { ManageIndustriesModal } from "./ManageIndustriesModal";
 import {
@@ -108,6 +109,7 @@ export function Organisations() {
   const [departmentInput, setDepartmentInput] = useState("");
 
   const [campsData, setCampsData] = useState<CampListItem[]>([]);
+  const [initializedCampNos, setInitializedCampNos] = useState<Set<number>>(new Set());
   const [campsTotal, setCampsTotal] = useState(0);
   const [campsPage, setCampsPage] = useState(1);
   const [campsLimit] = useState(10);
@@ -188,16 +190,26 @@ export function Organisations() {
     setCampsLoading(true);
     setCampsError(null);
     try {
-      const res = await organizationsApi.listCamps({
+      const params = {
         page: campsPage,
         limit: campsLimit,
         search: campsSearch.trim() || undefined,
         sort_by: campsSortKey,
         sort_dir: campsSortDir,
-      });
+      };
+      const [res, initializedRes] = await Promise.all([
+        organizationsApi.listCamps({ ...params, initialized_only: false }),
+        organizationsApi.listCamps({
+          page: 1,
+          limit: 100,
+          search: campsSearch.trim() || undefined,
+          initialized_only: true,
+        }),
+      ]);
       const rows = res.data.data;
       setCampsData(rows);
       setCampsTotal(res.data.meta.total);
+      setInitializedCampNos(new Set(initializedRes.data.data.map((c) => c.camp_no)));
       setSelectedCamp((curr) => {
         if (!curr) return curr;
         return rows.find((c) => c.camp_no === curr.camp_no) ?? curr;
@@ -511,7 +523,6 @@ export function Organisations() {
     setCampEngagements({
       campNo: row.camp_no,
       campName: row.camp_name,
-      orgName: row.organization_name,
     });
   };
 
@@ -556,7 +567,7 @@ export function Organisations() {
       }
       await organizationsApi.remapCampNo(selectedCamp.camp_no, parsed);
       handleCampReportFeedback(
-        `Camp number updated to ${parsed} (${selectedCamp.engagement_count} engagement(s) remapped)`
+        `Camp number updated to ${parsed} (${selectedCamp.engagement_ids.length} engagement(s) remapped)`
       );
       setChangeCampNoOpen(false);
       setChangeCampNoConfirm(null);
@@ -586,7 +597,7 @@ export function Organisations() {
     setCampActionError(null);
     try {
       await campReportsApi.deleteCamp(row.camp_no);
-      setCampActionMessage("Camp reports deleted successfully");
+      setCampActionMessage("All camp reports deleted successfully (main, department, city, and city × department)");
       setCampReportDeleteConfirm(null);
       fetchCamps();
     } catch (err) {
@@ -600,7 +611,7 @@ export function Organisations() {
     { key: "camp_no", label: "Camp No", sortable: true },
     { key: "camp_name", label: "Camp name", sortable: true },
     {
-      key: "engagement_count",
+      key: "engagement_ids",
       label: "No of engagements",
       sortable: true,
       render: (row) => (
@@ -612,12 +623,12 @@ export function Organisations() {
           }}
           className="text-zinc-900 hover:underline font-medium"
         >
-          {row.engagement_count}
+          {row.engagement_ids.length}
         </button>
       ),
     },
     {
-      key: "department_count",
+      key: "departments",
       label: "No of departments",
       sortable: true,
       render: (row) => (
@@ -629,7 +640,7 @@ export function Organisations() {
           }}
           className="text-zinc-900 hover:underline font-medium"
         >
-          {row.department_count}
+          {row.departments.count}
         </button>
       ),
     },
@@ -833,16 +844,26 @@ export function Organisations() {
                 onView={openCampView}
                 onViewEngagements={openCampEngagements}
                 onViewDepartments={openCampDepartments}
-                onParticipants={(r) =>
-                  setParticipantsCamp({
-                    campNo: r.camp_no,
-                    campName: r.camp_name,
-                    organizationId: r.organization_id,
-                  })
-                }
+                onParticipants={async (r) => {
+                  try {
+                    const engagements = await listAllEngagementsForCamp(r.camp_no);
+                    const organizationId = engagements[0]?.organization_id;
+                    if (organizationId == null) {
+                      setCampActionError("Could not resolve organization for this camp");
+                      return;
+                    }
+                    setParticipantsCamp({
+                      campNo: r.camp_no,
+                      campName: r.camp_name,
+                      organizationId,
+                    });
+                  } catch (err) {
+                    setCampActionError(getApiError(err));
+                  }
+                }}
                 onDelete={(r) => setCampReportDeleteConfirm(r)}
                 onDeleteLabel="Delete Camp Report"
-                canDelete={(r) => r.report_count > 0}
+                canDelete={(r) => initializedCampNos.has(r.camp_no)}
                 renderExtraMenuItems={(row, closeMenu) => (
                   <>
                     <button
@@ -855,7 +876,7 @@ export function Organisations() {
                     >
                       <MapPin className="w-4 h-4" /> View cities
                     </button>
-                    {row.report_count > 0 ? (
+                    {initializedCampNos.has(row.camp_no) ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -869,7 +890,6 @@ export function Organisations() {
                     ) : (
                       <CampReportInitMenu
                         campNo={row.camp_no}
-                        organizationId={row.organization_id}
                         variant="menu"
                         onClose={closeMenu}
                         onFeedback={handleCampReportFeedback}
@@ -908,13 +928,15 @@ export function Organisations() {
               <span className="text-zinc-500">Camp name:</span> {selectedCamp.camp_name}
             </div>
             <div>
-              <span className="text-zinc-500">Organisation:</span> {selectedCamp.organization_name}
+              <span className="text-zinc-500">Year:</span> {selectedCamp.year}
             </div>
             <div>
-              <span className="text-zinc-500">No of engagements:</span> {selectedCamp.engagement_count}
+              <span className="text-zinc-500">No of engagements:</span>{" "}
+              {selectedCamp.engagement_ids.length}
             </div>
             <div>
-              <span className="text-zinc-500">No of departments:</span> {selectedCamp.department_count}
+              <span className="text-zinc-500">No of departments:</span>{" "}
+              {selectedCamp.departments.count}
             </div>
             <div className="pt-2 flex flex-wrap gap-2">
               <button
@@ -924,10 +946,9 @@ export function Organisations() {
               >
                 Change camp_no
               </button>
-              {selectedCamp.report_count === 0 && (
+              {!initializedCampNos.has(selectedCamp.camp_no) && (
                 <CampReportInitMenu
                   campNo={selectedCamp.camp_no}
-                  organizationId={selectedCamp.organization_id}
                   onFeedback={handleCampReportFeedback}
                   onInitialized={fetchCamps}
                 />
@@ -1451,8 +1472,9 @@ export function Organisations() {
           title="Delete Camp Reports"
         >
           <p className="text-zinc-600 text-sm mb-4">
-            This will delete the overall camp report and all department reports for camp &quot;
-            {campReportDeleteConfirm.camp_name}&quot;.
+            This will delete all reports for camp &quot;{campReportDeleteConfirm.camp_name}&quot;:
+            the main camp report, all department reports, all city reports, and all
+            city × department reports.
           </p>
           <div className="flex flex-col-reverse sm:flex-row gap-3">
             <button

@@ -170,6 +170,24 @@ function consultationWant(value: ConsultationPreference | boolean | null | undef
   return Boolean(value.want);
 }
 
+function consultationFieldValue(
+  participant: Participant,
+  field: ConsultationField
+): ConsultationPreference | boolean | null {
+  const consultations = participant.consultations;
+  if (consultations == null) return null;
+  if (typeof consultations === "boolean") return consultations;
+  return consultations[field] ?? null;
+}
+
+function participantConsultationsRecord(
+  participant: Participant
+): Record<string, ConsultationPreference | boolean | null> {
+  const consultations = participant.consultations;
+  if (consultations == null || typeof consultations === "boolean") return {};
+  return consultations;
+}
+
 function formatConsultationCell(value: ConsultationPreference | boolean | null | undefined): string {
   const pref = normalizeConsultationPref(value);
   if (!pref.want) return "No";
@@ -195,7 +213,7 @@ function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Partic
     }
     for (const [key, filter] of Object.entries(filters.consultationFilters)) {
       if (filter !== "all") {
-        const val = consultationWant(p.consultations?.[key] ?? null);
+        const val = consultationWant(consultationFieldValue(p, key));
         if (!matchesBoolFilter(val, filter)) return false;
       }
     }
@@ -578,14 +596,17 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     try {
       setConsultationUpdateLoading(loadingKey);
       setConsultationUpdateError(null);
-      const prev = normalizeConsultationPref(participant.consultations?.[field]);
+      const prev = normalizeConsultationPref(consultationFieldValue(participant, field));
       const nextPref: ConsultationPreference = {
         ...prev,
         want: value === true,
         done: value === true ? Boolean(prev.done) : false,
         ...(value !== true ? { date: null, slot: null, expert_id: null, done: false } : {}),
       };
-      const updatedConsultations = { ...(participant.consultations ?? {}), [field]: nextPref };
+      const updatedConsultations = {
+        ...participantConsultationsRecord(participant),
+        [field]: nextPref,
+      };
       await participantsApi.updateParticipant(engagementIdForDepartment, participant.user_id, {
         consultations: updatedConsultations,
       });
@@ -633,7 +654,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const renderConsultationCell = (p: Participant, field: ConsultationField) => {
     const isEditing = consultationEditMode.has(field);
-    const cellValue = p.consultations?.[field] ?? null;
+    const cellValue = consultationFieldValue(p, field);
     const want = consultationWant(cellValue);
 
     if (isEditing && canEditConsultation) {

@@ -82,7 +82,13 @@ function formatFieldLabel(key: string): string {
     return `People in ${key.slice("enrolled.".length)}`;
   }
   if (key.startsWith("percent.")) {
-    const band = key.slice("percent.".length);
+    const rest = key.slice("percent.".length);
+    if (rest.startsWith("male.") || rest.startsWith("female.")) {
+      const [gender, ...bucketParts] = rest.split(".");
+      const genderLabel = gender === "male" ? "Men" : "Women";
+      return `Share · ${genderLabel} · ${bucketParts.join(" ").replace(/_/g, " ")} (%)`;
+    }
+    const band = rest;
     if (
       band === "optimal" ||
       band === "low_risk" ||
@@ -94,7 +100,20 @@ function formatFieldLabel(key: string): string {
     return `Share in ${band} (%)`;
   }
   if (key.startsWith("count.")) {
-    return `People in ${key.slice("count.".length).replace(/_/g, " ")}`;
+    const rest = key.slice("count.".length);
+    if (rest.startsWith("male.") || rest.startsWith("female.")) {
+      const [gender, ...bucketParts] = rest.split(".");
+      const genderLabel = gender === "male" ? "Men" : "Women";
+      return `People · ${genderLabel} · ${bucketParts.join(" ").replace(/_/g, " ")}`;
+    }
+    return `People in ${rest.replace(/_/g, " ")}`;
+  }
+  if (key.startsWith("male.") || key.startsWith("female.")) {
+    const [gender, field] = key.split(".");
+    const genderLabel = gender === "male" ? "Men" : "Women";
+    if (field === "total_responded") return `${genderLabel} on chart`;
+    if (field === "group") return `${genderLabel} chart groups`;
+    if (field === "counts_sum") return `${genderLabel} counts add up`;
   }
   const labels: Record<string, string> = {
     employees_enrolled: "People enrolled",
@@ -118,6 +137,9 @@ function formatFieldLabel(key: string): string {
     elevated_metabolic_score: "Elevated metabolic score (%)",
     counts_sum: "Risk-group counts add up",
     elevated_consistency: "Elevated % matches Increased + High",
+    answered_vs_questionnaire_completed: "Answered vs questionnaire completed",
+    unknown_answers: "Unrecognized answers",
+    unknown_gender: "Gender not male or female",
   };
   if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
@@ -171,6 +193,8 @@ function BtsModalBody({
   const [openRiskPeople, setOpenRiskPeople] = useState(false);
   const [openQuestionnaireByEngagement, setOpenQuestionnaireByEngagement] = useState(false);
   const [openBioAiMismatch, setOpenBioAiMismatch] = useState(false);
+  const [openQgdGroups, setOpenQgdGroups] = useState<Record<string, boolean>>({});
+  const [openQgdExceptions, setOpenQgdExceptions] = useState<Record<string, boolean>>({});
 
   if (data == null) {
     return (
@@ -257,6 +281,45 @@ function BtsModalBody({
   const orsBandRules = Array.isArray(method?.band_rules)
     ? (method.band_rules as Record<string, unknown>[])
     : [];
+  const qgdGroups =
+    details?.groups && typeof details.groups === "object"
+      ? (details.groups as Record<string, Record<string, unknown>>)
+      : null;
+  const qgdExceptions =
+    details?.exceptions && typeof details.exceptions === "object"
+      ? (details.exceptions as Record<string, Record<string, unknown>[]>)
+      : null;
+  const qgdComparison =
+    details?.comparison && typeof details.comparison === "object"
+      ? (details.comparison as Record<string, unknown>)
+      : null;
+
+  const qgdExceptionSections: {
+    key: string;
+    title: string;
+    showAnswer?: boolean;
+  }[] = [
+    {
+      key: "answered_without_finishing_questionnaire",
+      title: "Answered without finishing questionnaire",
+      showAnswer: true,
+    },
+    {
+      key: "finished_questionnaire_without_this_answer",
+      title: "Finished questionnaire without this answer",
+    },
+    {
+      key: "answer_not_a_known_choice",
+      title: "Answer is not a known choice",
+      showAnswer: true,
+    },
+    {
+      key: "gender_not_male_or_female",
+      title: "Gender not male or female",
+      showAnswer: true,
+    },
+    { key: "blank_answer", title: "Blank answer saved" },
+  ];
 
   function formatRiskGroupLabel(value: unknown): string {
     if (value === "high") return "High";
@@ -271,6 +334,10 @@ function BtsModalBody({
     if (band === "increased_risk") return "Increased Risk";
     if (band === "high_risk") return "High Risk";
     return band.replace(/_/g, " ");
+  }
+
+  function formatQgdGroupLabel(bucket: string): string {
+    return bucket.replace(/_/g, " ");
   }
 
   if (fields || status === "ok" || status === "mismatch") {
@@ -308,6 +375,11 @@ function BtsModalBody({
             {typeof method.scope_label === "string" && (
               <p className="text-[12px] text-zinc-600">
                 Scope: {method.scope_label}
+              </p>
+            )}
+            {typeof method.question_label === "string" && (
+              <p className="text-[12px] text-zinc-600">
+                Question: {method.question_label}
               </p>
             )}
             {typeof method.counting_rule === "string" && (
@@ -363,6 +435,11 @@ function BtsModalBody({
                   { key: "with_metabolic_score", label: "With metabolic score" },
                   { key: "missing_metabolic_score", label: "Missing metabolic score" },
                   { key: "excluded_people_count", label: "Not in this chart" },
+                  { key: "enrolled", label: "People enrolled" },
+                  { key: "questionnaire_completed", label: "Questionnaire completed" },
+                  { key: "answered_this_question", label: "Answered this question" },
+                  { key: "counted_on_chart", label: "On the chart" },
+                  { key: "not_on_chart", label: "Not on the chart" },
                 ] as const
               ).map((item) =>
                 method[item.key] == null ? null : (
@@ -817,6 +894,172 @@ function BtsModalBody({
             )}
           </div>
         )}
+
+        {qgdComparison && typeof qgdComparison.summary === "string" && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5">
+            <p className="text-xs font-medium text-zinc-800 mb-1">How totals compare</p>
+            <p className="text-[12px] text-zinc-700 leading-relaxed">{qgdComparison.summary}</p>
+          </div>
+        )}
+
+        {qgdGroups && Object.keys(qgdGroups).length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Who is on the chart
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {(["male", "female"] as const).flatMap((gender) =>
+                Object.entries(qgdGroups[gender] ?? {}).map(([bucket, raw]) => {
+                  const groupData =
+                    raw && typeof raw === "object"
+                      ? (raw as Record<string, unknown>)
+                      : null;
+                  const count =
+                    groupData && typeof groupData.count === "number"
+                      ? groupData.count
+                      : null;
+                  const people = Array.isArray(groupData?.people)
+                    ? (groupData.people as Record<string, unknown>[])
+                    : [];
+                  const accordionKey = `${gender}:${bucket}`;
+                  const open = openQgdGroups[accordionKey] ?? false;
+                  const genderLabel = gender === "male" ? "Men" : "Women";
+                  return (
+                    <div key={accordionKey}>
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                        onClick={() =>
+                          setOpenQgdGroups((prev) => ({
+                            ...prev,
+                            [accordionKey]: !open,
+                          }))
+                        }
+                      >
+                        {open ? (
+                          <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                        )}
+                        <span className="text-xs font-medium text-zinc-800">
+                          {genderLabel} · {formatQgdGroupLabel(bucket)}
+                        </span>
+                        <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                          {count == null ? "—" : `${count} people`}
+                        </span>
+                      </button>
+                      {open && (
+                        <div className="px-3 pb-3 overflow-x-auto">
+                          {people.length === 0 ? (
+                            <p className="text-[11px] text-zinc-500 px-1">No one in this group.</p>
+                          ) : (
+                            <table className="w-full text-[11px] text-left">
+                              <thead>
+                                <tr className="text-zinc-500 border-b border-zinc-100">
+                                  <th className="py-1.5 pr-3 font-medium">Name</th>
+                                  <th className="py-1.5 pr-3 font-medium">User ID</th>
+                                  <th className="py-1.5 font-medium">Answer</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-50">
+                                {people.map((person, idx) => (
+                                  <tr key={`${String(person.user_id)}-${idx}`}>
+                                    <td className="py-1.5 pr-3 text-zinc-800">
+                                      {person.name == null ? "—" : String(person.name)}
+                                    </td>
+                                    <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                                      {person.user_id == null ? "—" : String(person.user_id)}
+                                    </td>
+                                    <td className="py-1.5 text-zinc-700">
+                                      {person.answer_label == null
+                                        ? "—"
+                                        : String(person.answer_label)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {qgdExceptions &&
+          qgdExceptionSections.map(({ key, title, showAnswer }) => {
+            const people = Array.isArray(qgdExceptions[key]) ? qgdExceptions[key] : [];
+            if (people.length === 0) return null;
+            const open = openQgdExceptions[key] ?? false;
+            return (
+              <div key={key} className="rounded-lg border border-zinc-200 overflow-hidden">
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+                  onClick={() =>
+                    setOpenQgdExceptions((prev) => ({
+                      ...prev,
+                      [key]: !open,
+                    }))
+                  }
+                >
+                  {open ? (
+                    <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                  )}
+                  <span className="text-xs font-medium text-zinc-800">{title}</span>
+                  <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                    {people.length} people
+                  </span>
+                </button>
+                {open && (
+                  <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100">
+                    <table className="w-full text-[11px] text-left">
+                      <thead>
+                        <tr className="text-zinc-500 border-b border-zinc-100">
+                          <th className="py-1.5 pr-3 font-medium">Name</th>
+                          <th className="py-1.5 pr-3 font-medium">User ID</th>
+                          {showAnswer && (
+                            <th className="py-1.5 pr-3 font-medium">Answer</th>
+                          )}
+                          <th className="py-1.5 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-50">
+                        {people.map((person, idx) => (
+                          <tr key={`${String(person.user_id)}-${idx}`}>
+                            <td className="py-1.5 pr-3 text-zinc-800 align-top">
+                              {person.name == null ? "—" : String(person.name)}
+                            </td>
+                            <td className="py-1.5 pr-3 text-zinc-700 tabular-nums align-top">
+                              {person.user_id == null ? "—" : String(person.user_id)}
+                            </td>
+                            {showAnswer && (
+                              <td className="py-1.5 pr-3 text-zinc-700 align-top">
+                                {person.answer_shown == null
+                                  ? person.answer_label == null
+                                    ? "—"
+                                    : String(person.answer_label)
+                                  : String(person.answer_shown)}
+                              </td>
+                            )}
+                            <td className="py-1.5 text-zinc-700 align-top">
+                              {person.reason == null ? "—" : String(person.reason)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
         {questionnaireByEngagement.length > 0 && (
           <div className="rounded-lg border border-zinc-200 overflow-hidden">
