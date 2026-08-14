@@ -84,7 +84,7 @@ export function OrganizationEngagementsModal({
         return (
           (e.engagement_name ?? "").toLowerCase().includes(q) ||
           (e.engagement_code ?? "").toLowerCase().includes(q) ||
-          (e.engagement_type ?? "").toLowerCase().includes(q) ||
+          String(e.engagement_type ?? "").toLowerCase().includes(q) ||
           (e.city ?? "").toLowerCase().includes(q)
         );
       })
