@@ -22,7 +22,16 @@ import {
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
 import { AddressAutocomplete } from "./AddressAutocomplete";
-import { CollectionDateStep } from "./CollectionDateStep";
+import { EngagementScheduleStep } from "./EngagementScheduleStep";
+import {
+  datesAfterPrune,
+  getScheduleStepLabel,
+  getTypeConfig,
+  getTypeHint,
+  hasOfferingsFields,
+  needsScheduleStep,
+  pruneSlotDetailForType,
+} from "./engagementTypeConfig";
 import {
   collectDates,
   normalizeSlotDetail,
@@ -30,17 +39,12 @@ import {
 } from "./slotDetailUtils";
 
 const BLOOD_COLLECTION_TYPE_OPTIONS = [
-  { value: "", label: "None" },
+  { value: "", label: "Select mode" },
   { value: "home_collection", label: "Home Collection" },
   { value: "camp_collection", label: "Camp Collection" },
 ] as const;
 
-const STEPS = [
-  { id: 1, label: "Basics & location" },
-  { id: 2, label: "Collection date" },
-  { id: 3, label: "Packages & flags" },
-  { id: 4, label: "Notifications" },
-] as const;
+type StepKey = "basics" | "location" | "offerings" | "schedule" | "notifications";
 
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900";
@@ -51,46 +55,20 @@ function toNumberOrNull(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function needsAssessment(kind: EngagementKind): boolean {
-  return kind === "bio_ai" || kind === "bio_ai_with_consultation" || kind === "vifc";
-}
-
-function needsDiagnostic(kind: EngagementKind): boolean {
-  return (
-    kind === "bio_ai" ||
-    kind === "blood_test" ||
-    kind === "blood_test_with_consultation" ||
-    kind === "bio_ai_with_consultation"
-  );
-}
-
-function needsConsultation(kind: EngagementKind): boolean {
-  return kind === "consultation" || kind === "blood_test_with_consultation" || kind === "bio_ai_with_consultation";
-}
-
-function needsBloodCollection(kind: EngagementKind): boolean {
-  return (
-    kind === "bio_ai" ||
-    kind === "blood_test" ||
-    kind === "blood_test_with_consultation" ||
-    kind === "bio_ai_with_consultation"
-  );
-}
-
-function needsHealthiansZone(kind: EngagementKind): boolean {
-  return needsBloodCollection(kind);
-}
-
-function needsSlotDuration(kind: EngagementKind): boolean {
-  return needsBloodCollection(kind);
-}
-
-function needsMetsightsFields(kind: EngagementKind): boolean {
-  return kind === "bio_ai" || kind === "bio_ai_with_consultation";
-}
-
-function needsFitPrint(kind: EngagementKind): boolean {
-  return kind === "bio_ai" || kind === "bio_ai_with_consultation" || kind === "vifc";
+function buildSteps(
+  kind: EngagementKind | null,
+  bloodMode: string | null | undefined
+): { key: StepKey; label: string }[] {
+  const steps: { key: StepKey; label: string }[] = [
+    { key: "basics", label: "Type & basics" },
+    { key: "location", label: "Location" },
+    { key: "offerings", label: "Offerings" },
+  ];
+  if (needsScheduleStep(kind)) {
+    steps.push({ key: "schedule", label: getScheduleStepLabel(kind, bloodMode) });
+  }
+  steps.push({ key: "notifications", label: "Notifications" });
+  return steps;
 }
 
 type Props = {
@@ -120,7 +98,7 @@ export function EngagementFormModal({
   onClose,
   onSubmit,
 }: Props) {
-  const [step, setStep] = useState(1);
+  const [stepIndex, setStepIndex] = useState(0);
   const [formData, setFormData] = useState<EngagementCreate>(initialData);
   const [slotDetail, setSlotDetail] = useState<SlotDetail>(() =>
     normalizeSlotDetail(initialData.slot_detail)
@@ -147,7 +125,7 @@ export function EngagementFormModal({
     const normalized = normalizeSlotDetail(initialData.slot_detail);
     setSlotDetail(normalized);
     setCollectionDates(collectDates(normalized));
-    setStep(1);
+    setStepIndex(0);
     setStepError(null);
     setZoneMessage(null);
     setZoneMessageTone("info");
@@ -190,14 +168,14 @@ export function EngagementFormModal({
       }
 
       if (lat == null || lng == null) {
-        setZoneMessage("Set location coordinates in step 1 (Basics & location) to auto-fill zone ID.");
+        setZoneMessage("Set location coordinates in the Location step to auto-fill zone ID.");
         setZoneMessageTone("info");
         return;
       }
 
       const normalizedPincode = (pincode ?? "").trim();
       if (!normalizedPincode) {
-        setZoneMessage("Set pincode in step 1 to auto-fill zone ID.");
+        setZoneMessage("Set pincode in the Location step to auto-fill zone ID.");
         setZoneMessageTone("info");
         return;
       }
@@ -296,21 +274,88 @@ export function EngagementFormModal({
     if (typeof formData.engagement_type === "string") {
       return formData.engagement_type as EngagementKind;
     }
-    const match = engagementTypes.find(
-      (t) => t.id === formData.engagement_type
-    );
+    const match = engagementTypes.find((t) => t.id === formData.engagement_type);
     return (match?.code as EngagementKind) ?? null;
   }, [formData.engagement_type, engagementTypes]);
 
-  const validateStep1 = () => {
+  const typeConfig = useMemo(
+    () => getTypeConfig(selectedTypeCode),
+    [selectedTypeCode]
+  );
+
+  const steps = useMemo(
+    () => buildSteps(selectedTypeCode, formData.blood_collection_type),
+    [selectedTypeCode, formData.blood_collection_type]
+  );
+
+  useEffect(() => {
+    if (stepIndex >= steps.length) {
+      setStepIndex(Math.max(0, steps.length - 1));
+    }
+  }, [stepIndex, steps.length]);
+
+  const currentStep = steps[stepIndex];
+  const currentStepKey = currentStep?.key ?? "basics";
+  const isLastStep = stepIndex >= steps.length - 1;
+
+  const applySlotDetailPrune = useCallback(
+    (kind: EngagementKind | null, bloodMode: string | null | undefined) => {
+      setSlotDetail((prev) => {
+        const pruned = pruneSlotDetailForType(prev, kind, bloodMode);
+        setCollectionDates(datesAfterPrune(pruned));
+        return pruned;
+      });
+    },
+    []
+  );
+
+  const handleTypeChange = (typeId: number) => {
+    const match = engagementTypes.find((t) => t.id === typeId);
+    const newCode = (match?.code as EngagementKind) ?? null;
+    const config = getTypeConfig(newCode);
+
+    setFormData((prev) => ({
+      ...prev,
+      engagement_type: typeId,
+      assessment_package_id: config.needsAssessment ? prev.assessment_package_id : undefined,
+      diagnostic_package_id: config.needsDiagnostic ? prev.diagnostic_package_id : undefined,
+      consultations: config.needsConsultation ? prev.consultations : undefined,
+      blood_collection_type: config.needsBloodCollection ? prev.blood_collection_type : undefined,
+      external_camp_id:
+        config.needsBloodCollection && prev.blood_collection_type === "camp_collection"
+          ? prev.external_camp_id
+          : undefined,
+      healthians_zone_id: config.needsHealthiansZone ? prev.healthians_zone_id : undefined,
+      metsights_engagement_id: config.needsMetsights ? prev.metsights_engagement_id : undefined,
+      create_profile_on_metsights: config.needsMetsights
+        ? Boolean(prev.create_profile_on_metsights)
+        : false,
+      enroll_for_fitprint_full: config.needsFitPrint
+        ? Boolean(prev.enroll_for_fitprint_full)
+        : false,
+    }));
+
+    applySlotDetailPrune(newCode, formData.blood_collection_type);
+  };
+
+  const handleBloodModeChange = (next: string | undefined) => {
+    setFormData((prev) => ({
+      ...prev,
+      blood_collection_type: next,
+      external_camp_id: next === "camp_collection" ? prev.external_camp_id : undefined,
+    }));
+    applySlotDetailPrune(selectedTypeCode, next ?? null);
+  };
+
+  const validateBasics = () => {
     const missingOrg = mode === "add" && !(formData.organization_id && formData.organization_id > 0);
     const missingDates = !formData.start_date || !formData.end_date;
     const missingType = !selectedTypeId;
     if (missingOrg || missingDates || missingType) {
       const parts: string[] = [];
+      if (missingType) parts.push("engagement type");
       if (missingOrg) parts.push("organisation");
       if (missingDates) parts.push("start and end dates");
-      if (missingType) parts.push("engagement type");
       setStepError(`Please fill required fields: ${parts.join(", ")}`);
       return false;
     }
@@ -318,34 +363,61 @@ export function EngagementFormModal({
     return true;
   };
 
-  const validateStep3 = () => {
+  const validateOfferings = () => {
     if (!selectedTypeId) {
       setStepError("Please select an engagement type");
       return false;
     }
+
+    if (typeConfig.needsAssessment && !(formData.assessment_package_id && formData.assessment_package_id > 0)) {
+      setStepError("Select an assessment package");
+      return false;
+    }
+
+    if (typeConfig.needsDiagnostic && !(formData.diagnostic_package_id && formData.diagnostic_package_id > 0)) {
+      setStepError("Select a diagnostic package");
+      return false;
+    }
+
+    if (typeConfig.needsBloodCollection && !formData.blood_collection_type) {
+      setStepError("Select a blood collection mode (Home or Camp)");
+      return false;
+    }
+
     if (
-      selectedTypeCode &&
-      needsConsultation(selectedTypeCode) &&
+      typeConfig.needsConsultation &&
       expertTypes.length > 0
     ) {
       const selected = expertTypes.some(
         (et) => !!(formData.consultations ?? {})[et.type_key]
       );
       if (!selected) {
-        setStepError("Select at least 1 Expert Type");
+        setStepError("Select at least 1 expert type");
         return false;
       }
     }
+
     setStepError(null);
     return true;
   };
 
+  const validateCurrentStep = () => {
+    if (currentStepKey === "basics") return validateBasics();
+    if (currentStepKey === "offerings") return validateOfferings();
+    return true;
+  };
+
+  const goToStep = (index: number) => {
+    if (index < 0 || index >= steps.length) return;
+    setStepError(null);
+    setStepIndex(index);
+  };
+
   const goNext = () => {
-    if (step === 1 && !validateStep1()) return;
-    if (step === 3 && !validateStep3()) return;
-    const nextStep = Math.min(4, step + 1);
-    setStep(nextStep);
-    if (nextStep === 3 && formData.diagnostic_package_id) {
+    if (!validateCurrentStep()) return;
+    const nextIndex = Math.min(steps.length - 1, stepIndex + 1);
+    setStepIndex(nextIndex);
+    if (steps[nextIndex]?.key === "offerings" && formData.diagnostic_package_id) {
       void checkZoneId(
         formData.diagnostic_package_id,
         formData.latitude,
@@ -357,11 +429,11 @@ export function EngagementFormModal({
 
   const goBack = () => {
     setStepError(null);
-    setStep((s) => Math.max(1, s - 1));
+    setStepIndex((s) => Math.max(0, s - 1));
   };
 
   useEffect(() => {
-    if (step !== 4 || !selectedTypeId) return;
+    if (currentStepKey !== "notifications" || !selectedTypeId) return;
 
     let cancelled = false;
     setNotificationsLoading(true);
@@ -426,20 +498,22 @@ export function EngagementFormModal({
     return () => {
       cancelled = true;
     };
-  }, [step, selectedTypeId, mode, engagementId]);
+  }, [currentStepKey, selectedTypeId, mode, engagementId]);
+
+  const findStepIndex = (key: StepKey) => steps.findIndex((s) => s.key === key);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (step < 4) {
+    if (!isLastStep) {
       goNext();
       return;
     }
-    if (!validateStep1()) {
-      setStep(1);
+    if (!validateBasics()) {
+      goToStep(findStepIndex("basics"));
       return;
     }
-    if (!validateStep3()) {
-      setStep(3);
+    if (!validateOfferings()) {
+      goToStep(findStepIndex("offerings"));
       return;
     }
 
@@ -454,7 +528,7 @@ export function EngagementFormModal({
       }));
 
     let consultations = formData.consultations ?? null;
-    if (selectedTypeCode && !needsConsultation(selectedTypeCode)) {
+    if (selectedTypeCode && !typeConfig.needsConsultation) {
       consultations = null;
     } else if (selectedTypeCode && expertTypes.length > 0) {
       consultations = Object.fromEntries(
@@ -463,13 +537,8 @@ export function EngagementFormModal({
     }
 
     const kind = selectedTypeCode;
-    const showBlood = kind ? needsBloodCollection(kind) : false;
     const showCamp =
-      showBlood && formData.blood_collection_type === "camp_collection";
-    const showZone = kind ? needsHealthiansZone(kind) : false;
-    const showMetsights = kind ? needsMetsightsFields(kind) : false;
-    const showFitPrint = kind ? needsFitPrint(kind) : false;
-    const showSlot = kind ? needsSlotDuration(kind) : false;
+      typeConfig.needsBloodCollection && formData.blood_collection_type === "camp_collection";
 
     onSubmit({
       ...formData,
@@ -477,22 +546,26 @@ export function EngagementFormModal({
       slot_detail: slotDetailForSubmit(slotDetail),
       notifications,
       assessment_package_id:
-        kind && needsAssessment(kind) ? formData.assessment_package_id ?? null : null,
+        kind && typeConfig.needsAssessment ? formData.assessment_package_id ?? null : null,
       diagnostic_package_id:
-        kind && needsDiagnostic(kind) ? formData.diagnostic_package_id ?? null : null,
-      blood_collection_type: showBlood
+        kind && typeConfig.needsDiagnostic ? formData.diagnostic_package_id ?? null : null,
+      blood_collection_type: typeConfig.needsBloodCollection
         ? formData.blood_collection_type || null
         : null,
       external_camp_id: showCamp ? formData.external_camp_id ?? null : null,
-      healthians_zone_id: showZone ? formData.healthians_zone_id ?? null : null,
-      slot_duration: showSlot ? formData.slot_duration : formData.slot_duration || 60,
-      metsights_engagement_id: showMetsights
+      healthians_zone_id: typeConfig.needsHealthiansZone
+        ? formData.healthians_zone_id ?? null
+        : null,
+      slot_duration: typeConfig.needsSlotDuration
+        ? formData.slot_duration
+        : formData.slot_duration || 60,
+      metsights_engagement_id: typeConfig.needsMetsights
         ? formData.metsights_engagement_id ?? null
         : null,
-      create_profile_on_metsights: showMetsights
+      create_profile_on_metsights: typeConfig.needsMetsights
         ? Boolean(formData.create_profile_on_metsights)
         : false,
-      enroll_for_fitprint_full: showFitPrint
+      enroll_for_fitprint_full: typeConfig.needsFitPrint
         ? Boolean(formData.enroll_for_fitprint_full)
         : false,
     });
@@ -506,32 +579,20 @@ export function EngagementFormModal({
     return "Start";
   })();
 
-  const showAssessment = selectedTypeCode
-    ? needsAssessment(selectedTypeCode)
-    : false;
-  const showDiagnostic = selectedTypeCode
-    ? needsDiagnostic(selectedTypeCode)
-    : false;
-  const showConsultation = selectedTypeCode
-    ? needsConsultation(selectedTypeCode)
-    : false;
-  const showBloodCollection = selectedTypeCode
-    ? needsBloodCollection(selectedTypeCode)
-    : false;
-  const showCampId =
-    showBloodCollection && formData.blood_collection_type === "camp_collection";
-  const showHealthiansZone = selectedTypeCode
-    ? needsHealthiansZone(selectedTypeCode)
-    : false;
-  const showSlotDuration = selectedTypeCode
-    ? needsSlotDuration(selectedTypeCode)
-    : false;
-  const showMetsightsFields = selectedTypeCode
-    ? needsMetsightsFields(selectedTypeCode)
-    : false;
-  const showFitPrint = selectedTypeCode
-    ? needsFitPrint(selectedTypeCode)
-    : false;
+  const typeHint = getTypeHint(selectedTypeCode);
+  const showOfferingsEmpty = selectedTypeCode && !hasOfferingsFields(selectedTypeCode);
+
+  const scheduleHasData = useMemo(() => {
+    const pruned = slotDetailForSubmit(slotDetail);
+    return pruned != null;
+  }, [slotDetail]);
+
+  const nextButtonLabel = (() => {
+    if (currentStepKey === "schedule" && !scheduleHasData && collectionDates.length === 0) {
+      return "Skip";
+    }
+    return "Next";
+  })();
 
   return (
     <Modal
@@ -542,30 +603,35 @@ export function EngagementFormModal({
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="flex items-center gap-2">
-          {STEPS.map((item, index) => {
-            const active = step === item.id;
-            const done = step > item.id;
+          {steps.map((item, index) => {
+            const active = stepIndex === index;
+            const done = stepIndex > index;
             return (
-              <div key={item.id} className="flex items-center gap-2 flex-1 min-w-0">
-                <div
-                  className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold shrink-0 ${
+              <div key={item.key} className="flex items-center gap-2 flex-1 min-w-0">
+                <button
+                  type="button"
+                  disabled={!done && !active}
+                  onClick={() => done && goToStep(index)}
+                  className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold shrink-0 transition-colors ${
                     active
                       ? "bg-zinc-900 text-white"
                       : done
-                        ? "bg-zinc-200 text-zinc-800"
-                        : "bg-zinc-100 text-zinc-400"
+                        ? "bg-zinc-200 text-zinc-800 hover:bg-zinc-300 cursor-pointer"
+                        : "bg-zinc-100 text-zinc-400 cursor-default"
                   }`}
                 >
-                  {item.id}
-                </div>
+                  {index + 1}
+                </button>
                 <span
                   className={`text-xs font-medium truncate ${
-                    active ? "text-zinc-900" : "text-zinc-500"
+                    active ? "text-zinc-900" : done ? "text-zinc-700" : "text-zinc-500"
                   }`}
                 >
                   {item.label}
                 </span>
-                {index < STEPS.length - 1 && <div className="hidden sm:block flex-1 h-px bg-zinc-200" />}
+                {index < steps.length - 1 && (
+                  <div className="hidden sm:block flex-1 h-px bg-zinc-200" />
+                )}
               </div>
             );
           })}
@@ -573,8 +639,31 @@ export function EngagementFormModal({
 
         {stepError && <p className="text-sm text-red-600">{stepError}</p>}
 
-        {step === 1 && (
+        {currentStepKey === "basics" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Type *</label>
+              <select
+                value={selectedTypeId ?? ""}
+                onChange={(e) => handleTypeChange(Number(e.target.value))}
+                className={inputClass}
+                required
+              >
+                <option value="" disabled>
+                  Select type
+                </option>
+                {engagementTypes
+                  .filter((t) => t.is_active)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.display_name}
+                    </option>
+                  ))}
+              </select>
+              {typeHint && (
+                <p className="text-xs text-zinc-500 mt-1">{typeHint}</p>
+              )}
+            </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Name</label>
               <input
@@ -613,6 +702,34 @@ export function EngagementFormModal({
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Start date *</label>
+              <input
+                type="date"
+                value={formData.start_date}
+                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                className={inputClass}
+                required
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Same start date as other engagements from this organisation groups them into one camp.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">End date *</label>
+              <input
+                type="date"
+                value={formData.end_date}
+                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                className={inputClass}
+                required
+              />
+            </div>
+          </div>
+        )}
+
+        {currentStepKey === "location" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">Address</label>
               <AddressAutocomplete
@@ -706,69 +823,25 @@ export function EngagementFormModal({
                 className={inputClass}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Start date *</label>
-              <input
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                className={inputClass}
-                required
-              />
-              <p className="text-xs text-zinc-500 mt-1">
-                Same start date as other engagements from this organisation groups them into one camp.
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">End date *</label>
-              <input
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                className={inputClass}
-                required
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Type *</label>
-              <select
-                value={selectedTypeId ?? ""}
-                onChange={(e) =>
-                  setFormData({ ...formData, engagement_type: Number(e.target.value) })
-                }
-                className={inputClass}
-                required
-              >
-                <option value="" disabled>
-                  Select type
-                </option>
-                {engagementTypes
-                  .filter((t) => t.is_active)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.display_name}
-                    </option>
-                  ))}
-              </select>
-            </div>
           </div>
         )}
 
-        {step === 2 && (
-          <CollectionDateStep
-            kind={selectedTypeCode}
-            slotDetail={slotDetail}
-            dates={collectionDates}
-            onDatesChange={setCollectionDates}
-            onSlotDetailChange={setSlotDetail}
-          />
-        )}
-
-        {step === 3 && (
+        {currentStepKey === "offerings" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {showAssessment && (
+            {showOfferingsEmpty && (
+              <p className="md:col-span-2 text-sm text-zinc-500">
+                No type-specific offerings for this engagement type.
+                {!needsScheduleStep(selectedTypeCode) && (
+                  <span> On-site scheduling is not used — continue to notifications.</span>
+                )}
+              </p>
+            )}
+
+            {typeConfig.needsAssessment && (
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Assessment package *
+                </label>
                 <select
                   value={formData.assessment_package_id ?? 0}
                   onChange={(e) =>
@@ -776,7 +849,7 @@ export function EngagementFormModal({
                   }
                   className={inputClass}
                 >
-                  <option value={0}>None</option>
+                  <option value={0}>Select package</option>
                   {assessmentPackages.map((p) => (
                     <option key={p.package_id} value={p.package_id}>
                       {p.display_name ?? p.package_code ?? p.package_id}
@@ -786,9 +859,11 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {showDiagnostic && (
+            {typeConfig.needsDiagnostic && (
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Diagnostic package</label>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Diagnostic package *
+                </label>
                 <select
                   value={formData.diagnostic_package_id ?? 0}
                   onChange={(e) => {
@@ -809,7 +884,7 @@ export function EngagementFormModal({
                   }}
                   className={inputClass}
                 >
-                  <option value={0}>None</option>
+                  <option value={0}>Select package</option>
                   {diagnosticPackages.map((p) => (
                     <option key={p.diagnostic_package_id} value={p.diagnostic_package_id}>
                       {p.package_name}
@@ -819,13 +894,16 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {showConsultation && expertTypes.length > 0 && (
+            {typeConfig.needsConsultation && expertTypes.length > 0 && (
               <div className="md:col-span-2 space-y-2">
-                <label className="block text-sm font-medium text-zinc-700">Consultations</label>
-                <p className="text-xs text-zinc-500">Select at least 1 Expert Type</p>
+                <label className="block text-sm font-medium text-zinc-700">Expert consultations *</label>
+                <p className="text-xs text-zinc-500">Select at least 1 expert type</p>
                 <div className="flex flex-wrap gap-3">
                   {expertTypes.map((et) => (
-                    <label key={et.type_key} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 bg-zinc-50 text-sm cursor-pointer hover:bg-zinc-100 transition-colors">
+                    <label
+                      key={et.type_key}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 bg-zinc-50 text-sm cursor-pointer hover:bg-zinc-100 transition-colors"
+                    >
                       <input
                         type="checkbox"
                         checked={!!(formData.consultations ?? {})[et.type_key]}
@@ -847,20 +925,14 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {showBloodCollection && (
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Blood Collection Type</label>
+            {typeConfig.needsBloodCollection && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Blood collection mode *
+                </label>
                 <select
                   value={formData.blood_collection_type ?? ""}
-                  onChange={(e) => {
-                    const next = e.target.value || undefined;
-                    setFormData({
-                      ...formData,
-                      blood_collection_type: next,
-                      external_camp_id:
-                        next === "camp_collection" ? formData.external_camp_id : undefined,
-                    });
-                  }}
+                  onChange={(e) => handleBloodModeChange(e.target.value || undefined)}
                   className={inputClass}
                 >
                   {BLOOD_COLLECTION_TYPE_OPTIONS.map((opt) => (
@@ -869,10 +941,14 @@ export function EngagementFormModal({
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Camp collection uses on-site cabins. Home collection uses Healthians per participant.
+                </p>
               </div>
             )}
 
-            {showCampId && (
+            {typeConfig.needsBloodCollection &&
+              formData.blood_collection_type === "camp_collection" && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Healthians Camp ID</label>
                 <input
@@ -887,7 +963,7 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {showHealthiansZone && (
+            {typeConfig.needsHealthiansZone && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Healthians Zone ID {zoneLoading && <span className="text-xs text-zinc-400">(loading...)</span>}
@@ -915,7 +991,7 @@ export function EngagementFormModal({
               </div>
             )}
 
-            {showSlotDuration && (
+            {typeConfig.needsSlotDuration && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Slot duration (min)</label>
                 <input
@@ -926,10 +1002,13 @@ export function EngagementFormModal({
                   onChange={(e) => setFormData({ ...formData, slot_duration: Number(e.target.value) })}
                   className={inputClass}
                 />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Default engagement duration. Per-cabin duration is set in the Schedule step.
+                </p>
               </div>
             )}
 
-            {showMetsightsFields && (
+            {typeConfig.needsMetsights && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 mb-1">
@@ -980,7 +1059,7 @@ export function EngagementFormModal({
               </>
             )}
 
-            {showFitPrint && (
+            {typeConfig.needsFitPrint && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
                   Enroll For FitPrint Full
@@ -1010,7 +1089,20 @@ export function EngagementFormModal({
           </div>
         )}
 
-        {step === 4 && (
+        {currentStepKey === "schedule" && (
+          <EngagementScheduleStep
+            kind={selectedTypeCode}
+            bloodCollectionType={formData.blood_collection_type}
+            startDate={formData.start_date}
+            endDate={formData.end_date}
+            slotDetail={slotDetail}
+            dates={collectionDates}
+            onDatesChange={setCollectionDates}
+            onSlotDetailChange={setSlotDetail}
+          />
+        )}
+
+        {currentStepKey === "notifications" && (
           <div className="grid grid-cols-1 gap-4">
             {notificationsLoading ? (
               <div className="py-8 flex justify-center">
@@ -1020,7 +1112,7 @@ export function EngagementFormModal({
               <p className="text-sm text-zinc-500">
                 {selectedTypeId
                   ? "No notification events configured for this engagement type."
-                  : "Select an engagement type in step 1 first."}
+                  : "Select an engagement type in Type & basics first."}
               </p>
             ) : (
               notificationEvents.map((event) => (
@@ -1042,12 +1134,12 @@ export function EngagementFormModal({
         )}
 
         <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
-          {step < 4 ? (
+          {!isLastStep ? (
             <button
               type="submit"
               className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
             >
-              {step === 2 && collectionDates.length === 0 ? "Skip" : "Next"}
+              {nextButtonLabel}
             </button>
           ) : (
             <button
@@ -1058,7 +1150,7 @@ export function EngagementFormModal({
               {submitLabel}
             </button>
           )}
-          {step > 1 && (
+          {stepIndex > 0 && (
             <button
               type="button"
               onClick={goBack}

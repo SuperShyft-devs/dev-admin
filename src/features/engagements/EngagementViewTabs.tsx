@@ -13,6 +13,10 @@ import type {
   Engagement,
 } from "../../lib/api";
 import { ConsoleUrlActions } from "./consoleUrlActions";
+import {
+  formatBloodCollectionLabel,
+  summarizeSlotDetail,
+} from "./engagementTypeConfig";
 import { Field, formatEngagementStatusLabel, isB2BEngagement } from "./engagementViewShared";
 
 type SharedProps = {
@@ -198,6 +202,8 @@ export function EngagementDetailsTab({
     ? `https://www.openstreetmap.org/?mlat=${engagement.latitude}&mlon=${engagement.longitude}#map=17/${engagement.latitude}/${engagement.longitude}`
     : null;
 
+  const scheduleSummary = summarizeSlotDetail(engagement.slot_detail);
+
   const copyCoords = async () => {
     if (!hasCoords) return;
     try {
@@ -272,6 +278,15 @@ export function EngagementDetailsTab({
           </Field>
           <Field label="Start">{String(engagement.start_date ?? "—")}</Field>
           <Field label="End">{String(engagement.end_date ?? "—")}</Field>
+          <Field label="Blood collection">
+            {formatBloodCollectionLabel(engagement.blood_collection_type)}
+          </Field>
+          {engagement.external_camp_id != null ? (
+            <Field label="Healthians Camp ID">{String(engagement.external_camp_id)}</Field>
+          ) : null}
+          {engagement.healthians_zone_id ? (
+            <Field label="Healthians Zone ID">{engagement.healthians_zone_id}</Field>
+          ) : null}
           <Field label="Slot duration">
             {engagement.slot_duration != null ? `${engagement.slot_duration} min` : "—"}
           </Field>
@@ -284,6 +299,32 @@ export function EngagementDetailsTab({
             {engagement.enroll_for_fitprint_full ? "Yes" : "No"}
           </Field>
         </div>
+      </div>
+
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-zinc-800">On-site schedule</h3>
+        {scheduleSummary.bloodCabins + scheduleSummary.consultCabins === 0 ? (
+          <p className="text-sm text-zinc-500">
+            {engagement.blood_collection_type === "home_collection"
+              ? "Home collection — slots are chosen per participant via Healthians."
+              : "No on-site dates or cabins configured."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {scheduleSummary.bloodDates > 0 && (
+              <>
+                <Field label="Blood test dates">{scheduleSummary.bloodDates}</Field>
+                <Field label="Blood test cabins">{scheduleSummary.bloodCabins}</Field>
+              </>
+            )}
+            {scheduleSummary.consultDates > 0 && (
+              <>
+                <Field label="Consultation dates">{scheduleSummary.consultDates}</Field>
+                <Field label="Consultation cabins">{scheduleSummary.consultCabins}</Field>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,29 +1,11 @@
 import type {
   CabinBreak,
   CabinSlotConfig,
-  EngagementKind,
   SlotDetail,
   SlotDetailSection,
 } from "../../lib/api";
 
 export type CabinSectionKey = "blood_collection" | "consultation";
-
-export function needsBloodCabins(kind: EngagementKind | null): boolean {
-  return (
-    kind === "bio_ai" ||
-    kind === "blood_test" ||
-    kind === "blood_test_with_consultation" ||
-    kind === "bio_ai_with_consultation"
-  );
-}
-
-export function needsConsultationCabins(kind: EngagementKind | null): boolean {
-  return (
-    kind === "consultation" ||
-    kind === "blood_test_with_consultation" ||
-    kind === "bio_ai_with_consultation"
-  );
-}
 
 export function emptySlotDetail(): SlotDetail {
   return {};
