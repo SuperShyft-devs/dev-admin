@@ -1008,6 +1008,7 @@ export function Engagements({
     external_camp_id: undefined,
     create_profile_on_metsights: false,
     enroll_for_fitprint_full: false,
+    slot_detail: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<EngagementListItem | null>(null);
@@ -1272,6 +1273,7 @@ export function Engagements({
       blood_collection_type: preset?.blood_collection_type ?? undefined,
       create_profile_on_metsights: preset?.create_profile_on_metsights ?? false,
       enroll_for_fitprint_full: preset?.enroll_for_fitprint_full ?? false,
+      slot_detail: preset?.slot_detail ?? null,
     });
     setModalMode("add");
     setModalOpen(true);
@@ -1320,6 +1322,7 @@ export function Engagements({
         blood_collection_type: e.blood_collection_type ?? undefined,
         create_profile_on_metsights: Boolean(e.create_profile_on_metsights),
         enroll_for_fitprint_full: Boolean(e.enroll_for_fitprint_full),
+        slot_detail: e.slot_detail ?? null,
       });
       setModalMode("edit");
       setModalOpen(true);
@@ -1392,6 +1395,7 @@ export function Engagements({
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notifications: data.notifications ?? [],
           camp_no: computeCampNo(orgId, data.start_date),
+          slot_detail: data.slot_detail ?? null,
         };
         const created = await engagementsApi.create(createPayload);
         const engagementId = created.data.data.engagement_id;
@@ -1428,6 +1432,7 @@ export function Engagements({
           create_profile_on_metsights: Boolean(data.create_profile_on_metsights),
           enroll_for_fitprint_full: Boolean(data.enroll_for_fitprint_full),
           notifications: data.notifications ?? [],
+          slot_detail: data.slot_detail ?? null,
         };
 
         if (orgId && nextCampNo != null && currentCampNo !== nextCampNo) {

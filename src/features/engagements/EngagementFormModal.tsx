@@ -12,6 +12,7 @@ import {
   type NotificationEventItem,
   type NotificationServiceItem,
   type OrganizationListItem,
+  type SlotDetail,
   engagementsApi,
   engagementNotificationsApi,
   engagementTypesApi,
@@ -21,6 +22,12 @@ import {
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
 import { AddressAutocomplete } from "./AddressAutocomplete";
+import { CollectionDateStep } from "./CollectionDateStep";
+import {
+  collectDates,
+  normalizeSlotDetail,
+  slotDetailForSubmit,
+} from "./slotDetailUtils";
 
 const BLOOD_COLLECTION_TYPE_OPTIONS = [
   { value: "", label: "None" },
@@ -30,8 +37,9 @@ const BLOOD_COLLECTION_TYPE_OPTIONS = [
 
 const STEPS = [
   { id: 1, label: "Basics & location" },
-  { id: 2, label: "Type, packages & flags" },
-  { id: 3, label: "Notifications" },
+  { id: 2, label: "Collection date" },
+  { id: 3, label: "Packages & flags" },
+  { id: 4, label: "Notifications" },
 ] as const;
 
 const inputClass =
@@ -114,6 +122,12 @@ export function EngagementFormModal({
 }: Props) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<EngagementCreate>(initialData);
+  const [slotDetail, setSlotDetail] = useState<SlotDetail>(() =>
+    normalizeSlotDetail(initialData.slot_detail)
+  );
+  const [collectionDates, setCollectionDates] = useState<string[]>(() =>
+    collectDates(normalizeSlotDetail(initialData.slot_detail))
+  );
   const [stepError, setStepError] = useState<string | null>(null);
   const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
 
@@ -130,6 +144,9 @@ export function EngagementFormModal({
   useEffect(() => {
     if (!open) return;
     setFormData(initialData);
+    const normalized = normalizeSlotDetail(initialData.slot_detail);
+    setSlotDetail(normalized);
+    setCollectionDates(collectDates(normalized));
     setStep(1);
     setStepError(null);
     setZoneMessage(null);
@@ -251,20 +268,6 @@ export function EngagementFormModal({
     });
   };
 
-  const validateStep1 = () => {
-    const missingOrg = mode === "add" && !(formData.organization_id && formData.organization_id > 0);
-    const missingDates = !formData.start_date || !formData.end_date;
-    if (missingOrg || missingDates) {
-      const parts: string[] = [];
-      if (missingOrg) parts.push("organisation");
-      if (missingDates) parts.push("start and end dates");
-      setStepError(`Please fill required fields: ${parts.join(", ")}`);
-      return false;
-    }
-    setStepError(null);
-    return true;
-  };
-
   const applyDiagPkgConsultationDefaults = useCallback(
     (pkgId: number | undefined) => {
       if (!pkgId || pkgId <= 0) return;
@@ -299,7 +302,23 @@ export function EngagementFormModal({
     return (match?.code as EngagementKind) ?? null;
   }, [formData.engagement_type, engagementTypes]);
 
-  const validateStep2 = () => {
+  const validateStep1 = () => {
+    const missingOrg = mode === "add" && !(formData.organization_id && formData.organization_id > 0);
+    const missingDates = !formData.start_date || !formData.end_date;
+    const missingType = !selectedTypeId;
+    if (missingOrg || missingDates || missingType) {
+      const parts: string[] = [];
+      if (missingOrg) parts.push("organisation");
+      if (missingDates) parts.push("start and end dates");
+      if (missingType) parts.push("engagement type");
+      setStepError(`Please fill required fields: ${parts.join(", ")}`);
+      return false;
+    }
+    setStepError(null);
+    return true;
+  };
+
+  const validateStep3 = () => {
     if (!selectedTypeId) {
       setStepError("Please select an engagement type");
       return false;
@@ -323,10 +342,10 @@ export function EngagementFormModal({
 
   const goNext = () => {
     if (step === 1 && !validateStep1()) return;
-    if (step === 2 && !validateStep2()) return;
-    const nextStep = Math.min(3, step + 1);
+    if (step === 3 && !validateStep3()) return;
+    const nextStep = Math.min(4, step + 1);
     setStep(nextStep);
-    if (nextStep === 2 && formData.diagnostic_package_id) {
+    if (nextStep === 3 && formData.diagnostic_package_id) {
       void checkZoneId(
         formData.diagnostic_package_id,
         formData.latitude,
@@ -342,7 +361,7 @@ export function EngagementFormModal({
   };
 
   useEffect(() => {
-    if (step !== 3 || !selectedTypeId) return;
+    if (step !== 4 || !selectedTypeId) return;
 
     let cancelled = false;
     setNotificationsLoading(true);
@@ -411,7 +430,7 @@ export function EngagementFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (step < 3) {
+    if (step < 4) {
       goNext();
       return;
     }
@@ -419,8 +438,8 @@ export function EngagementFormModal({
       setStep(1);
       return;
     }
-    if (!validateStep2()) {
-      setStep(2);
+    if (!validateStep3()) {
+      setStep(3);
       return;
     }
 
@@ -455,6 +474,7 @@ export function EngagementFormModal({
     onSubmit({
       ...formData,
       consultations,
+      slot_detail: slotDetailForSubmit(slotDetail),
       notifications,
       assessment_package_id:
         kind && needsAssessment(kind) ? formData.assessment_package_id ?? null : null,
@@ -518,7 +538,7 @@ export function EngagementFormModal({
       open={open}
       onClose={onClose}
       title={mode === "add" ? "Add Engagement" : "Edit Engagement"}
-      maxWidthClassName="max-w-2xl"
+      maxWidthClassName="max-w-3xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="flex items-center gap-2">
@@ -709,11 +729,6 @@ export function EngagementFormModal({
                 required
               />
             </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-zinc-700 mb-1">Engagement Type *</label>
               <select
@@ -736,7 +751,21 @@ export function EngagementFormModal({
                   ))}
               </select>
             </div>
+          </div>
+        )}
 
+        {step === 2 && (
+          <CollectionDateStep
+            kind={selectedTypeCode}
+            slotDetail={slotDetail}
+            dates={collectionDates}
+            onDatesChange={setCollectionDates}
+            onSlotDetailChange={setSlotDetail}
+          />
+        )}
+
+        {step === 3 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {showAssessment && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Assessment package</label>
@@ -981,7 +1010,7 @@ export function EngagementFormModal({
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="grid grid-cols-1 gap-4">
             {notificationsLoading ? (
               <div className="py-8 flex justify-center">
@@ -991,7 +1020,7 @@ export function EngagementFormModal({
               <p className="text-sm text-zinc-500">
                 {selectedTypeId
                   ? "No notification events configured for this engagement type."
-                  : "Select an engagement type in step 2 first."}
+                  : "Select an engagement type in step 1 first."}
               </p>
             ) : (
               notificationEvents.map((event) => (
@@ -1013,12 +1042,12 @@ export function EngagementFormModal({
         )}
 
         <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
-          {step < 3 ? (
+          {step < 4 ? (
             <button
               type="submit"
               className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
             >
-              Next
+              {step === 2 && collectionDates.length === 0 ? "Skip" : "Next"}
             </button>
           ) : (
             <button
