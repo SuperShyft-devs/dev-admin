@@ -765,6 +765,16 @@ export const employeesApi = {
 };
 
 // Organizations
+export type CityContactAssignments = {
+  managers: number[];
+  [departmentSlug: string]: number[];
+};
+
+export type ContactPersonUserIds = {
+  organization_managers: number[];
+  [city: string]: number[] | CityContactAssignments;
+};
+
 export interface OrganizationDepartment {
   department: string;
   slug: string;
@@ -787,7 +797,7 @@ export interface Organization {
   country?: string | null;
   industry_key?: string | null;
   industry?: string | null;
-  contact_person_user_id?: number | null;
+  contact_person_user_ids?: ContactPersonUserIds | null;
   bd_employee_id?: number | null;
   status?: string | null;
   created_at?: string | null;
@@ -795,6 +805,8 @@ export interface Organization {
   updated_at?: string | null;
   updated_employee_id?: number | null;
   departments?: OrganizationDepartment[] | null;
+  camp_cities?: string[];
+  report_access?: Record<string, unknown>;
 }
 
 export interface OrganizationListItem {
@@ -822,7 +834,7 @@ export interface OrganizationCreate {
   state?: string | null;
   country?: string | null;
   industry_key?: string | null;
-  contact_person_user_id?: number | null;
+  contact_person_user_ids?: ContactPersonUserIds | null;
   bd_employee_id?: number | null;
   departments?: OrganizationDepartmentInput[] | null;
 }
@@ -927,6 +939,10 @@ export interface CampListItem {
   departments: {
     count: number;
     departments: { name: string; slug: string }[];
+  };
+  cities: {
+    count: number;
+    cities: string[];
   };
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Search, Plus, Loader2, Users, X, FileBarChart, MapPin } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -12,11 +12,15 @@ import { CampDepartmentsModal } from "../../shared/ui/CampDepartmentsModal";
 import { CampCitiesModal } from "../../shared/ui/CampCitiesModal";
 import { CampReportInitMenu } from "../../shared/ui/CampReportInitMenu";
 import { listAllEngagementsForCamp } from "../../shared/ui/listAllEngagementsForCamp";
-import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
+import {
+  OrganizationContactPersonsEditor,
+  summarizeContactPersonUserIds,
+} from "../../shared/ui/OrganizationContactPersonsEditor";
 import { ManageIndustriesModal } from "./ManageIndustriesModal";
 import {
   organizationsApi,
   employeesApi,
+  engagementsApi,
   uploadsApi,
   campReportsApi,
   usersApi,
@@ -25,11 +29,21 @@ import {
   type OrganizationListItem,
   type Organization,
   type OrganizationCreate,
+  type ContactPersonUserIds,
   type CampListItem,
   getApiError,
 } from "../../lib/api";
 
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
+
+function slugifyDepartment(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
 type TabKey = "organizations" | "camps";
 const TAB_KEYS: TabKey[] = ["organizations", "camps"];
@@ -71,9 +85,10 @@ export function Organisations() {
     city: "",
     state: "",
     country: "",
-    contact_person_user_id: 0,
+    contact_person_user_ids: null,
     bd_employee_id: undefined,
   });
+  const [engagementCities, setEngagementCities] = useState<string[]>([]);
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
   const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
   const [employeeLoading, setEmployeeLoading] = useState(false);
@@ -107,6 +122,17 @@ export function Organisations() {
   } | null>(null);
   const [departmentNames, setDepartmentNames] = useState<string[]>([]);
   const [departmentInput, setDepartmentInput] = useState("");
+
+  const departmentOptions = useMemo(
+    () =>
+      (selected?.departments?.length
+        ? selected.departments.map((d) => ({ name: d.department, slug: d.slug }))
+        : departmentNames.map((department) => ({
+            name: department,
+            slug: slugifyDepartment(department),
+          }))),
+    [selected, departmentNames]
+  );
 
   const [campsData, setCampsData] = useState<CampListItem[]>([]);
   const [initializedCampNos, setInitializedCampNos] = useState<Set<number>>(new Set());
@@ -292,15 +318,53 @@ export function Organisations() {
 
   const buildOrganizationPayload = (): OrganizationCreate => ({
     ...formData,
-    contact_person_user_id:
-      formData.contact_person_user_id && formData.contact_person_user_id > 0
-        ? formData.contact_person_user_id
-        : null,
+    contact_person_user_ids: formData.contact_person_user_ids ?? null,
     departments:
       departmentNames.length > 0
         ? departmentNames.map((department) => ({ department }))
         : null,
   });
+
+  const collectContactPersonUserIds = (value: ContactPersonUserIds | null | undefined): number[] => {
+    if (!value) return [];
+    const ids = new Set<number>();
+    for (const id of value.organization_managers ?? []) {
+      if (id > 0) ids.add(id);
+    }
+    for (const [key, raw] of Object.entries(value)) {
+      if (key === "organization_managers" || !raw || typeof raw !== "object" || Array.isArray(raw)) {
+        continue;
+      }
+      for (const nested of Object.values(raw)) {
+        if (Array.isArray(nested)) {
+          nested.forEach((id) => {
+            if (typeof id === "number" && id > 0) ids.add(id);
+          });
+        }
+      }
+    }
+    return Array.from(ids);
+  };
+
+  const loadEngagementCitiesForOrg = async (organizationId: number) => {
+    try {
+      const cities = new Set<string>();
+      let page = 1;
+      let total = 0;
+      do {
+        const res = await engagementsApi.list({ org_id: organizationId, page, limit: 100 });
+        for (const item of res.data.data) {
+          const city = (item.city ?? "").trim();
+          if (city) cities.add(city);
+        }
+        total = res.data.meta.total;
+        page += 1;
+      } while ((page - 1) * 100 < total);
+      setEngagementCities(Array.from(cities).sort((a, b) => a.localeCompare(b)));
+    } catch {
+      setEngagementCities([]);
+    }
+  };
 
   const formatUserLabel = (userId: number | null | undefined): string => {
     if (!userId) return "—";
@@ -312,32 +376,38 @@ export function Organisations() {
     return name ? `${name} (#${userId})` : `User #${userId}`;
   };
 
-  const loadContactPersonUser = async (userId: number | null | undefined) => {
-    if (!userId || usersById[userId]) return;
-    try {
-      const res = await usersApi.get(userId);
-      const u = res.data.data;
-      setUsersById((prev) => ({
-        ...prev,
-        [userId]: {
-          user_id: u.user_id,
-          first_name: u.first_name,
-          last_name: u.last_name,
-          phone: u.phone,
-          email: u.email,
-          status: u.status,
-        },
-      }));
-    } catch {
-      // ignore lookup errors in view mode
-    }
+  const loadContactPersonUsers = async (value: ContactPersonUserIds | null | undefined) => {
+    const userIds = collectContactPersonUserIds(value);
+    await Promise.all(
+      userIds.map(async (userId) => {
+        if (usersById[userId]) return;
+        try {
+          const res = await usersApi.get(userId);
+          const u = res.data.data;
+          setUsersById((prev) => ({
+            ...prev,
+            [userId]: {
+              user_id: u.user_id,
+              first_name: u.first_name,
+              last_name: u.last_name,
+              phone: u.phone,
+              email: u.email,
+              status: u.status,
+            },
+          }));
+        } catch {
+          // ignore lookup errors in view mode
+        }
+      })
+    );
   };
 
   const openView = (row: OrganizationListItem) => {
     organizationsApi.get(row.organization_id).then(async (res) => {
       const org = res.data.data;
       setSelected(org);
-      await loadContactPersonUser(org.contact_person_user_id);
+      await loadContactPersonUsers(org.contact_person_user_ids);
+      await loadEngagementCitiesForOrg(org.organization_id);
       setModalMode("view");
       setModalOpen(true);
     }).catch((err) => setError(getApiError(err)));
@@ -356,9 +426,10 @@ export function Organisations() {
       city: "",
       state: "",
       country: "",
-      contact_person_user_id: 0,
+      contact_person_user_ids: null,
       bd_employee_id: undefined,
     });
+    setEngagementCities([]);
     setDepartmentNames([]);
     setDepartmentInput("");
     setModalMode("add");
@@ -381,9 +452,10 @@ export function Organisations() {
         city: o.city ?? "",
         state: o.state ?? "",
         country: o.country ?? "",
-        contact_person_user_id: o.contact_person_user_id ?? 0,
+        contact_person_user_ids: o.contact_person_user_ids ?? null,
         bd_employee_id: o.bd_employee_id ?? undefined,
       });
+      void loadEngagementCitiesForOrg(o.organization_id);
       setDepartmentNames(
         (o.departments ?? [])
           .map((d: any) => {
@@ -1092,7 +1164,32 @@ export function Organisations() {
               <div><span className="text-zinc-500">City:</span> {selected.city ?? "—"}</div>
               <div><span className="text-zinc-500">State:</span> {selected.state ?? "—"}</div>
               <div><span className="text-zinc-500">Country:</span> {selected.country ?? "—"}</div>
-              <div><span className="text-zinc-500">Contact Person:</span> {formatUserLabel(selected.contact_person_user_id)}</div>
+              <div className="md:col-span-2">
+                <span className="text-zinc-500">Access & managers:</span>
+                {summarizeContactPersonUserIds(
+                  selected.contact_person_user_ids,
+                  (userId) => formatUserLabel(userId),
+                  (selected.departments ?? []).map((d) => ({
+                    slug: d.slug,
+                    name: d.department,
+                  })),
+                ).length > 0 ? (
+                  <ul className="mt-1 space-y-1 text-sm">
+                    {summarizeContactPersonUserIds(
+                      selected.contact_person_user_ids,
+                      (userId) => formatUserLabel(userId),
+                      (selected.departments ?? []).map((d) => ({
+                        slug: d.slug,
+                        name: d.department,
+                      })),
+                    ).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  " —"
+                )}
+              </div>
               <div><span className="text-zinc-500">BD Employee ID:</span> {selected.bd_employee_id ?? "—"}</div>
               <div><span className="text-zinc-500">Status:</span> {selected.status ?? "—"}</div>
             </div>
@@ -1294,15 +1391,14 @@ export function Organisations() {
                   className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 />
               </div>
-              <div className="md:col-span-2">
-                <UserSearchPicker
-                  label="Contact Person"
-                  value={formData.contact_person_user_id ?? 0}
-                  onChange={(userId) =>
-                    setFormData({ ...formData, contact_person_user_id: userId })
-                  }
-                />
-              </div>
+              <OrganizationContactPersonsEditor
+                value={formData.contact_person_user_ids}
+                onChange={(contact_person_user_ids) =>
+                  setFormData({ ...formData, contact_person_user_ids })
+                }
+                departments={departmentOptions}
+                engagementCities={engagementCities}
+              />
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">BD Employee</label>
                 <select
