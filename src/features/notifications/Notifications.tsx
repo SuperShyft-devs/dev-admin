@@ -599,6 +599,7 @@ interface ServiceFormData {
   require_participant_detail: boolean;
   require_otp: boolean;
   require_session_details: boolean;
+  require_external_link: boolean;
 }
 
 const EMPTY_SERVICE_FORM: ServiceFormData = {
@@ -612,6 +613,7 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   require_participant_detail: false,
   require_otp: false,
   require_session_details: false,
+  require_external_link: false,
 };
 
 function ServicesTab() {
@@ -662,6 +664,7 @@ function ServicesTab() {
       require_participant_detail: row.require_participant_detail,
       require_otp: row.require_otp,
       require_session_details: row.require_session_details,
+      require_external_link: row.require_external_link,
     });
     setEditingId(row.notification_service_id);
     setModalMode("edit");
@@ -702,6 +705,7 @@ function ServicesTab() {
           require_participant_detail: formData.require_participant_detail,
           require_otp: formData.require_otp,
           require_session_details: formData.require_session_details,
+          require_external_link: formData.require_external_link,
         });
       }
       setModalOpen(false);
@@ -770,6 +774,13 @@ function ServicesTab() {
       sortable: false,
       hideOnTablet: true,
       render: (r) => (r.require_session_details ? "Yes" : "No"),
+    },
+    {
+      key: "require_external_link",
+      label: "Requires External Link",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (r.require_external_link ? "Yes" : "No"),
     },
     {
       key: "created_at",
@@ -924,6 +935,15 @@ function ServicesTab() {
                 className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
               <span className="text-sm text-zinc-700">Require Session Details</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.require_external_link}
+                onChange={(e) => setFormData({ ...formData, require_external_link: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              />
+              <span className="text-sm text-zinc-700">Require External Link</span>
             </label>
           </div>
 

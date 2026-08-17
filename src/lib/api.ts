@@ -3415,6 +3415,7 @@ export interface NotificationServiceItem {
   require_participant_detail: boolean;
   require_otp: boolean;
   require_session_details: boolean;
+  require_external_link: boolean;
   created_at: string | null;
 }
 
@@ -3484,6 +3485,7 @@ export const notificationsApi = {
     require_participant_detail?: boolean;
     require_otp?: boolean;
     require_session_details?: boolean;
+    require_external_link?: boolean;
   }) =>
     api.post<{ data: NotificationServiceItem; meta: Record<string, unknown> }>("/notifications/services", body),
   updateService: (
@@ -3498,6 +3500,7 @@ export const notificationsApi = {
       require_participant_detail?: boolean;
       require_otp?: boolean;
       require_session_details?: boolean;
+      require_external_link?: boolean;
     }
   ) =>
     api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(
