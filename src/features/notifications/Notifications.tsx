@@ -598,6 +598,7 @@ interface ServiceFormData {
   require_bio_ai_report_url: boolean;
   require_participant_detail: boolean;
   require_otp: boolean;
+  require_session_details: boolean;
 }
 
 const EMPTY_SERVICE_FORM: ServiceFormData = {
@@ -610,6 +611,7 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   require_bio_ai_report_url: false,
   require_participant_detail: false,
   require_otp: false,
+  require_session_details: false,
 };
 
 function ServicesTab() {
@@ -659,6 +661,7 @@ function ServicesTab() {
       require_bio_ai_report_url: row.require_bio_ai_report_url,
       require_participant_detail: row.require_participant_detail,
       require_otp: row.require_otp,
+      require_session_details: row.require_session_details,
     });
     setEditingId(row.notification_service_id);
     setModalMode("edit");
@@ -698,6 +701,7 @@ function ServicesTab() {
           require_bio_ai_report_url: formData.require_bio_ai_report_url,
           require_participant_detail: formData.require_participant_detail,
           require_otp: formData.require_otp,
+          require_session_details: formData.require_session_details,
         });
       }
       setModalOpen(false);
@@ -759,6 +763,13 @@ function ServicesTab() {
       sortable: false,
       hideOnTablet: true,
       render: (r) => (r.require_otp ? "Yes" : "No"),
+    },
+    {
+      key: "require_session_details",
+      label: "Requires Session",
+      sortable: false,
+      hideOnTablet: true,
+      render: (r) => (r.require_session_details ? "Yes" : "No"),
     },
     {
       key: "created_at",
@@ -904,6 +915,15 @@ function ServicesTab() {
                 className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
               <span className="text-sm text-zinc-700">Require Participant Detail</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.require_session_details}
+                onChange={(e) => setFormData({ ...formData, require_session_details: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              />
+              <span className="text-sm text-zinc-700">Require Session Details</span>
             </label>
           </div>
 

@@ -4,9 +4,11 @@ import { Modal } from "../../shared/ui/Modal";
 import {
   notificationsApi,
   participantsApi,
+  type ConsultationPreference,
   type Engagement,
   type NotificationServiceItem,
   type Participant,
+  type SessionDetailsPayload,
   getApiError,
 } from "../../lib/api";
 
@@ -68,6 +70,43 @@ function participantDetailsFromRow(p: Participant): Record<string, string> {
     phone: p.phone ?? "",
     engagement: p.engagement_name ?? p.engagement_code ?? "",
   };
+}
+
+function sessionDetailsFromParticipantConsultations(
+  consultations: Participant["consultations"],
+  referenceDate?: string
+): SessionDetailsPayload | null {
+  if (!consultations || typeof consultations === "boolean") return null;
+
+  const today = referenceDate ?? new Date().toISOString().slice(0, 10);
+  let best: SessionDetailsPayload | null = null;
+  let bestDate = "";
+
+  for (const [expertType, pref] of Object.entries(consultations)) {
+    if (!pref || typeof pref === "boolean") continue;
+    const booking = pref as ConsultationPreference;
+    if (!booking.want) continue;
+    const date = (booking.date ?? "").trim();
+    if (!date) continue;
+
+    const details: SessionDetailsPayload = {
+      want: booking.want,
+      date,
+      slot: booking.slot ?? "",
+      expert_type: expertType,
+    };
+
+    if (date === today) {
+      return details;
+    }
+
+    if (date > bestDate) {
+      bestDate = date;
+      best = details;
+    }
+  }
+
+  return best;
 }
 
 export interface EngagementNotificationModalProps {
@@ -212,6 +251,19 @@ export function EngagementNotificationModal({
         const participant = participantsByUserId.get(userId);
 
         try {
+          let sessionDetails: SessionDetailsPayload | undefined;
+          if (svc.require_session_details) {
+            const resolved = participant
+              ? sessionDetailsFromParticipantConsultations(participant.consultations)
+              : null;
+            if (!resolved) {
+              lastError = `No consultation booking found for user ${userId}.`;
+              setSendProgress({ done: i + 1, total: pendingUserIds.length });
+              continue;
+            }
+            sessionDetails = resolved;
+          }
+
           await notificationsApi.dispatch({
             service_key: serviceKey,
             user_ids: [userId],
@@ -220,6 +272,7 @@ export function EngagementNotificationModal({
               svc.require_participant_detail && participant
                 ? participantDetailsFromRow(participant)
                 : undefined,
+            session_details: sessionDetails,
           });
           sentCount += 1;
           setNotifiedIds((prev) => {

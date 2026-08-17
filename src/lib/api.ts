@@ -3414,7 +3414,15 @@ export interface NotificationServiceItem {
   require_bio_ai_report_url: boolean;
   require_participant_detail: boolean;
   require_otp: boolean;
+  require_session_details: boolean;
   created_at: string | null;
+}
+
+export interface SessionDetailsPayload {
+  want: boolean;
+  date: string;
+  slot: string;
+  expert_type: string;
 }
 
 export const notificationsApi = {
@@ -3440,6 +3448,8 @@ export const notificationsApi = {
     assessment_instance_id?: number | null;
     participant_details?: Record<string, string> | null;
     otp?: string | null;
+    session_details?: SessionDetailsPayload | null;
+    session_details_by_user_id?: Record<number, SessionDetailsPayload> | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
 
   prepareReports: (body: {
@@ -3473,6 +3483,7 @@ export const notificationsApi = {
     require_bio_ai_report_url?: boolean;
     require_participant_detail?: boolean;
     require_otp?: boolean;
+    require_session_details?: boolean;
   }) =>
     api.post<{ data: NotificationServiceItem; meta: Record<string, unknown> }>("/notifications/services", body),
   updateService: (
@@ -3486,6 +3497,7 @@ export const notificationsApi = {
       require_bio_ai_report_url?: boolean;
       require_participant_detail?: boolean;
       require_otp?: boolean;
+      require_session_details?: boolean;
     }
   ) =>
     api.put<{ data: NotificationServiceItem; meta: Record<string, unknown> }>(
