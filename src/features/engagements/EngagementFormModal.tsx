@@ -1099,6 +1099,7 @@ export function EngagementFormModal({
             dates={collectionDates}
             onDatesChange={setCollectionDates}
             onSlotDetailChange={setSlotDetail}
+            expertTypes={expertTypes}
           />
         )}
 

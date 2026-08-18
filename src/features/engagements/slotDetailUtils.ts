@@ -75,6 +75,7 @@ export function createEmptyCabin(section: CabinSectionKey): CabinSlotConfig {
     cabin_key: "",
     start_time: "09:00",
     end_time: "17:00",
+    ...(section === "consultation" ? { expert_type: "" } : {}),
     slot_duration: 30,
     capacity_per_slot: section === "blood_collection" ? 2 : 1,
     breaks: [],
@@ -182,11 +183,12 @@ export function normalizeTime(value: string): string {
   return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
 }
 
-export function validateCabin(cabin: CabinSlotConfig): string | null {
+export function validateCabin(cabin: CabinSlotConfig, section?: CabinSectionKey): string | null {
   const start = normalizeTime(cabin.start_time);
   const end = normalizeTime(cabin.end_time);
   if (!cabin.cabin_name.trim()) return "Cabin name is required";
   if (!cabin.cabin_key.trim()) return "Cabin key could not be generated from the cabin name";
+  if (section === "consultation" && !cabin.expert_type?.trim()) return "Expert type is required";
   if (!start || !end) return "Start and end time are required";
   if (end <= start) return "End time must be after start time";
   if (!(cabin.slot_duration > 0)) return "Slot duration must be at least 1 minute";

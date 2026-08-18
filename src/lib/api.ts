@@ -1519,6 +1519,7 @@ export interface CabinSlotConfig {
   cabin_key: string;
   start_time: string;
   end_time: string;
+  expert_type?: string;
   slot_duration: number;
   capacity_per_slot: number;
   breaks: CabinBreak[];
