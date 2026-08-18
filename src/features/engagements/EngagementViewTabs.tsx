@@ -1,6 +1,8 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   ExternalLink,
+  Loader2,
   MapPin,
   Pencil,
   ScrollText,
@@ -11,6 +13,14 @@ import type {
   ChecklistReadiness,
   DiagnosticPackageListItem,
   Engagement,
+  EngagementNotificationItem,
+  EngagementTypeItem,
+  NotificationEventItem,
+} from "../../lib/api";
+import {
+  engagementNotificationsApi,
+  engagementTypesApi,
+  notificationEventsApi,
 } from "../../lib/api";
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import {
@@ -334,39 +344,128 @@ export function EngagementNotificationsTab({
   engagement,
   notificationServiceLabel,
 }: Pick<SharedProps, "engagement" | "notificationServiceLabel">) {
-  const formatServices = (value: string | null | undefined) =>
-    value
-      ? value
-          .split(",")
-          .map((k) => notificationServiceLabel(k.trim()))
-          .join(", ")
+  const [loading, setLoading] = useState(true);
+  const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
+  const [notificationEvents, setNotificationEvents] = useState<NotificationEventItem[]>([]);
+  const [configuredNotifications, setConfiguredNotifications] = useState<
+    EngagementNotificationItem[]
+  >([]);
+
+  const engagementTypeId = useMemo((): number | null => {
+    const val = engagement.engagement_type;
+    if (typeof val === "number" && val > 0) return val;
+    if (typeof val === "string") {
+      const match = engagementTypes.find((t) => t.code === val);
+      return match?.id ?? null;
+    }
+    return null;
+  }, [engagement.engagement_type, engagementTypes]);
+
+  useEffect(() => {
+    engagementTypesApi
+      .list()
+      .then((res) => setEngagementTypes(res.data.data ?? []))
+      .catch(() => setEngagementTypes([]));
+  }, []);
+
+  const embeddedNotifications = (
+    engagement as Engagement & { notifications?: EngagementNotificationItem[] }
+  ).notifications;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const hasEmbedded =
+          Array.isArray(embeddedNotifications) && embeddedNotifications.length > 0;
+
+        const [eventsRes, configRes] = await Promise.all([
+          engagementTypeId
+            ? notificationEventsApi.list({ engagement_type_id: engagementTypeId })
+            : Promise.resolve({ data: { data: [] as NotificationEventItem[] } }),
+          hasEmbedded
+            ? Promise.resolve({ data: { data: embeddedNotifications } })
+            : engagementNotificationsApi.getForEngagement(engagement.engagement_id),
+        ]);
+
+        if (cancelled) return;
+
+        setNotificationEvents(
+          Array.isArray(eventsRes.data.data) ? eventsRes.data.data : []
+        );
+        setConfiguredNotifications(
+          Array.isArray(configRes.data.data) ? configRes.data.data : []
+        );
+      } catch {
+        if (!cancelled) {
+          setNotificationEvents([]);
+          setConfiguredNotifications([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [engagement.engagement_id, engagementTypeId, embeddedNotifications]);
+
+  const servicesByEventId = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const item of configuredNotifications) {
+      map.set(
+        item.notification_event_id,
+        Array.isArray(item.notification_services) ? item.notification_services : []
+      );
+    }
+    return map;
+  }, [configuredNotifications]);
+
+  const formatServices = (services: string[]) =>
+    services.length > 0
+      ? services.map((key) => notificationServiceLabel(key)).join(", ")
       : "—";
+
+  const rows = useMemo(() => {
+    if (notificationEvents.length > 0) {
+      return notificationEvents.map((event) => ({
+        key: event.notification_event_id,
+        label: event.display_name,
+        services: servicesByEventId.get(event.notification_event_id) ?? [],
+      }));
+    }
+    return configuredNotifications.map((item) => ({
+      key: item.notification_event_id,
+      label: item.event_display_name ?? `Event #${item.notification_event_id}`,
+      services: Array.isArray(item.notification_services) ? item.notification_services : [],
+    }));
+  }, [configuredNotifications, notificationEvents, servicesByEventId]);
 
   return (
     <div className="bg-white border border-zinc-200 rounded-xl p-4">
-      <div className="grid grid-cols-1 gap-3">
-        <Field label="Onboarding notification">
-          {formatServices(engagement.onboarding_notification)}
-        </Field>
-        <Field label="Pretest Guidelines Notification">
-          {formatServices(engagement.pretest_guidelines_notification)}
-        </Field>
-        <Field label="Questionnaire Reminder 1 (day before)">
-          {formatServices(engagement.questionnaire_reminder_1)}
-        </Field>
-        <Field label="Questionnaire Reminder 2 (day after)">
-          {formatServices(engagement.questionnaire_reminder_2)}
-        </Field>
-        <Field label="Blood Report Notification">
-          {formatServices(engagement.blood_report_notification)}
-        </Field>
-        <Field label="BioAI Report Notification">
-          {formatServices(engagement.bioai_report_notification)}
-        </Field>
-        <Field label="Notify users for consultation">
-          {formatServices(engagement.notify_users_for_consultation)}
-        </Field>
-      </div>
+      {loading ? (
+        <div className="py-8 flex justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          {engagementTypeId
+            ? "No notification events configured for this engagement type."
+            : "No notification configuration found for this engagement."}
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {rows.map((row) => (
+            <Field key={row.key} label={row.label}>
+              {formatServices(row.services)}
+            </Field>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

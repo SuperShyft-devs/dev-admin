@@ -1564,13 +1564,26 @@ export interface Engagement {
   blood_collection_type?: BloodCollectionType | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
+  /** @deprecated Use notifications array instead */
   onboarding_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   pretest_guidelines_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   questionnaire_reminder_1?: string | null;
+  /** @deprecated Use notifications array instead */
   questionnaire_reminder_2?: string | null;
+  /** @deprecated Use notifications array instead */
   blood_report_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   bioai_report_notification?: string | null;
+  /** @deprecated Use notifications array instead */
   notify_users_for_consultation?: string | null;
+  notifications?: {
+    notification_event_id: number;
+    event_code?: string | null;
+    event_display_name?: string | null;
+    notification_services: string[];
+  }[];
 }
 
 export interface EngagementListItem {
