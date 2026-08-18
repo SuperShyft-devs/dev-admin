@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Loader2, X, ScrollText } from "lucide-react";
+import { Plus, Loader2, X, ScrollText, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
@@ -616,10 +616,60 @@ const EMPTY_SERVICE_FORM: ServiceFormData = {
   require_external_link: false,
 };
 
+type ServiceChannelFilter = "" | "email" | "whatsapp";
+type ServiceStatusFilter = "" | "active" | "inactive";
+type ServiceRequirementsFilter = "" | "any";
+
+function getServiceRequirementLabels(row: NotificationServiceItem): string[] {
+  const labels: string[] = [];
+  if (row.require_blood_report_url) labels.push("Blood report");
+  if (row.require_bio_ai_report_url) labels.push("BioAI report");
+  if (row.require_participant_detail) labels.push("Participant");
+  if (row.require_session_details) labels.push("Session");
+  if (row.require_external_link) labels.push("External link");
+  if (row.require_otp) labels.push("OTP");
+  return labels;
+}
+
+function ServiceRequirementsCell({ row }: { row: NotificationServiceItem }) {
+  const labels = getServiceRequirementLabels(row);
+  if (labels.length === 0) {
+    return <span className="text-zinc-400">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1 max-w-xs">
+      {labels.map((label) => (
+        <span
+          key={label}
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-violet-50 text-violet-700 border-violet-200"
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ServiceNameCell({ row }: { row: NotificationServiceItem }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-medium text-zinc-900 truncate">{row.display_name}</div>
+      <div className="text-xs text-zinc-500 truncate" title={row.service_key}>
+        {row.service_key}
+      </div>
+    </div>
+  );
+}
+
 function ServicesTab() {
   const [data, setData] = useState<NotificationServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [channelFilter, setChannelFilter] = useState<ServiceChannelFilter>("");
+  const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>("");
+  const [requirementsFilter, setRequirementsFilter] = useState<ServiceRequirementsFilter>("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
@@ -643,6 +693,26 @@ function ServicesTab() {
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  const filteredData = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return data.filter((row) => {
+      if (query) {
+        const haystack = `${row.display_name} ${row.service_key} ${row.webhook_path}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (channelFilter && row.channel !== channelFilter) return false;
+      if (statusFilter === "active" && !row.is_active) return false;
+      if (statusFilter === "inactive" && row.is_active) return false;
+      if (requirementsFilter === "any" && getServiceRequirementLabels(row).length === 0) return false;
+      return true;
+    });
+  }, [channelFilter, data, requirementsFilter, searchQuery, statusFilter]);
+
+  const editingRow = useMemo(
+    () => (editingId != null ? data.find((row) => row.notification_service_id === editingId) ?? null : null),
+    [data, editingId]
+  );
 
   const openAdd = () => {
     setFormData(EMPTY_SERVICE_FORM);
@@ -718,8 +788,12 @@ function ServicesTab() {
   };
 
   const columns: Column<NotificationServiceItem>[] = [
-    { key: "service_key", label: "Service Key", sortable: false },
-    { key: "display_name", label: "Display Name", sortable: false },
+    {
+      key: "display_name",
+      label: "Service",
+      sortable: false,
+      render: (r) => <ServiceNameCell row={r} />,
+    },
     {
       key: "channel",
       label: "Channel",
@@ -727,67 +801,16 @@ function ServicesTab() {
       render: (r) => <ChannelBadge channel={r.channel} />,
     },
     {
-      key: "webhook_path",
-      label: "Webhook Path",
-      sortable: false,
-      hideOnMobile: true,
-      render: (r) => <code className="text-xs bg-zinc-100 px-1.5 py-0.5 rounded">{r.webhook_path}</code>,
-    },
-    {
       key: "is_active",
-      label: "Active",
+      label: "Status",
       sortable: false,
-      hideOnMobile: true,
       render: (r) => <ActiveBadge active={r.is_active} />,
     },
     {
-      key: "require_blood_report_url",
-      label: "Blood Report",
+      key: "requirements",
+      label: "Requirements",
       sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_blood_report_url ? "Yes" : "No"),
-    },
-    {
-      key: "require_bio_ai_report_url",
-      label: "BioAI Report",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_bio_ai_report_url ? "Yes" : "No"),
-    },
-    {
-      key: "require_participant_detail",
-      label: "Requires Participant",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_participant_detail ? "Yes" : "No"),
-    },
-    {
-      key: "require_otp",
-      label: "Requires OTP",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_otp ? "Yes" : "No"),
-    },
-    {
-      key: "require_session_details",
-      label: "Requires Session",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_session_details ? "Yes" : "No"),
-    },
-    {
-      key: "require_external_link",
-      label: "Requires External Link",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => (r.require_external_link ? "Yes" : "No"),
-    },
-    {
-      key: "created_at",
-      label: "Created",
-      sortable: false,
-      hideOnTablet: true,
-      render: (r) => <span className="text-xs text-zinc-500">{formatDateTime(r.created_at)}</span>,
+      render: (r) => <ServiceRequirementsCell row={r} />,
     },
   ];
 
@@ -797,29 +820,89 @@ function ServicesTab() {
         <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>
       )}
 
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center flex-1 min-w-0">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search services…"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {CHANNEL_OPTIONS.map((channel) => (
+              <button
+                key={channel}
+                type="button"
+                onClick={() =>
+                  setChannelFilter((prev) => (prev === channel ? "" : (channel as ServiceChannelFilter)))
+                }
+                className={filterChipClass(channelFilter === channel)}
+              >
+                {channel.charAt(0).toUpperCase() + channel.slice(1)}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setStatusFilter((prev) => (prev === "active" ? "" : "active"))}
+              className={filterChipClass(statusFilter === "active")}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter((prev) => (prev === "inactive" ? "" : "inactive"))}
+              className={filterChipClass(statusFilter === "inactive")}
+            >
+              Inactive
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequirementsFilter((prev) => (prev === "any" ? "" : "any"))}
+              className={filterChipClass(requirementsFilter === "any")}
+            >
+              Has requirements
+            </button>
+          </div>
+        </div>
         <button
           onClick={openAdd}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4" />
           Add Service
         </button>
       </div>
 
+      {!loading && data.length > 0 ? (
+        <p className="mb-3 text-xs text-zinc-500">
+          Showing {filteredData.length} of {data.length} service{data.length === 1 ? "" : "s"}
+        </p>
+      ) : null}
+
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
         {loading ? (
           <div className="py-12 flex justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
           </div>
+        ) : filteredData.length === 0 ? (
+          <div className="py-12 px-6 text-center text-sm text-zinc-500">
+            {data.length === 0
+              ? "No notification services configured yet."
+              : "No services match your search or filters."}
+          </div>
         ) : (
           <DataTable
             columns={columns}
-            data={data}
+            data={filteredData}
             keyExtractor={(r) => r.notification_service_id}
+            onView={openEdit}
             onEdit={openEdit}
             onDelete={handleDelete}
-            firstColumnClickableView={false}
+            firstColumnClickableView
           />
         )}
       </div>
@@ -862,35 +945,42 @@ function ServicesTab() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Channel</label>
-            <select
-              value={formData.channel}
-              onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            >
-              {CHANNEL_OPTIONS.map((c) => (
-                <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
-              ))}
-            </select>
-          </div>
+          <div className="rounded-lg border border-zinc-200 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-800">Delivery</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                How this service sends notifications through n8n.
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Webhook Path</label>
-            <input
-              type="text"
-              value={formData.webhook_path}
-              onChange={(e) => setFormData({ ...formData, webhook_path: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              placeholder="/webhook/send-reports-email"
-              required
-            />
-            <p className="mt-1 text-xs text-zinc-500">
-              Only enter the path. The BASE_URL will be auto-picked from server configuration.
-            </p>
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Channel</label>
+              <select
+                value={formData.channel}
+                onChange={(e) => setFormData({ ...formData, channel: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                {CHANNEL_OPTIONS.map((c) => (
+                  <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                ))}
+              </select>
+            </div>
 
-          <div className="flex items-center gap-6">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Webhook Path</label>
+              <input
+                type="text"
+                value={formData.webhook_path}
+                onChange={(e) => setFormData({ ...formData, webhook_path: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                placeholder="/webhook/send-reports-email"
+                required
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Only enter the path. The BASE_URL will be auto-picked from server configuration.
+              </p>
+            </div>
+
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -900,78 +990,96 @@ function ServicesTab() {
               />
               <span className="text-sm text-zinc-700">Active</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_blood_report_url}
-                onChange={(e) => setFormData({ ...formData, require_blood_report_url: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-              />
-              <span className="text-sm text-zinc-700">Require Blood Report URL</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_bio_ai_report_url}
-                onChange={(e) => setFormData({ ...formData, require_bio_ai_report_url: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-              />
-              <span className="text-sm text-zinc-700">Require BioAI Report URL</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_participant_detail}
-                onChange={(e) => setFormData({ ...formData, require_participant_detail: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-              />
-              <span className="text-sm text-zinc-700">Require Participant Detail</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_session_details}
-                onChange={(e) => setFormData({ ...formData, require_session_details: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-              />
-              <span className="text-sm text-zinc-700">Require Session Details</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.require_external_link}
-                onChange={(e) => setFormData({ ...formData, require_external_link: e.target.checked })}
-                className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-              />
-              <span className="text-sm text-zinc-700">Require External Link</span>
-            </label>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Require OTP</label>
-            <div className="flex items-center gap-4">
+          <div className="rounded-lg border border-zinc-200 p-4 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-800">Required payload</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                Data the admin UI must collect before dispatching this service.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="radio"
-                  name="require_otp"
-                  checked={formData.require_otp === true}
-                  onChange={() => setFormData({ ...formData, require_otp: true })}
-                  className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  type="checkbox"
+                  checked={formData.require_blood_report_url}
+                  onChange={(e) => setFormData({ ...formData, require_blood_report_url: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                 />
-                <span className="text-sm text-zinc-700">Yes</span>
+                <span className="text-sm text-zinc-700">Blood report URL</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
-                  type="radio"
-                  name="require_otp"
-                  checked={formData.require_otp === false}
-                  onChange={() => setFormData({ ...formData, require_otp: false })}
-                  className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  type="checkbox"
+                  checked={formData.require_bio_ai_report_url}
+                  onChange={(e) => setFormData({ ...formData, require_bio_ai_report_url: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                 />
-                <span className="text-sm text-zinc-700">No</span>
+                <span className="text-sm text-zinc-700">BioAI report URL</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.require_participant_detail}
+                  onChange={(e) => setFormData({ ...formData, require_participant_detail: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                <span className="text-sm text-zinc-700">Participant detail</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.require_session_details}
+                  onChange={(e) => setFormData({ ...formData, require_session_details: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                <span className="text-sm text-zinc-700">Session details</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.require_external_link}
+                  onChange={(e) => setFormData({ ...formData, require_external_link: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                <span className="text-sm text-zinc-700">External link</span>
               </label>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1">OTP</label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="require_otp"
+                    checked={formData.require_otp === true}
+                    onChange={() => setFormData({ ...formData, require_otp: true })}
+                    className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="text-sm text-zinc-700">Required</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="require_otp"
+                    checked={formData.require_otp === false}
+                    onChange={() => setFormData({ ...formData, require_otp: false })}
+                    className="w-4 h-4 border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="text-sm text-zinc-700">Not required</span>
+                </label>
+              </div>
+            </div>
           </div>
+
+          {modalMode === "edit" && editingRow ? (
+            <p className="text-xs text-zinc-500">
+              Created {formatDateTime(editingRow.created_at)}
+            </p>
+          ) : null}
 
           <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
             <button
