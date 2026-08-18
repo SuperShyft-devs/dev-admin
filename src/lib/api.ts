@@ -1066,6 +1066,27 @@ export const campReportsApi = {
       `/reports/camps/${campNo}/${encodeURIComponent(city)}/department/${slug}/dashboard`,
       { params: { section } }
     ),
+  updateCityDashboard: (
+    campNo: number,
+    city: string,
+    section: string,
+    payload: Record<string, unknown>
+  ) =>
+    api.put<{ data: { report_id: number; section: Record<string, unknown> } }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/dashboard`,
+      { section, payload }
+    ),
+  updateCityDepartmentDashboard: (
+    campNo: number,
+    city: string,
+    slug: string,
+    section: string,
+    payload: Record<string, unknown>
+  ) =>
+    api.put<{ data: { report_id: number; section: Record<string, unknown> } }>(
+      `/reports/camps/${campNo}/${encodeURIComponent(city)}/department/${slug}/dashboard`,
+      { section, payload }
+    ),
   deleteCamp: (campNo: number) =>
     api.delete<{ data: { deleted: boolean } }>(`/reports/camps/${campNo}`),
   deleteDepartment: (campNo: number, slug: string) =>
@@ -1121,12 +1142,14 @@ export interface CampReportEstimateOperation {
   section: string;
   action: "refresh" | "validate";
   department?: string | null;
+  city?: string | null;
 }
 
 export interface CampReportEstimateOperationResult {
   section: string;
   action: string;
   department: string | null;
+  city?: string | null;
   participant_count: number;
   unit_count: number;
   estimated_seconds: number;

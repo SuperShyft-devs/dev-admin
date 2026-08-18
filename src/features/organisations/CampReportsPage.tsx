@@ -45,8 +45,98 @@ function getSectionData(
   return section as CampReportSectionPayload;
 }
 
+function reportCity(report: CampReportRow): string | null {
+  const city = typeof report.city === "string" ? report.city.trim() : "";
+  return city || null;
+}
+
+function isOverallReport(report: CampReportRow): boolean {
+  return report.department === null && reportCity(report) === null;
+}
+
+function reportSortRank(report: CampReportRow): number {
+  const city = reportCity(report);
+  if (!city && report.department === null) return 0;
+  if (!city && report.department) return 1;
+  if (city && report.department === null) return 2;
+  return 3;
+}
+
 function reportAccordionKey(report: CampReportRow): string {
-  return `${report.report_id}-${report.department ?? "overall"}`;
+  return `${report.report_id}-${reportCity(report) ?? "all"}-${report.department ?? "overall"}`;
+}
+
+function estimateScope(
+  report: CampReportRow
+): Pick<CampReportEstimateOperation, "department" | "city"> {
+  return {
+    department: report.department,
+    city: reportCity(report),
+  };
+}
+
+async function refreshScopedSection(
+  campNo: number,
+  report: CampReportRow,
+  sectionKey: string
+) {
+  const city = reportCity(report);
+  const department = report.department;
+  if (city && department) {
+    return campReportsApi.refreshCityDepartment(campNo, city, department, sectionKey);
+  }
+  if (city) {
+    return campReportsApi.refreshCity(campNo, city, sectionKey);
+  }
+  if (department) {
+    return campReportsApi.refreshDepartment(campNo, department, sectionKey);
+  }
+  return campReportsApi.refreshCamp(campNo, sectionKey);
+}
+
+async function fetchScopedDashboard(
+  campNo: number,
+  report: CampReportRow,
+  sectionKey: string
+) {
+  const city = reportCity(report);
+  const department = report.department;
+  if (city && department) {
+    return campReportsApi.getCityDepartmentDashboard(campNo, city, department, sectionKey);
+  }
+  if (city) {
+    return campReportsApi.getCityDashboard(campNo, city, sectionKey);
+  }
+  if (department) {
+    return campReportsApi.getDepartmentDashboard(campNo, department, sectionKey);
+  }
+  return campReportsApi.getDashboard(campNo, sectionKey);
+}
+
+async function updateScopedDashboard(
+  campNo: number,
+  report: CampReportRow,
+  sectionKey: string,
+  payload: Record<string, unknown>
+) {
+  const city = reportCity(report);
+  const department = report.department;
+  if (city && department) {
+    return campReportsApi.updateCityDepartmentDashboard(
+      campNo,
+      city,
+      department,
+      sectionKey,
+      payload
+    );
+  }
+  if (city) {
+    return campReportsApi.updateCityDashboard(campNo, city, sectionKey, payload);
+  }
+  if (department) {
+    return campReportsApi.updateDepartmentDashboard(campNo, department, sectionKey, payload);
+  }
+  return campReportsApi.updateDashboard(campNo, sectionKey, payload);
 }
 
 function formatEstimatedTime(seconds: number): string {
@@ -1306,7 +1396,7 @@ export function CampReportsPage() {
         for (const row of rows) {
           const key = reportAccordionKey(row);
           if (next[key] === undefined) {
-            next[key] = row.department === null;
+            next[key] = isOverallReport(row);
           }
         }
         return next;
@@ -1326,8 +1416,10 @@ export function CampReportsPage() {
 
   const sortedReports = useMemo(() => {
     return [...reports].sort((a, b) => {
-      if (a.department === null && b.department !== null) return -1;
-      if (a.department !== null && b.department === null) return 1;
+      const rank = reportSortRank(a) - reportSortRank(b);
+      if (rank !== 0) return rank;
+      const cityCmp = (reportCity(a) ?? "").localeCompare(reportCity(b) ?? "");
+      if (cityCmp !== 0) return cityCmp;
       return (a.department ?? "").localeCompare(b.department ?? "");
     });
   }, [reports]);
@@ -1340,14 +1432,7 @@ export function CampReportsPage() {
     report: CampReportRow,
     section: CampReportSection
   ): Promise<Record<string, unknown>> => {
-    const response =
-      report.department === null
-        ? await campReportsApi.getDashboard(campNo, section.section_key)
-        : await campReportsApi.getDepartmentDashboard(
-            campNo,
-            report.department,
-            section.section_key
-          );
+    const response = await fetchScopedDashboard(campNo, report, section.section_key);
     return response.data.data;
   };
 
@@ -1388,15 +1473,7 @@ export function CampReportsPage() {
     setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
 
     try {
-      if (report.department === null) {
-        await campReportsApi.refreshCamp(campNo, section.section_key);
-      } else {
-        await campReportsApi.refreshDepartment(
-          campNo,
-          report.department,
-          section.section_key
-        );
-      }
+      await refreshScopedSection(campNo, report, section.section_key);
 
       const data = await fetchDashboard(report, section);
       setDashboardEditMode(false);
@@ -1461,15 +1538,7 @@ export function CampReportsPage() {
 
     try {
       const { report, sectionKey } = dashboardModal;
-      const response =
-        report.department === null
-          ? await campReportsApi.updateDashboard(campNo, sectionKey, payload)
-          : await campReportsApi.updateDepartmentDashboard(
-              campNo,
-              report.department,
-              sectionKey,
-              payload
-            );
+      const response = await updateScopedDashboard(campNo, report, sectionKey, payload);
       const saved = response.data.data.section;
       setDashboardModal({
         ...dashboardModal,
@@ -1494,18 +1563,8 @@ export function CampReportsPage() {
     setSectionErrors((prev) => ({ ...prev, [loadStateKey]: null }));
 
     try {
-      let refreshResult: { report_bts?: Record<string, unknown> | null } | undefined;
-      if (report.department === null) {
-        const response = await campReportsApi.refreshCamp(campNo, section.section_key);
-        refreshResult = response.data.data;
-      } else {
-        const response = await campReportsApi.refreshDepartment(
-          campNo,
-          report.department,
-          section.section_key
-        );
-        refreshResult = response.data.data;
-      }
+      const response = await refreshScopedSection(campNo, report, section.section_key);
+      const refreshResult = response.data.data;
 
       const rows = await fetchData({ silent: true });
       const refreshed = rows.find((row) => row.report_id === report.report_id);
@@ -1531,10 +1590,13 @@ export function CampReportsPage() {
   };
 
   const reportDisplayName = (report: CampReportRow): string => {
-    if (report.department === null) return "Main report";
     const meta = getReportMeta(report);
     if (typeof meta?.camp_name === "string" && meta.camp_name) return meta.camp_name;
-    return `Department: ${report.department}`;
+    const city = reportCity(report);
+    if (city && report.department) return `City: ${city} · Department: ${report.department}`;
+    if (city) return `City: ${city}`;
+    if (report.department) return `Department: ${report.department}`;
+    return "Main report";
   };
 
   const closeConfirmModal = () => {
@@ -1587,7 +1649,7 @@ export function CampReportsPage() {
         {
           section: section.section_key,
           action: "refresh",
-          department: report.department,
+          ...estimateScope(report),
         },
       ]
     );
@@ -1598,7 +1660,7 @@ export function CampReportsPage() {
       "Confirm validate",
       `Validate “${section.section}” on ${reportDisplayName(report)}? This will refresh the section and update validation data.`,
       { kind: "validate", report, section },
-      [{ section: section.section_key, action: "validate", department: report.department }]
+      [{ section: section.section_key, action: "validate", ...estimateScope(report) }]
     );
   };
 
@@ -1608,12 +1670,12 @@ export function CampReportsPage() {
       sections.map((section) => ({
         section: section.section_key,
         action: "refresh" as const,
-        department: report.department,
+        ...estimateScope(report),
       }))
     );
     void openConfirmModal(
       "Confirm refresh all",
-      `Refresh every section on the main report and all department reports (${operations.length} operations)?`,
+      `Refresh every section on the main, department, city, and city × department reports (${operations.length} operations)?`,
       { kind: "refresh_all" },
       operations
     );
@@ -1666,15 +1728,7 @@ export function CampReportsPage() {
       }));
 
       try {
-        if (job.report.department === null) {
-          await campReportsApi.refreshCamp(campNo, job.section.section_key);
-        } else {
-          await campReportsApi.refreshDepartment(
-            campNo,
-            job.report.department,
-            job.section.section_key
-          );
-        }
+        await refreshScopedSection(campNo, job.report, job.section.section_key);
       } catch (err) {
         failures.push({ label: job.label, error: getApiError(err) });
       }
@@ -1744,7 +1798,7 @@ export function CampReportsPage() {
             onClick={() => requestRefreshAllSections()}
             disabled={bulkRefresh.running || confirmModal.open}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50 shrink-0"
-            title="Refresh every section on the main report and all department reports"
+            title="Refresh every section on the main, department, city, and city × department reports"
           >
             {bulkRefresh.running ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1778,7 +1832,8 @@ export function CampReportsPage() {
               typeof meta?.camp_name === "string" && meta.camp_name
                 ? meta.camp_name
                 : "Camp report";
-            const isMain = report.department === null;
+            const isMain = isOverallReport(report);
+            const city = reportCity(report);
 
             return (
               <div
@@ -1810,8 +1865,15 @@ export function CampReportsPage() {
                         </span>
                       )}
                     </div>
-                    {!isMain && report.department && (
-                      <p className="text-xs text-zinc-500 mt-0.5">Department: {report.department}</p>
+                    {!isMain && (city || report.department) && (
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        {[
+                          city ? `City: ${city}` : null,
+                          report.department ? `Department: ${report.department}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
                     )}
                   </div>
                 </button>
@@ -2048,7 +2110,7 @@ export function CampReportsPage() {
                 />
               </div>
               <p className="text-xs text-zinc-500">
-                Keep this window open. Main report and every department section are refreshed one by one.
+                Keep this window open. Every report scope is refreshed one section at a time.
               </p>
             </>
           ) : (
