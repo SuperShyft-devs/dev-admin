@@ -10,6 +10,7 @@ import {
   type ExpertTypeItem,
   type GeocodeSuggestion,
   type NotificationEventItem,
+  type NotificationServiceConfigItem,
   type NotificationServiceItem,
   type OrganizationListItem,
   type SlotDetail,
@@ -20,7 +21,7 @@ import {
   getApiError,
   notificationEventsApi,
 } from "../../lib/api";
-import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
+import { NotificationEventServicesInput, normalizeNotificationServiceConfigs, validateNotificationServiceConfigs } from "../../shared/ui/NotificationEventServicesInput";
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { EngagementScheduleStep } from "./EngagementScheduleStep";
 import {
@@ -115,7 +116,7 @@ export function EngagementFormModal({
 
   const [engagementTypes, setEngagementTypes] = useState<EngagementTypeItem[]>([]);
   const [notificationEvents, setNotificationEvents] = useState<NotificationEventItem[]>([]);
-  const [notificationConfig, setNotificationConfig] = useState<Record<number, string>>({});
+  const [notificationConfig, setNotificationConfig] = useState<Record<number, NotificationServiceConfigItem[]>>({});
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const editConfigLoaded = useRef(false);
 
@@ -447,7 +448,7 @@ export function EngagementFormModal({
         const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
         setNotificationEvents(events);
 
-        const config: Record<number, string> = {};
+        const config: Record<number, NotificationServiceConfigItem[]> = {};
 
         if (mode === "edit" && engagementId && !editConfigLoaded.current) {
           editConfigLoaded.current = true;
@@ -457,10 +458,9 @@ export function EngagementFormModal({
             if (!cancelled) {
               const items = Array.isArray(configRes.data.data) ? configRes.data.data : [];
               for (const item of items) {
-                const services = Array.isArray(item.notification_services)
-                  ? item.notification_services
-                  : [];
-                config[item.notification_event_id] = services.join(",");
+                config[item.notification_event_id] = normalizeNotificationServiceConfigs(
+                  item.notification_services
+                );
               }
             }
           } catch {
@@ -473,10 +473,9 @@ export function EngagementFormModal({
             if (!cancelled) {
               const items = Array.isArray(defaultsRes.data.data) ? defaultsRes.data.data : [];
               for (const item of items) {
-                const services = Array.isArray(item.notification_services)
-                  ? item.notification_services
-                  : [];
-                config[item.notification_event_id] = services.join(",");
+                config[item.notification_event_id] = normalizeNotificationServiceConfigs(
+                  item.notification_services
+                );
               }
             }
           } catch {
@@ -518,14 +517,23 @@ export function EngagementFormModal({
     }
 
     const notifications = Object.entries(notificationConfig)
-      .filter(([, value]) => value && value.trim())
       .map(([eventId, services]) => ({
         notification_event_id: Number(eventId),
-        notification_services: services
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }));
+        notification_services: services.filter((item) => item.service_key.trim()),
+      }))
+      .filter((item) => item.notification_services.length > 0);
+
+    for (const item of notifications) {
+      const validationError = validateNotificationServiceConfigs(
+        item.notification_services,
+        notificationServices
+      );
+      if (validationError) {
+        setStepError(validationError);
+        goToStep(findStepIndex("notifications"));
+        return;
+      }
+    }
 
     let consultations = formData.consultations ?? null;
     if (selectedTypeCode && !typeConfig.needsConsultation) {
@@ -1117,14 +1125,14 @@ export function EngagementFormModal({
               </p>
             ) : (
               notificationEvents.map((event) => (
-                <NotificationServiceChipInput
+                <NotificationEventServicesInput
                   key={event.notification_event_id}
                   label={event.display_name}
-                  value={notificationConfig[event.notification_event_id] || null}
+                  value={notificationConfig[event.notification_event_id] ?? []}
                   onChange={(next) =>
                     setNotificationConfig((prev) => ({
                       ...prev,
-                      [event.notification_event_id]: next ?? "",
+                      [event.notification_event_id]: next,
                     }))
                   }
                   services={notificationServices}

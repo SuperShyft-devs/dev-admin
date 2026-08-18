@@ -202,6 +202,7 @@ export function Users() {
   const [sendMsgSessionDate, setSendMsgSessionDate] = useState("");
   const [sendMsgSessionSlot, setSendMsgSessionSlot] = useState("");
   const [sendMsgSessionExpertType, setSendMsgSessionExpertType] = useState("");
+  const [sendMsgExternalLink, setSendMsgExternalLink] = useState("");
   const [sendMsgPrepareDetails, setSendMsgPrepareDetails] = useState<PrepareReportDetail[]>([]);
   const [sendMsgError, setSendMsgError] = useState<string | null>(null);
   const [sendMsgSuccess, setSendMsgSuccess] = useState<string | null>(null);
@@ -430,6 +431,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgExternalLink("");
     setSendMsgPrepareDetails([]);
     setSendMsgDropdownOpen(false);
   };
@@ -451,6 +453,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgExternalLink("");
     setSendMsgPrepareDetails([]);
     setSendMsgPreparing(false);
     setSendMsgSubmitting(false);
@@ -518,6 +521,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgExternalLink("");
     setSendMsgError(null);
     setSendMsgPrepareDetails([]);
 
@@ -570,6 +574,23 @@ export function Users() {
         return;
       }
     }
+    if (svc.require_external_link) {
+      const externalLink = sendMsgExternalLink.trim();
+      if (!externalLink) {
+        setSendMsgError("This service requires an external link.");
+        return;
+      }
+      try {
+        const parsed = new URL(externalLink);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          setSendMsgError("External link must be a valid http(s) URL.");
+          return;
+        }
+      } catch {
+        setSendMsgError("External link must be a valid http(s) URL.");
+        return;
+      }
+    }
 
     const engagementLabel = needsAssessment
       ? selectedSendMsgInstance?.engagement_name ||
@@ -608,6 +629,7 @@ export function Users() {
               expert_type: sendMsgSessionExpertType.trim(),
             }
           : undefined,
+        external_link: svc.require_external_link ? sendMsgExternalLink.trim() : undefined,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1460,6 +1482,19 @@ export function Users() {
               </div>
             )}
 
+            {selectedSendMsgService?.require_external_link && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">External link</label>
+                <input
+                  type="url"
+                  value={sendMsgExternalLink}
+                  onChange={(e) => setSendMsgExternalLink(e.target.value)}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
+            )}
+
             {needsSendMsgAssessment && selectedSendMsgService && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
@@ -1548,6 +1583,7 @@ export function Users() {
                   (selectedSendMsgService?.require_otp && !sendMsgOtp.trim()) ||
                   (selectedSendMsgService?.require_session_details &&
                     (!sendMsgSessionDate.trim() || !sendMsgSessionExpertType.trim())) ||
+                  (selectedSendMsgService?.require_external_link && !sendMsgExternalLink.trim()) ||
                   (needsSendMsgAssessment &&
                     (sendMsgEligibleInstances.length === 0 || sendMsgInstanceId === "")) ||
                   (!needsSendMsgAssessment &&

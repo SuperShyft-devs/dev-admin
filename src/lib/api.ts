@@ -316,7 +316,7 @@ export interface NotificationDefaultItem {
   id: number;
   engagement_type_id: number;
   notification_event_id: number;
-  notification_services: string[];
+  notification_services: NotificationServiceConfigItem[];
   event_code?: string;
   event_display_name?: string;
 }
@@ -334,7 +334,7 @@ export const platformSettingsApi = {
       "/platform-settings/engagement-notification-defaults",
       { params: { engagement_type_id: engagementTypeId } }
     ),
-  patchEngagementNotificationDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: string[] }[]) =>
+  patchEngagementNotificationDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: NotificationServiceConfigItem[] }[]) =>
     api.put<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
       "/platform-settings/engagement-notification-defaults",
       { engagement_type_id: engagementTypeId, defaults }
@@ -1584,7 +1584,7 @@ export interface Engagement {
     notification_event_id: number;
     event_code?: string | null;
     event_display_name?: string | null;
-    notification_services: string[];
+    notification_services: NotificationServiceConfigItem[];
   }[];
 }
 
@@ -1671,7 +1671,7 @@ export interface EngagementCreate {
   bioai_report_notification?: string | null;
   /** @deprecated Use notifications array instead */
   notify_users_for_consultation?: string | null;
-  notifications?: { notification_event_id: number; notification_services: string[] }[];
+  notifications?: { notification_event_id: number; notification_services: NotificationServiceConfigItem[] }[];
 }
 
 export interface GeocodeSuggestion extends EngagementLocationFields {
@@ -3418,6 +3418,11 @@ export interface NotificationItem {
   completed_at: string | null;
 }
 
+export interface NotificationServiceConfigItem {
+  service_key: string;
+  external_link?: string | null;
+}
+
 export interface NotificationServiceItem {
   notification_service_id: number;
   service_key: string;
@@ -3466,6 +3471,7 @@ export const notificationsApi = {
     otp?: string | null;
     session_details?: SessionDetailsPayload | null;
     session_details_by_user_id?: Record<number, SessionDetailsPayload> | null;
+    external_link?: string | null;
   }) => api.post<{ data: { notification_id: number; status: string; message: string }; meta: Record<string, unknown> }>("/notifications/dispatch", body),
 
   prepareReports: (body: {
@@ -3740,7 +3746,7 @@ export interface EngagementNotificationItem {
   id: number;
   engagement_id: number;
   notification_event_id: number;
-  notification_services: string[];
+  notification_services: NotificationServiceConfigItem[];
   event_code?: string;
   event_display_name?: string;
 }
@@ -3750,7 +3756,7 @@ export const engagementNotificationsApi = {
     api.get<{ data: EngagementNotificationItem[]; meta: Record<string, unknown> }>(
       `/engagements/${engagementId}/notifications`
     ),
-  upsertForEngagement: (engagementId: number, notifications: { notification_event_id: number; notification_services: string[] }[]) =>
+  upsertForEngagement: (engagementId: number, notifications: { notification_event_id: number; notification_services: NotificationServiceConfigItem[] }[]) =>
     api.put<{ data: EngagementNotificationItem[]; meta: Record<string, unknown> }>(
       `/engagements/${engagementId}/notifications`,
       { notifications }
@@ -3760,7 +3766,7 @@ export const engagementNotificationsApi = {
       "/platform-settings/engagement-notification-defaults",
       { params: { engagement_type_id: engagementTypeId } }
     ),
-  upsertDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: string[] }[]) =>
+  upsertDefaults: (engagementTypeId: number, defaults: { notification_event_id: number; notification_services: NotificationServiceConfigItem[] }[]) =>
     api.put<{ data: NotificationDefaultItem[]; meta: Record<string, unknown> }>(
       "/platform-settings/engagement-notification-defaults",
       { engagement_type_id: engagementTypeId, defaults }

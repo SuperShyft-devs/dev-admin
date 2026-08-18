@@ -141,6 +141,8 @@ export function EngagementNotificationModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [externalLink, setExternalLink] = useState("");
+
   const selectedService = useMemo(
     () => services.find((s) => s.service_key === serviceKey) ?? null,
     [services, serviceKey]
@@ -203,6 +205,7 @@ export function EngagementNotificationModal({
     if (!open || !engagement) return;
     setServiceKey("");
     setServiceSearch("");
+    setExternalLink("");
     setError(null);
     setSuccess(null);
     setSendProgress(null);
@@ -235,6 +238,24 @@ export function EngagementNotificationModal({
 
     const svc = selectedService;
     if (!svc) return;
+
+    if (svc.require_external_link) {
+      const link = externalLink.trim();
+      if (!link) {
+        setError("This service requires an external link.");
+        return;
+      }
+      try {
+        const parsed = new URL(link);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          setError("External link must be a valid http(s) URL.");
+          return;
+        }
+      } catch {
+        setError("External link must be a valid http(s) URL.");
+        return;
+      }
+    }
 
     setSubmitting(true);
     setError(null);
@@ -273,6 +294,7 @@ export function EngagementNotificationModal({
                 ? participantDetailsFromRow(participant)
                 : undefined,
             session_details: sessionDetails,
+            external_link: svc.require_external_link ? externalLink.trim() : undefined,
           });
           sentCount += 1;
           setNotifiedIds((prev) => {
@@ -409,6 +431,7 @@ export function EngagementNotificationModal({
                       onClick={() => {
                         setServiceKey(s.service_key);
                         setServiceSearch(s.display_name);
+                        setExternalLink("");
                         setDropdownOpen(false);
                         setSuccess(null);
                         setError(null);
@@ -438,6 +461,19 @@ export function EngagementNotificationModal({
           )}
         </div>
 
+        {selectedService?.require_external_link && (
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">External link</label>
+            <input
+              type="url"
+              value={externalLink}
+              onChange={(e) => setExternalLink(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            />
+          </div>
+        )}
+
         {submitting && sendProgress && (
           <div className="text-xs text-zinc-500">
             Sending… {sendProgress.done}/{sendProgress.total}
@@ -457,6 +493,7 @@ export function EngagementNotificationModal({
             disabled={
               submitting ||
               !serviceKey ||
+              (selectedService?.require_external_link && !externalLink.trim()) ||
               totalRecipients === 0 ||
               pendingUserIds.length === 0 ||
               !!success

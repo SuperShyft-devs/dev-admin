@@ -17,6 +17,7 @@ import type {
   EngagementTypeItem,
   NotificationEventItem,
 } from "../../lib/api";
+import { normalizeNotificationServiceConfigs } from "../../shared/ui/NotificationEventServicesInput";
 import {
   engagementNotificationsApi,
   engagementTypesApi,
@@ -415,19 +416,26 @@ export function EngagementNotificationsTab({
   }, [engagement.engagement_id, engagementTypeId, embeddedNotifications]);
 
   const servicesByEventId = useMemo(() => {
-    const map = new Map<number, string[]>();
+    const map = new Map<number, ReturnType<typeof normalizeNotificationServiceConfigs>>();
     for (const item of configuredNotifications) {
       map.set(
         item.notification_event_id,
-        Array.isArray(item.notification_services) ? item.notification_services : []
+        normalizeNotificationServiceConfigs(item.notification_services)
       );
     }
     return map;
   }, [configuredNotifications]);
 
-  const formatServices = (services: string[]) =>
+  const formatServices = (
+    services: ReturnType<typeof normalizeNotificationServiceConfigs>
+  ) =>
     services.length > 0
-      ? services.map((key) => notificationServiceLabel(key)).join(", ")
+      ? services
+          .map((item) => {
+            const label = notificationServiceLabel(item.service_key);
+            return item.external_link ? `${label} (${item.external_link})` : label;
+          })
+          .join(", ")
       : "—";
 
   const rows = useMemo(() => {
@@ -441,7 +449,7 @@ export function EngagementNotificationsTab({
     return configuredNotifications.map((item) => ({
       key: item.notification_event_id,
       label: item.event_display_name ?? `Event #${item.notification_event_id}`,
-      services: Array.isArray(item.notification_services) ? item.notification_services : [],
+      services: normalizeNotificationServiceConfigs(item.notification_services),
     }));
   }, [configuredNotifications, notificationEvents, servicesByEventId]);
 

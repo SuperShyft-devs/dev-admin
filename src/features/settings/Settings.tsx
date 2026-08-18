@@ -24,11 +24,17 @@ import {
   type MetsightsProfilesStats,
   type NotificationEventItem,
   type NotificationDefaultItem,
+  type NotificationServiceConfigItem,
   type NotificationServiceItem,
   type SupportQueryNotification,
   getApiError,
 } from "../../lib/api";
 import { NotificationServiceChipInput } from "../../shared/ui/NotificationServiceChipInput";
+import {
+  NotificationEventServicesInput,
+  normalizeNotificationServiceConfigs,
+  validateNotificationServiceConfigs,
+} from "../../shared/ui/NotificationEventServicesInput";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 
 const SYNC_STORAGE_KEY = "metsights-sync-v1";
@@ -183,13 +189,13 @@ export function Settings() {
   const [activeNotifType, setActiveNotifType] = useState<number | null>(null);
   const [notifEvents, setNotifEvents] = useState<NotificationEventItem[]>([]);
   const [notifEventsLoading, setNotifEventsLoading] = useState(false);
-  const [notifDefaults, setNotifDefaults] = useState<Record<number, string>>({});
-  const [, setNotifDefaultsOriginal] = useState<Record<number, string>>({});
+  const [notifDefaults, setNotifDefaults] = useState<Record<number, NotificationServiceConfigItem[]>>({});
+  const [, setNotifDefaultsOriginal] = useState<Record<number, NotificationServiceConfigItem[]>>({});
   const [notifSaving, setNotifSaving] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
   const [notifSuccess, setNotifSuccess] = useState(false);
-  const notifDraftsRef = useRef<Record<number, Record<number, string>>>({});
-  const notifOriginalsRef = useRef<Record<number, Record<number, string>>>({});
+  const notifDraftsRef = useRef<Record<number, Record<number, NotificationServiceConfigItem[]>>>({});
+  const notifOriginalsRef = useRef<Record<number, Record<number, NotificationServiceConfigItem[]>>>({});
 
   const [defaultAssistantEmployees, setDefaultAssistantEmployees] = useState<EmployeeListItem[]>([]);
   const [selectedDefaultAssistantIds, setSelectedDefaultAssistantIds] = useState<Set<number>>(new Set());
@@ -530,16 +536,15 @@ export function Settings() {
         if (cancelled) return;
         const events = Array.isArray(eventsRes.data.data) ? eventsRes.data.data : [];
         setNotifEvents(events);
-        const defaults: Record<number, string> = {};
-        for (const ev of events) defaults[ev.notification_event_id] = "";
+        const defaults: Record<number, NotificationServiceConfigItem[]> = {};
+        for (const ev of events) defaults[ev.notification_event_id] = [];
         const defaultsList = Array.isArray(defaultsRes.data.data)
           ? (defaultsRes.data.data as NotificationDefaultItem[])
           : [];
         for (const d of defaultsList) {
-          const services = Array.isArray(d.notification_services)
-            ? d.notification_services
-            : [];
-          defaults[d.notification_event_id] = services.join(",");
+          defaults[d.notification_event_id] = normalizeNotificationServiceConfigs(
+            d.notification_services
+          );
         }
         setNotifDefaults(defaults);
         setNotifDefaultsOriginal({ ...defaults });
@@ -566,10 +571,9 @@ export function Settings() {
     return JSON.stringify(draft) !== JSON.stringify(original);
   }
 
-  function updateNotifDefault(eventId: number, value: string | null) {
-    const v = value ?? "";
+  function updateNotifDefault(eventId: number, value: NotificationServiceConfigItem[]) {
     setNotifDefaults((prev) => {
-      const next = { ...prev, [eventId]: v };
+      const next = { ...prev, [eventId]: value };
       if (activeNotifType !== null) notifDraftsRef.current[activeNotifType] = next;
       return next;
     });
@@ -582,10 +586,24 @@ export function Settings() {
     setNotifError(null);
     setNotifSuccess(false);
     try {
-      const payload = Object.entries(notifDefaults).map(([eventId, services]) => ({
-        notification_event_id: Number(eventId),
-        notification_services: services ? services.split(",").map((s) => s.trim()).filter(Boolean) : [],
-      }));
+      const payload = Object.entries(notifDefaults)
+        .map(([eventId, services]) => ({
+          notification_event_id: Number(eventId),
+          notification_services: services.filter((item) => item.service_key.trim()),
+        }))
+        .filter((item) => item.notification_services.length > 0);
+
+      for (const item of payload) {
+        const validationError = validateNotificationServiceConfigs(
+          item.notification_services,
+          notificationServices
+        );
+        if (validationError) {
+          setNotifError(validationError);
+          return;
+        }
+      }
+
       await engagementNotificationsApi.upsertDefaults(activeNotifType, payload);
       setNotifDefaultsOriginal({ ...notifDefaults });
       notifOriginalsRef.current[activeNotifType] = { ...notifDefaults };
@@ -1217,10 +1235,10 @@ export function Settings() {
           ) : activeNotifType !== null && notifEvents.length > 0 ? (
             <div className="space-y-4">
               {notifEvents.map((ev) => (
-                <NotificationServiceChipInput
+                <NotificationEventServicesInput
                   key={ev.notification_event_id}
                   label={ev.display_name}
-                  value={notifDefaults[ev.notification_event_id] || null}
+                  value={notifDefaults[ev.notification_event_id] ?? []}
                   onChange={(next) => updateNotifDefault(ev.notification_event_id, next)}
                   services={notificationServices}
                 />
