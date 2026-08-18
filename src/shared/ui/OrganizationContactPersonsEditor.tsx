@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import { UserMultiSearchPicker } from "./UserMultiSearchPicker";
-import type { ContactPersonUserIds } from "../../lib/api";
+import type { CityContactAssignments, ContactPersonUserIds } from "../../lib/api";
 
 type DepartmentOption = {
   slug: string;
@@ -31,7 +31,7 @@ function normalizeValue(value: ContactPersonUserIds | null | undefined): Contact
     const managers = Array.isArray(raw.managers)
       ? raw.managers.filter((id) => typeof id === "number" && id > 0)
       : [];
-    const cityPayload: Record<string, number[]> = { managers };
+    const cityPayload: CityContactAssignments = { managers };
     for (const [deptKey, deptIds] of Object.entries(raw)) {
       if (deptKey === "managers" || !Array.isArray(deptIds)) continue;
       cityPayload[deptKey] = deptIds.filter((id) => typeof id === "number" && id > 0);
@@ -41,7 +41,7 @@ function normalizeValue(value: ContactPersonUserIds | null | undefined): Contact
   return next;
 }
 
-function cityHasAssignments(payload: Record<string, number[]> | undefined): boolean {
+function cityHasAssignments(payload: CityContactAssignments | undefined): boolean {
   if (!payload) return false;
   if (payload.managers?.length) return true;
   return Object.entries(payload).some(
@@ -63,20 +63,22 @@ function serializeValue(
   for (const city of engagementCities) {
     const payload = normalized[city];
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
-    if (!cityHasAssignments(payload as Record<string, number[]>)) continue;
+    if (!cityHasAssignments(payload as CityContactAssignments)) continue;
     next[city] = payload;
   }
 
   for (const [city, raw] of Object.entries(normalized)) {
     if (city === "organization_managers" || allowedCities.has(city)) continue;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-    if (!cityHasAssignments(raw as Record<string, number[]>)) continue;
+    if (!cityHasAssignments(raw as CityContactAssignments)) continue;
     next[city] = raw;
   }
 
   const hasOrgManagers = next.organization_managers.length > 0;
   const hasCityAssignments = Object.keys(next).some(
-    (key) => key !== "organization_managers" && cityHasAssignments(next[key] as Record<string, number[]>),
+    (key) =>
+      key !== "organization_managers" &&
+      cityHasAssignments(next[key] as CityContactAssignments),
   );
 
   if (!hasOrgManagers && !hasCityAssignments) return null;
@@ -105,12 +107,12 @@ export function OrganizationContactPersonsEditor({
     updateValue({ ...normalized, organization_managers: userIds });
   };
 
-  const ensureCityPayload = (city: string) => {
+  const ensureCityPayload = (city: string): CityContactAssignments => {
     const existing = normalized[city];
     if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-      return existing as Record<string, number[]>;
+      return existing as CityContactAssignments;
     }
-    return { managers: [] as number[] };
+    return { managers: [] };
   };
 
   const setCityManagers = (city: string, userIds: number[]) => {

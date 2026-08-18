@@ -198,6 +198,10 @@ export function Users() {
   const [sendMsgPreparing, setSendMsgPreparing] = useState(false);
   const [sendMsgLoading, setSendMsgLoading] = useState(false);
   const [sendMsgOtp, setSendMsgOtp] = useState("");
+  const [sendMsgSessionWant, setSendMsgSessionWant] = useState(true);
+  const [sendMsgSessionDate, setSendMsgSessionDate] = useState("");
+  const [sendMsgSessionSlot, setSendMsgSessionSlot] = useState("");
+  const [sendMsgSessionExpertType, setSendMsgSessionExpertType] = useState("");
   const [sendMsgPrepareDetails, setSendMsgPrepareDetails] = useState<PrepareReportDetail[]>([]);
   const [sendMsgError, setSendMsgError] = useState<string | null>(null);
   const [sendMsgSuccess, setSendMsgSuccess] = useState<string | null>(null);
@@ -422,6 +426,10 @@ export function Users() {
     setSendMsgSubmitting(false);
     setSendMsgLoading(false);
     setSendMsgOtp("");
+    setSendMsgSessionWant(true);
+    setSendMsgSessionDate("");
+    setSendMsgSessionSlot("");
+    setSendMsgSessionExpertType("");
     setSendMsgPrepareDetails([]);
     setSendMsgDropdownOpen(false);
   };
@@ -439,6 +447,10 @@ export function Users() {
     setSendMsgEngagementId("");
     setSendMsgScopeEngagement(false);
     setSendMsgOtp("");
+    setSendMsgSessionWant(true);
+    setSendMsgSessionDate("");
+    setSendMsgSessionSlot("");
+    setSendMsgSessionExpertType("");
     setSendMsgPrepareDetails([]);
     setSendMsgPreparing(false);
     setSendMsgSubmitting(false);
@@ -502,6 +514,10 @@ export function Users() {
     setSendMsgEngagementId("");
     setSendMsgScopeEngagement(false);
     setSendMsgOtp("");
+    setSendMsgSessionWant(true);
+    setSendMsgSessionDate("");
+    setSendMsgSessionSlot("");
+    setSendMsgSessionExpertType("");
     setSendMsgError(null);
     setSendMsgPrepareDetails([]);
 
@@ -544,6 +560,16 @@ export function Users() {
       setSendMsgError("This service requires an OTP.");
       return;
     }
+    if (svc.require_session_details) {
+      if (!sendMsgSessionDate.trim()) {
+        setSendMsgError("This service requires session date.");
+        return;
+      }
+      if (!sendMsgSessionExpertType.trim()) {
+        setSendMsgError("This service requires expert type.");
+        return;
+      }
+    }
 
     const engagementLabel = needsAssessment
       ? selectedSendMsgInstance?.engagement_name ||
@@ -574,6 +600,14 @@ export function Users() {
           ? participantDetailsFromUser(sendMsgUser, engagementLabel)
           : undefined,
         otp: svc.require_otp ? sendMsgOtp.trim() : undefined,
+        session_details: svc.require_session_details
+          ? {
+              want: sendMsgSessionWant,
+              date: sendMsgSessionDate.trim(),
+              slot: sendMsgSessionSlot.trim(),
+              expert_type: sendMsgSessionExpertType.trim(),
+            }
+          : undefined,
       });
       setSendMsgSuccess("Message dispatched successfully");
     } catch (err) {
@@ -1380,6 +1414,52 @@ export function Users() {
               </div>
             )}
 
+            {selectedSendMsgService?.require_session_details && (
+              <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                <p className="text-sm font-medium text-zinc-700">Session details</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendMsgSessionWant}
+                    onChange={(e) => setSendMsgSessionWant(e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  <span className="text-sm text-zinc-700">Want consultation</span>
+                </label>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={sendMsgSessionDate}
+                    onChange={(e) => setSendMsgSessionDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Slot</label>
+                  <input
+                    type="text"
+                    value={sendMsgSessionSlot}
+                    onChange={(e) => setSendMsgSessionSlot(e.target.value)}
+                    placeholder="e.g. 10:00-10:30"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Expert type</label>
+                  <input
+                    type="text"
+                    value={sendMsgSessionExpertType}
+                    onChange={(e) => setSendMsgSessionExpertType(e.target.value)}
+                    placeholder="e.g. doctor"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
             {needsSendMsgAssessment && selectedSendMsgService && (
               <div>
                 <label className="block text-sm font-medium text-zinc-700 mb-1">
@@ -1466,6 +1546,8 @@ export function Users() {
                   !sendMsgKey ||
                   !!sendMsgSuccess ||
                   (selectedSendMsgService?.require_otp && !sendMsgOtp.trim()) ||
+                  (selectedSendMsgService?.require_session_details &&
+                    (!sendMsgSessionDate.trim() || !sendMsgSessionExpertType.trim())) ||
                   (needsSendMsgAssessment &&
                     (sendMsgEligibleInstances.length === 0 || sendMsgInstanceId === "")) ||
                   (!needsSendMsgAssessment &&
