@@ -1695,7 +1695,7 @@ export function Engagements({
 
   // Employees not yet assigned as assistants for this engagement
   const assignedIds = new Set(assistants.map((a) => a.employee_id));
-  const assignableRoles = new Set(["admin", "onboarding_assistant", "organization_manager"]);
+  const assignableRoles = new Set(["admin", "onboarding_assistant", "organization_manager", "expert"]);
   const availableEmployees = allEmployees.filter(
     (e) => !assignedIds.has(e.employee_id) && assignableRoles.has((e.role ?? "").toLowerCase())
   );

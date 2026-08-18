@@ -106,7 +106,7 @@ function labelEmployee(emp: EmployeeListItem | DefaultOnboardingAssistantItem) {
   return full || `Employee #${emp.employee_id}`;
 }
 
-const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager"]);
+const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager", "expert"]);
 
 const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: string }[] = [
   { value: "", label: "None" },
