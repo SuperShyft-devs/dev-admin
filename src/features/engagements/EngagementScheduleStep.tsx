@@ -16,6 +16,7 @@ import type {
   CabinBreak,
   CabinSlotConfig,
   EngagementKind,
+  ExpertTypeItem,
   SlotDetail,
 } from "../../lib/api";
 import { Modal } from "../../shared/ui/Modal";
@@ -54,6 +55,7 @@ type Props = {
   dates: string[];
   onDatesChange: (dates: string[]) => void;
   onSlotDetailChange: (next: SlotDetail) => void;
+  expertTypes?: ExpertTypeItem[];
 };
 
 type EditingCabin = {
@@ -101,6 +103,11 @@ function cabinCountForDate(slotDetail: SlotDetail, date: string): { blood: numbe
   };
 }
 
+function expertTypeLabel(typeKey: string | undefined, expertTypes: ExpertTypeItem[]): string {
+  if (!typeKey) return "";
+  return expertTypes.find((et) => et.type_key === typeKey)?.type ?? typeKey;
+}
+
 export function EngagementScheduleStep({
   kind,
   bloodCollectionType,
@@ -110,6 +117,7 @@ export function EngagementScheduleStep({
   dates,
   onDatesChange,
   onSlotDetailChange,
+  expertTypes = [],
 }: Props) {
   const showBlood = showBloodCabinsInSchedule(kind, bloodCollectionType);
   const showConsult = getTypeConfig(kind).needsConsultationCabins;
@@ -232,7 +240,7 @@ export function EngagementScheduleStep({
         editingCabin.originalKey || undefined
       ),
     };
-    const err = validateCabin(withKey);
+    const err = validateCabin(withKey, editingCabin.section);
     if (err) {
       setCabinError(err);
       return;
@@ -351,6 +359,7 @@ export function EngagementScheduleStep({
             onEditCabin={startEditCabin}
             onDeleteCabin={deleteCabin}
             selectedDateHasNoCabins={selectedDateHasNoCabins}
+            expertTypes={expertTypes}
           />
         )}
         <Modal
@@ -370,6 +379,7 @@ export function EngagementScheduleStep({
             <CabinEditor
               editing={editingCabin}
               error={cabinError}
+              expertTypes={expertTypes}
               onChange={updateEditingCabin}
               onNameChange={updateCabinName}
               onSave={saveCabin}
@@ -440,6 +450,7 @@ export function EngagementScheduleStep({
         onDeleteCabin={deleteCabin}
         selectedDateHasNoCabins={selectedDateHasNoCabins}
         unsetBloodPanel={showUnsetPanel}
+        expertTypes={expertTypes}
       />
 
       <Modal
@@ -459,6 +470,7 @@ export function EngagementScheduleStep({
           <CabinEditor
             editing={editingCabin}
             error={cabinError}
+            expertTypes={expertTypes}
             onChange={updateEditingCabin}
             onNameChange={updateCabinName}
             onSave={saveCabin}
@@ -503,6 +515,7 @@ function ConsultationScheduleSection({
   onDeleteCabin,
   selectedDateHasNoCabins,
   unsetBloodPanel,
+  expertTypes = [],
 }: {
   title: string;
   showBlood: boolean;
@@ -528,6 +541,7 @@ function ConsultationScheduleSection({
   onDeleteCabin: (section: CabinSectionKey, date: string, cabinKey: string) => void;
   selectedDateHasNoCabins: boolean;
   unsetBloodPanel?: boolean;
+  expertTypes?: ExpertTypeItem[];
 }) {
   return (
     <>
@@ -682,6 +696,7 @@ function ConsultationScheduleSection({
             <CabinList
               title="Consultation Cabins"
               cabins={getCabinsForDate(slotDetail, "consultation", selectedDate)}
+              expertTypes={expertTypes}
               onEdit={(cabin) => onEditCabin("consultation", selectedDate, cabin)}
               onDelete={(key) => onDeleteCabin("consultation", selectedDate, key)}
             />
@@ -855,18 +870,22 @@ function CabinList({
   cabins,
   onEdit,
   onDelete,
+  expertTypes = [],
 }: {
   title: string;
   cabins: CabinSlotConfig[];
   onEdit: (cabin: CabinSlotConfig) => void;
   onDelete: (cabinKey: string) => void;
+  expertTypes?: ExpertTypeItem[];
 }) {
   if (cabins.length === 0) return null;
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">{title}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {cabins.map((cabin) => (
+        {cabins.map((cabin) => {
+          const typeLabel = expertTypeLabel(cabin.expert_type, expertTypes);
+          return (
           <div
             key={cabin.cabin_key}
             className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 hover:border-zinc-400"
@@ -880,6 +899,7 @@ function CabinList({
                 <p className="text-sm font-medium text-zinc-900">{cabin.cabin_name}</p>
                 <p className="text-xs text-zinc-500">
                   {cabin.cabin_key} · {cabin.start_time}–{cabin.end_time}
+                  {typeLabel ? ` · ${typeLabel}` : ""}
                   {!cabin.is_active ? " · inactive" : ""}
                 </p>
               </div>
@@ -901,7 +921,8 @@ function CabinList({
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -910,6 +931,7 @@ function CabinList({
 function CabinEditor({
   editing,
   error,
+  expertTypes = [],
   onChange,
   onNameChange,
   onSave,
@@ -924,6 +946,7 @@ function CabinEditor({
 }: {
   editing: EditingCabin;
   error: string | null;
+  expertTypes?: ExpertTypeItem[];
   onChange: (cabin: CabinSlotConfig) => void;
   onNameChange: (cabinName: string) => void;
   onSave: () => void;
@@ -949,6 +972,26 @@ function CabinEditor({
             className={inputClass}
           />
         </div>
+        {editing.section === "consultation" && (
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-zinc-700 mb-1">
+              Expert Type <span className="text-red-600">*</span>
+            </label>
+            <select
+              value={cabin.expert_type ?? ""}
+              onChange={(e) => onChange({ ...cabin, expert_type: e.target.value })}
+              className={inputClass}
+              required
+            >
+              <option value="">Select expert type</option>
+              {expertTypes.map((et) => (
+                <option key={et.type_key} value={et.type_key}>
+                  {et.type}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-zinc-700 mb-1">Cabin key</label>
           <input type="text" value={cabin.cabin_key} readOnly className={`${inputClass} bg-zinc-50 text-zinc-500`} />

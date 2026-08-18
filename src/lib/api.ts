@@ -1253,6 +1253,7 @@ export interface ConsultationPreference {
   consultation_id?: number | null;
   want: boolean;
   date?: string | null;
+  cabin?: string | null;
   slot?: string | null;
   expert_id?: number | null;
   done?: boolean;
@@ -1519,6 +1520,7 @@ export interface CabinSlotConfig {
   cabin_key: string;
   start_time: string;
   end_time: string;
+  expert_type?: string;
   slot_duration: number;
   capacity_per_slot: number;
   breaks: CabinBreak[];

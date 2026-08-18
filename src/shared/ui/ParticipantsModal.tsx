@@ -150,14 +150,15 @@ function normalizeConsultationPref(
   value: ConsultationPreference | boolean | null | undefined
 ): ConsultationPreference {
   if (value == null) {
-    return { want: false, date: null, slot: null, expert_id: null, done: false };
+    return { want: false, date: null, cabin: null, slot: null, expert_id: null, done: false };
   }
   if (typeof value === "boolean") {
-    return { want: value, date: null, slot: null, expert_id: null, done: false };
+    return { want: value, date: null, cabin: null, slot: null, expert_id: null, done: false };
   }
   return {
     want: Boolean(value.want),
     date: value.date ?? null,
+    cabin: value.cabin ?? null,
     slot: value.slot ?? null,
     expert_id: value.expert_id ?? null,
     done: Boolean(value.done),
@@ -601,7 +602,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         ...prev,
         want: value === true,
         done: value === true ? Boolean(prev.done) : false,
-        ...(value !== true ? { date: null, slot: null, expert_id: null, done: false } : {}),
+        ...(value !== true ? { date: null, cabin: null, slot: null, expert_id: null, done: false } : {}),
       };
       const updatedConsultations = {
         ...participantConsultationsRecord(participant),
