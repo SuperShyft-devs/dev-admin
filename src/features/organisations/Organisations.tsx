@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search, Plus, Loader2, Users, X, FileBarChart, MapPin } from "lucide-react";
+import { Search, Plus, Loader2, Users, X, FileBarChart, FileText, MapPin } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
@@ -154,6 +154,7 @@ export function Organisations() {
   } | null>(null);
   const [campDepartments, setCampDepartments] = useState<CampListItem | null>(null);
   const [campCities, setCampCities] = useState<CampListItem | null>(null);
+  const [initCampTarget, setInitCampTarget] = useState<{ campNo: number } | null>(null);
   const [campReportDeleteConfirm, setCampReportDeleteConfirm] = useState<CampListItem | null>(null);
   const [campActionMessage, setCampActionMessage] = useState<string | null>(null);
   const [campActionError, setCampActionError] = useState<string | null>(null);
@@ -960,13 +961,19 @@ export function Organisations() {
                         <FileBarChart className="w-4 h-4" /> Manage Reports
                       </button>
                     ) : (
-                      <CampReportInitMenu
-                        campNo={row.camp_no}
-                        variant="menu"
-                        onClose={closeMenu}
-                        onFeedback={handleCampReportFeedback}
-                        onInitialized={fetchCamps}
-                      />
+                      <div className="border-t border-zinc-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeMenu();
+                            setInitCampTarget({ campNo: row.camp_no });
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2"
+                        >
+                          <FileText className="w-4 h-4" /> Init Camp Report
+                        </button>
+                      </div>
                     )}
                   </>
                 )}
@@ -1023,6 +1030,7 @@ export function Organisations() {
                   campNo={selectedCamp.camp_no}
                   onFeedback={handleCampReportFeedback}
                   onInitialized={fetchCamps}
+                  zIndexClassName="z-[60]"
                 />
               )}
             </div>
@@ -1559,6 +1567,15 @@ export function Organisations() {
       <CampCitiesModal
         camp={campCities}
         onClose={() => setCampCities(null)}
+      />
+
+      <CampReportInitMenu
+        campNo={initCampTarget?.campNo ?? 0}
+        hideTrigger
+        open={initCampTarget != null}
+        onClose={() => setInitCampTarget(null)}
+        onFeedback={handleCampReportFeedback}
+        onInitialized={fetchCamps}
       />
 
       {campReportDeleteConfirm && (

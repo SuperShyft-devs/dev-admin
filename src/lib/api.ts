@@ -1027,6 +1027,15 @@ export const campReportsApi = {
     }),
   initCamp: (campNo: number) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/init`),
+  initAll: (campNo: number) =>
+    api.post<{
+      data: {
+        created: { overall: number; departments: number; cities: number; city_departments: number };
+        skipped: { overall: number; departments: number; cities: number; city_departments: number };
+        cities: string[];
+        departments: string[];
+      };
+    }>(`/reports/camps/${campNo}/init-all`),
   initDepartment: (campNo: number, slug: string) =>
     api.post<{ data: { report_id: number } }>(`/reports/camps/${campNo}/department/${slug}/init`),
   initCity: (campNo: number, city: string) =>

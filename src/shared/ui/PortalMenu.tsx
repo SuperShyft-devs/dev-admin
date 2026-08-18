@@ -88,6 +88,10 @@ export function PortalMenu({
       const target = event.target as Node;
       if (menuRef.current?.contains(target)) return;
       if (anchorRef.current?.contains(target)) return;
+      const el = target instanceof Element ? target : target.parentElement;
+      // Modals are portaled to document.body. Don't treat clicks inside a
+      // dialog as "outside" or the menu unmounts the modal before click fires.
+      if (el?.closest('[role="dialog"], [aria-modal="true"]')) return;
       onClose();
     };
     const onEscape = (event: KeyboardEvent) => {
