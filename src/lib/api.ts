@@ -1253,6 +1253,7 @@ export interface ConsultationPreference {
   consultation_id?: number | null;
   want: boolean;
   date?: string | null;
+  cabin?: string | null;
   slot?: string | null;
   expert_id?: number | null;
   done?: boolean;
