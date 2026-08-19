@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Stethoscope } from "lucide-react";
+import { Calendar, Loader2, Users } from "lucide-react";
 import { ExpertPortalLayout } from "../../layouts/ExpertPortalLayout";
 import {
   expertsPortalApi,
@@ -8,9 +8,8 @@ import {
   type CampConsultationEngagementItem,
 } from "../../lib/api";
 
-function formatDateRange(start?: string | null, end?: string | null): string {
-  if (start && end && start !== end) return `${start} – ${end}`;
-  return start || end || "—";
+function engagementLabel(item: CampConsultationEngagementItem): string {
+  return item.engagement_name || item.engagement_code || `Engagement ${item.engagement_id}`;
 }
 
 export function ExpertCampConsultationsPage() {
@@ -38,60 +37,77 @@ export function ExpertCampConsultationsPage() {
 
   return (
     <ExpertPortalLayout>
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
           <h1 className="text-xl font-semibold text-zinc-900">Camp Consultation</h1>
-          <p className="text-sm text-zinc-500 mt-1">
+          <p className="mt-1 text-sm text-zinc-500">
             Offline camp engagements where you are assigned as an onboarding assistant.
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-100">
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
           </div>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
-            <Stethoscope className="w-10 h-10 mb-3 text-zinc-300" />
-            <p className="text-sm">No camp consultations assigned to you</p>
+          <div className="py-16 text-center text-sm text-zinc-500">
+            No camp consultations assigned to you.
           </div>
         ) : (
-          <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden divide-y divide-zinc-100">
+          <ul className="space-y-3">
             {items.map((item) => (
-              <button
-                key={item.engagement_id}
-                type="button"
-                onClick={() =>
-                  navigate(`/experts/portal/camp-consultations/${item.engagement_id}`)
-                }
-                className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-zinc-50 min-w-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-zinc-900 truncate">
-                    {item.engagement_name || `Engagement #${item.engagement_id}`}
+              <li key={item.engagement_id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/experts/portal/camp-consultations/${item.engagement_id}`, {
+                      state: {
+                        engagementName: engagementLabel(item),
+                        engagementCode: item.engagement_code,
+                      },
+                    })
+                  }
+                  className="block w-full text-left p-4 bg-white border border-zinc-200 rounded-xl hover:border-zinc-300 hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-zinc-900 truncate">{engagementLabel(item)}</p>
+                      {item.engagement_code && (
+                        <p className="text-xs text-zinc-500 mt-0.5">{item.engagement_code}</p>
+                      )}
+                      {(item.start_date || item.end_date) && (
+                        <p className="flex items-center gap-1.5 text-xs text-zinc-500 mt-2">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            {item.start_date ?? "—"} — {item.end_date ?? "—"}
+                          </span>
+                        </p>
+                      )}
+                      {item.city || item.camp_no != null ? (
+                        <p className="text-xs text-zinc-500 mt-1">
+                          {[item.city, item.camp_no != null ? `Camp ${item.camp_no}` : null]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                        <Users className="w-3.5 h-3.5" />
+                        <span>{item.consultation_pending_count} pending</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-zinc-500 truncate mt-0.5">
-                    {item.engagement_code ? `${item.engagement_code} · ` : ""}
-                    {formatDateRange(item.start_date, item.end_date)}
-                    {item.city ? ` · ${item.city}` : ""}
-                    {item.camp_no != null ? ` · Camp ${item.camp_no}` : ""}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm font-semibold text-zinc-900">
-                    {item.consultation_pending_count}
-                  </div>
-                  <div className="text-[11px] text-zinc-500">pending</div>
-                </div>
-              </button>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </ExpertPortalLayout>

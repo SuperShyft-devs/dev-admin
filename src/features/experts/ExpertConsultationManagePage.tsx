@@ -23,6 +23,7 @@ type PdfKind = "bio_ai" | "blood_report";
 type CampNavState = {
   fromCamp?: boolean;
   engagementId?: number;
+  engagementName?: string;
 };
 
 function formatName(detail: ConsultationManageDetail): string {

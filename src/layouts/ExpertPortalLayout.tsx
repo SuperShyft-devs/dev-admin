@@ -9,6 +9,7 @@ import {
   Inbox,
   Menu,
   Stethoscope,
+  ArrowLeft,
   X,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -23,9 +24,19 @@ const portalNavItems = [
 
 interface ExpertPortalLayoutProps {
   children: React.ReactNode;
+  /** Console-style back link in the header (e.g. camp participant view). */
+  headerBackHref?: string;
+  headerBackLabel?: string;
+  /** Shown next to logo after back link (e.g. engagement name). */
+  contextTitle?: string;
 }
 
-export function ExpertPortalLayout({ children }: ExpertPortalLayoutProps) {
+export function ExpertPortalLayout({
+  children,
+  headerBackHref,
+  headerBackLabel,
+  contextTitle,
+}: ExpertPortalLayoutProps) {
   const { logout, userProfile, userId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,16 +74,41 @@ export function ExpertPortalLayout({ children }: ExpertPortalLayoutProps) {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <Link to="/experts/portal" className="flex items-center gap-2 min-w-0">
-            <img
-              src="/super-shyft.png"
-              alt="Super Shyft"
-              className="h-7 w-7 rounded-sm object-contain shrink-0"
-            />
-            <span className="text-sm font-semibold text-zinc-800 truncate hidden sm:inline">
-              Expert Portal
-            </span>
-          </Link>
+          {headerBackHref && headerBackLabel ? (
+            <>
+              <Link
+                to={headerBackHref}
+                className="flex items-center gap-1.5 text-sm text-zinc-600 hover:text-zinc-900 shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">{headerBackLabel}</span>
+              </Link>
+              <img
+                src="/super-shyft.png"
+                alt="Super Shyft"
+                className="h-7 w-7 rounded-sm object-contain shrink-0"
+              />
+              {contextTitle ? (
+                <>
+                  <div className="w-px h-5 bg-zinc-300 hidden sm:block" />
+                  <span className="text-sm font-semibold text-zinc-800 truncate hidden sm:inline">
+                    {contextTitle}
+                  </span>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <Link to="/experts/portal" className="flex items-center gap-2 min-w-0">
+              <img
+                src="/super-shyft.png"
+                alt="Super Shyft"
+                className="h-7 w-7 rounded-sm object-contain shrink-0"
+              />
+              <span className="text-sm font-semibold text-zinc-800 truncate hidden sm:inline">
+                Expert Portal
+              </span>
+            </Link>
+          )}
         </div>
         <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           <Link
