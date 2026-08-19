@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, Plus, X } from "lucide-react";
-import type { QuestionnaireOption, QuestionnaireQuestionCreate } from "../../../lib/api";
+import { AlertTriangle, ChevronDown, Plus, X } from "lucide-react";
+import type { MetsightsSyncConfig, QuestionnaireOption, QuestionnaireQuestionCreate } from "../../../lib/api";
 import {
+  getMetsightsSyncSuggestion,
+  hasMetsightsSyncMismatch,
   OPTION_SUPPORTED_TYPES,
   PREFILL_PREFERENCE_KEYS,
   Q_STATUS_OPTIONS,
@@ -29,6 +31,10 @@ export interface QuestionFormProps {
   onToggleStatus?: () => void;
   onSubmit: () => void;
   onCancel: () => void;
+  /** Existing metsights_sync config on the question (edit mode only). Used to detect mismatches when type changes. */
+  currentMetsightsSync?: MetsightsSyncConfig | null;
+  /** Called when admin clicks "Configure sync" from the suggestion banner. */
+  onConfigureSync?: () => void;
 }
 
 type VisibilityConditionPatch = Partial<
@@ -47,9 +53,19 @@ export function QuestionForm({
   onToggleStatus,
   onSubmit,
   onCancel,
+  currentMetsightsSync,
+  onConfigureSync,
 }: QuestionFormProps) {
   const showOptions = OPTION_SUPPORTED_TYPES.has(value.question_type);
   const options = value.options ?? [];
+  const syncSuggestion =
+    mode === "edit" && value.question_type
+      ? getMetsightsSyncSuggestion(value.question_type)
+      : null;
+  const showSyncWarning =
+    mode === "edit" &&
+    !!currentMetsightsSync &&
+    hasMetsightsSyncMismatch(value.question_type, currentMetsightsSync);
   const visibilityRules = value.visibility_rules ?? null;
   const visibilityConditions = Array.isArray(visibilityRules?.conditions) ? visibilityRules.conditions : [];
   const hasConditionalVisibility = visibilityConditions.length > 0;
@@ -293,6 +309,71 @@ export function QuestionForm({
           </select>
           <p className="mt-1 text-xs text-zinc-500">Choice and scale types need configured values.</p>
         </div>
+
+        {showSyncWarning && syncSuggestion && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-800">Metsights sync may need updating</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                The question type changed. Suggested sync config for{" "}
+                <span className="font-mono font-semibold">{value.question_type}</span>:
+              </p>
+              <ul className="mt-1.5 text-xs text-amber-700 space-y-0.5">
+                <li>
+                  <span className="font-medium">Pull:</span>{" "}
+                  <span className="font-mono">{syncSuggestion.pull?.strategy ?? "passthrough"}</span>
+                  {currentMetsightsSync?.pull?.strategy !== syncSuggestion.pull?.strategy && (
+                    <span className="ml-1 text-amber-500">
+                      (currently{" "}
+                      <span className="font-mono">{currentMetsightsSync?.pull?.strategy ?? "—"}</span>)
+                    </span>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium">Push:</span>{" "}
+                  <span className="font-mono">{syncSuggestion.push?.strategy ?? "passthrough"}</span>
+                  {currentMetsightsSync?.push?.strategy !== syncSuggestion.push?.strategy && (
+                    <span className="ml-1 text-amber-500">
+                      (currently{" "}
+                      <span className="font-mono">{currentMetsightsSync?.push?.strategy ?? "—"}</span>)
+                    </span>
+                  )}
+                </li>
+              </ul>
+              {onConfigureSync && (
+                <button
+                  type="button"
+                  onClick={onConfigureSync}
+                  className="mt-2 text-xs font-medium text-amber-800 underline underline-offset-2 hover:text-amber-900"
+                >
+                  Open sync config →
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!showSyncWarning && syncSuggestion && mode === "edit" && value.question_type && (
+          <p className="text-xs text-zinc-500">
+            Suggested Metsights sync for{" "}
+            <span className="font-mono font-medium">{value.question_type}</span>: pull{" "}
+            <span className="font-mono">{syncSuggestion.pull?.strategy}</span>, push{" "}
+            <span className="font-mono">{syncSuggestion.push?.strategy}</span>.
+            {onConfigureSync && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={onConfigureSync}
+                  className="text-zinc-700 underline underline-offset-2 hover:text-zinc-900"
+                >
+                  Configure sync
+                </button>
+              </>
+            )}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-4">
           <label className="inline-flex items-center gap-2 text-sm text-zinc-700">

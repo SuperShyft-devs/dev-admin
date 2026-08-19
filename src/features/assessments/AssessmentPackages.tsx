@@ -2432,6 +2432,10 @@ export function AssessmentPackages() {
           onToggleStatus={handleToggleQuestionStatus}
           onSubmit={handleQuestionSubmit}
           onCancel={closeQuestionModal}
+          currentMetsightsSync={selectedQ?.metsights_sync}
+          onConfigureSync={() => {
+            setSyncModalOpen(true);
+          }}
         />
       </Modal>
 

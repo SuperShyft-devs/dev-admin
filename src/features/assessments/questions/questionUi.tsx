@@ -1,4 +1,4 @@
-import type { QuestionnaireQuestionCreate } from "../../../lib/api";
+import type { MetsightsSyncConfig, QuestionnaireQuestionCreate } from "../../../lib/api";
 
 export const Q_STATUS_OPTIONS = ["active", "inactive"] as const;
 
@@ -42,6 +42,60 @@ export const STRATEGY_HAS_JSON_PARAMS = new Set([
   "scale_emit",
   "skip_if_only",
 ]);
+
+/**
+ * Returns the canonical recommended metsights_sync config for a given question_type.
+ * Used to surface auto-suggestions when the question type changes in the edit form.
+ */
+export function getMetsightsSyncSuggestion(
+  questionType: string
+): MetsightsSyncConfig | null {
+  if (questionType === "single_choice") {
+    return {
+      pull: { enabled: true, strategy: "list_to_single" },
+      push: { enabled: true, strategy: "single_to_list" },
+    };
+  }
+  if (questionType === "multiple_choice") {
+    return {
+      pull: { enabled: true, strategy: "passthrough" },
+      push: { enabled: true, strategy: "passthrough" },
+    };
+  }
+  if (questionType === "scale") {
+    return {
+      pull: { enabled: true, strategy: "scale_ingest" },
+      push: { enabled: true, strategy: "scale_emit" },
+    };
+  }
+  if (questionType === "text") {
+    return {
+      pull: { enabled: false, strategy: "passthrough" },
+      push: { enabled: false, strategy: "passthrough" },
+    };
+  }
+  return null;
+}
+
+/**
+ * Checks whether the current metsights_sync config matches the suggested config for a question_type.
+ * Returns true if there is a meaningful mismatch the admin should be aware of.
+ */
+export function hasMetsightsSyncMismatch(
+  questionType: string,
+  currentSync: MetsightsSyncConfig | null | undefined
+): boolean {
+  if (!currentSync) return false;
+  const suggestion = getMetsightsSyncSuggestion(questionType);
+  if (!suggestion) return false;
+  const pullMismatch =
+    currentSync.pull?.strategy !== undefined &&
+    currentSync.pull.strategy !== suggestion.pull?.strategy;
+  const pushMismatch =
+    currentSync.push?.strategy !== undefined &&
+    currentSync.push.strategy !== suggestion.push?.strategy;
+  return pullMismatch || pushMismatch;
+}
 
 export const BLANK_QUESTION: QuestionnaireQuestionCreate = {
   question_key: "",

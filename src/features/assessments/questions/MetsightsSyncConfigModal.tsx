@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { Modal } from "../../../shared/ui/Modal";
 import {
   questionnaireQuestionsApi,
@@ -7,6 +8,8 @@ import {
   getApiError,
 } from "../../../lib/api";
 import {
+  getMetsightsSyncSuggestion,
+  hasMetsightsSyncMismatch,
   PULL_STRATEGIES,
   PUSH_STRATEGIES,
   STRATEGY_HAS_JSON_PARAMS,
@@ -31,12 +34,21 @@ export function MetsightsSyncConfigModal({
   const [syncPushParamsJson, setSyncPushParamsJson] = useState("");
   const [syncSaving, setSyncSaving] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [suggestionApplied, setSuggestionApplied] = useState(false);
+
+  const questionType = question?.question_type ?? "";
+  const syncSuggestion = questionType ? getMetsightsSyncSuggestion(questionType) : null;
+  const showSuggestionBanner =
+    !suggestionApplied &&
+    !!syncSuggestion &&
+    hasMetsightsSyncMismatch(questionType, syncConfig);
 
   useEffect(() => {
     if (!open || !question) return;
     const config = question.metsights_sync ?? {};
     setSyncConfig(config);
     setSyncError(null);
+    setSuggestionApplied(false);
     const { pull, push } = config;
     const pullExtra = pull ? { ...pull } : {};
     delete pullExtra.enabled;
@@ -47,6 +59,17 @@ export function MetsightsSyncConfigModal({
     delete pushExtra.strategy;
     setSyncPushParamsJson(Object.keys(pushExtra).length > 0 ? JSON.stringify(pushExtra, null, 2) : "");
   }, [open, question]);
+
+  const applySuggestion = () => {
+    if (!syncSuggestion) return;
+    setSyncConfig({
+      pull: { ...syncSuggestion.pull },
+      push: { ...syncSuggestion.push },
+    });
+    setSyncPullParamsJson("");
+    setSyncPushParamsJson("");
+    setSuggestionApplied(true);
+  };
 
   const updateSyncPull = (patch: Record<string, unknown>) => {
     setSyncConfig((prev) => ({
@@ -110,6 +133,44 @@ export function MetsightsSyncConfigModal({
       <div className="space-y-5">
         {syncError && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{syncError}</div>
+        )}
+
+        {showSuggestionBanner && syncSuggestion && (
+          <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-blue-800">Suggested config for this question type</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Based on question type{" "}
+                <span className="font-mono font-semibold">{questionType}</span>, the recommended strategies are:
+              </p>
+              <ul className="mt-1.5 text-xs text-blue-700 space-y-0.5">
+                <li>
+                  <span className="font-medium">Pull:</span>{" "}
+                  <span className="font-mono">{syncSuggestion.pull?.strategy}</span>
+                </li>
+                <li>
+                  <span className="font-medium">Push:</span>{" "}
+                  <span className="font-mono">{syncSuggestion.push?.strategy}</span>
+                </li>
+              </ul>
+              <button
+                type="button"
+                onClick={applySuggestion}
+                className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors"
+              >
+                <Sparkles className="h-3 w-3" />
+                Apply suggestion
+              </button>
+            </div>
+          </div>
+        )}
+
+        {suggestionApplied && (
+          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+            <span className="font-medium">Suggestion applied.</span>
+            <span className="text-green-700">Review the config below and save when ready.</span>
+          </div>
         )}
 
         <div className="border border-zinc-200 rounded-lg p-4 space-y-3">
