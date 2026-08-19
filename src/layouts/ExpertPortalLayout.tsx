@@ -8,6 +8,7 @@ import {
   CalendarDays,
   Inbox,
   Menu,
+  Stethoscope,
   X,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -17,6 +18,7 @@ const portalNavItems = [
   { to: "/experts/portal/availability", icon: CalendarClock, label: "Availability", end: false },
   { to: "/experts/requests", icon: Inbox, label: "Requests", end: false },
   { to: "/experts/upcoming", icon: CalendarDays, label: "Upcoming", end: false },
+  { to: "/experts/portal/camp-consultations", icon: Stethoscope, label: "Camp Consultation", end: false },
 ];
 
 interface ExpertPortalLayoutProps {

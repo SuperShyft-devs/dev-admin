@@ -1333,6 +1333,7 @@ export interface ConsultationManageDetail {
   expert_id?: number | null;
   date?: string | null;
   slot?: string | null;
+  cabin?: string | null;
   done: boolean;
   meet_link?: string | null;
   consent: {
@@ -1348,6 +1349,32 @@ export interface ConsultationManageDetail {
     questionnaire: ConsultationSharedResourceState;
   };
   slot_reached: boolean;
+}
+
+export interface CampConsultationEngagementItem {
+  engagement_id: number;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  status?: string | null;
+  camp_no?: number | null;
+  city?: string | null;
+  consultation_pending_count: number;
+}
+
+export interface CampConsultationParticipantItem {
+  consultation_id: number;
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  date?: string | null;
+  slot?: string | null;
+  cabin?: string | null;
+  done: boolean;
+  expert_type: string;
 }
 
 export interface ConsultationQuestionnaireQuestion {
@@ -1393,6 +1420,14 @@ export const expertsPortalApi = {
   }) => api.post<{ data: { message: string } }>("/experts/portal/confirm", payload),
   listUpcoming: () =>
     api.get<{ data: ConsultationRequestItem[] }>("/experts/portal/upcoming"),
+  listCampConsultationEngagements: () =>
+    api.get<{ data: CampConsultationEngagementItem[] }>(
+      "/experts/portal/camp-consultations/engagements"
+    ),
+  listCampConsultationParticipants: (engagementId: number) =>
+    api.get<{ data: CampConsultationParticipantItem[] }>(
+      `/experts/portal/camp-consultations/engagements/${engagementId}/participants`
+    ),
   markConsultationDone: (payload: {
     user_id: number;
     engagement_id: number;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   FileText,
@@ -19,6 +19,11 @@ import {
 } from "../../lib/api";
 
 type PdfKind = "bio_ai" | "blood_report";
+
+type CampNavState = {
+  fromCamp?: boolean;
+  engagementId?: number;
+};
 
 function formatName(detail: ConsultationManageDetail): string {
   const name = [detail.first_name, detail.last_name].filter(Boolean).join(" ").trim();
@@ -56,6 +61,13 @@ export function ExpertConsultationManagePage() {
   const { consultationId: consultationIdParam } = useParams<{ consultationId: string }>();
   const consultationId = Number(consultationIdParam);
   const navigate = useNavigate();
+  const location = useLocation();
+  const campState = (location.state as CampNavState | null) ?? null;
+  const fromCamp = Boolean(campState?.fromCamp && campState.engagementId);
+  const backPath = fromCamp
+    ? `/experts/portal/camp-consultations/${campState?.engagementId}`
+    : "/experts/upcoming";
+  const backLabel = fromCamp ? "Participants" : "Upcoming";
 
   const [detail, setDetail] = useState<ConsultationManageDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,7 +222,7 @@ export function ExpertConsultationManagePage() {
     setError(null);
     try {
       await expertsPortalApi.markConsultationDoneById(consultationId);
-      navigate("/experts/upcoming");
+      navigate(backPath);
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -233,11 +245,11 @@ export function ExpertConsultationManagePage() {
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="min-w-0">
             <Link
-              to="/experts/upcoming"
+              to={backPath}
               className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-800 mb-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              Upcoming
+              {backLabel}
             </Link>
             {detail ? (
               <>
@@ -246,6 +258,7 @@ export function ExpertConsultationManagePage() {
                   {formatType(detail.expert_type)}
                   {detail.date ? ` · ${detail.date}` : ""}
                   {detail.slot ? ` · ${detail.slot}` : ""}
+                  {detail.cabin ? ` · ${detail.cabin}` : ""}
                   {detail.engagement_code ? ` · ${detail.engagement_code}` : ""}
                 </p>
               </>

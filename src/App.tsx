@@ -25,6 +25,8 @@ import { ExpertAvailabilityPage } from "./features/experts/ExpertAvailabilityPag
 import { ExpertRequestsPage } from "./features/experts/ExpertRequestsPage";
 import { ExpertUpcomingPage } from "./features/experts/ExpertUpcomingPage";
 import { ExpertConsultationManagePage } from "./features/experts/ExpertConsultationManagePage";
+import { ExpertCampConsultationsPage } from "./features/experts/ExpertCampConsultationsPage";
+import { ExpertCampConsultationParticipantsPage } from "./features/experts/ExpertCampConsultationParticipantsPage";
 import { Notifications } from "./features/notifications/Notifications";
 import { EngagementConsolePage } from "./features/console/EngagementConsolePage";
 import { ConsoleEngagementsPage } from "./features/console/ConsoleEngagementsPage";
@@ -268,6 +270,26 @@ function AppRoutes() {
           <ProtectedRoute>
             <ExpertPortalRoute>
               <ExpertUpcomingPage />
+            </ExpertPortalRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/experts/portal/camp-consultations"
+        element={
+          <ProtectedRoute>
+            <ExpertPortalRoute>
+              <ExpertCampConsultationsPage />
+            </ExpertPortalRoute>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/experts/portal/camp-consultations/:engagementId"
+        element={
+          <ProtectedRoute>
+            <ExpertPortalRoute>
+              <ExpertCampConsultationParticipantsPage />
             </ExpertPortalRoute>
           </ProtectedRoute>
         }
