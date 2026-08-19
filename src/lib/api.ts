@@ -2616,6 +2616,7 @@ export const integrationSyncLogsApi = {
     user_id?: number;
     engagement_id?: number;
     search?: string;
+    payload_search?: string;
     from?: string;
     to?: string;
   }) =>

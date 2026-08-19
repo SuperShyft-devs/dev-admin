@@ -264,6 +264,8 @@ export function IntegrationSyncLogsModal({
   const [engagementIdFilter, setEngagementIdFilter] = useState("");
   const [endpointSearch, setEndpointSearch] = useState("");
   const [endpointSearchDebounced, setEndpointSearchDebounced] = useState("");
+  const [payloadSearch, setPayloadSearch] = useState("");
+  const [payloadSearchDebounced, setPayloadSearchDebounced] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payloadTab, setPayloadTab] = useState<PayloadTab>("request");
 
@@ -277,6 +279,8 @@ export function IntegrationSyncLogsModal({
       setEngagementIdFilter(initialEngagementId ? String(initialEngagementId) : "");
       setEndpointSearch("");
       setEndpointSearchDebounced("");
+      setPayloadSearch("");
+      setPayloadSearchDebounced("");
       setExpandedId(null);
     }
   }, [open, defaultProvider, initialEngagementId]);
@@ -288,6 +292,14 @@ export function IntegrationSyncLogsModal({
     }, 350);
     return () => window.clearTimeout(timer);
   }, [endpointSearch]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPayloadSearchDebounced(payloadSearch.trim());
+      setPage(1);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [payloadSearch]);
 
   const listParams = useMemo(() => {
     const range = getTimeRange(timePreset);
@@ -310,6 +322,7 @@ export function IntegrationSyncLogsModal({
       engagement_id:
         showUserEngagementFilters && Number.isFinite(engagementId) && engagementId! > 0 ? engagementId : undefined,
       search: showEndpointSearch && endpointSearchDebounced ? endpointSearchDebounced : undefined,
+      payload_search: payloadSearchDebounced || undefined,
       ...range,
     };
   }, [
@@ -321,6 +334,7 @@ export function IntegrationSyncLogsModal({
     userIdFilter,
     engagementIdFilter,
     endpointSearchDebounced,
+    payloadSearchDebounced,
     isN8n,
     isNutritionApi,
     isHealthians,
@@ -364,26 +378,39 @@ export function IntegrationSyncLogsModal({
       <div className="space-y-4 max-h-[78vh] flex flex-col">
         <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3 space-y-3">
           {showEndpointSearch ? (
-            <div className="flex flex-wrap gap-2 items-center">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                  type="search"
-                  placeholder="Search endpoint URL…"
-                  value={endpointSearch}
-                  onChange={(e) => setEndpointSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-                />
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="search"
+                    placeholder="Search endpoint URL…"
+                    value={endpointSearch}
+                    onChange={(e) => setEndpointSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void fetchLogs()}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => void fetchLogs()}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </button>
+              <textarea
+                placeholder={'Search request payload — full or partial, e.g. {"albumin": 4.62} or { "albumin":'}
+                value={payloadSearch}
+                onChange={(e) => setPayloadSearch(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 resize-y min-h-[2.5rem]"
+              />
+              <p className="text-xs text-zinc-500">
+                Searches request payload only. Use field names with or without values — incomplete JSON like{" "}
+                <code className="text-[11px]">{`{ "albumin":`}</code> matches any log that sent albumin.
+              </p>
             </div>
           ) : (
             <div className="flex justify-end">
