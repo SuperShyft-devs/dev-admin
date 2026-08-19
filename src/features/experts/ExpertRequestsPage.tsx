@@ -75,7 +75,7 @@ export function ExpertRequestsPage() {
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-zinc-900">Requests</h1>
           <p className="text-sm text-zinc-500 mt-1">
-            Pending consultation requests from B2C engagements waiting for expert assignment.
+            Pending consultation requests from online engagements waiting for expert assignment.
           </p>
         </div>
 
