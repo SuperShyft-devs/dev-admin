@@ -149,7 +149,6 @@ export function ExpertConsultationListTable({
                 filtered.map((item) => {
                   const key = rowId(item);
                   const disabled = primaryActionDisabled?.(item) ?? false;
-                  const loading = primaryActionLoading?.(item) ?? false;
                   return (
                     <tr
                       key={key}

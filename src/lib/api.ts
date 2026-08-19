@@ -1183,7 +1183,7 @@ export const expertTypesApi = {
 
 // Experts (doctors & nutritionists)
 export type ExpertType = string;
-export type ConsultationMode = "video" | "voice" | "chat";
+export type ExpertConsultationMode = "video" | "voice" | "chat";
 
 export interface ExpertTag {
   tag_id: number;
@@ -1204,7 +1204,7 @@ export interface ExpertListItem {
   experience_years?: number | null;
   qualifications?: string | null;
   about_text?: string | null;
-  consultation_modes?: ConsultationMode[] | string[] | null;
+  consultation_modes?: ExpertConsultationMode[] | string[] | null;
   languages?: string[] | null;
   session_duration_mins?: number | null;
   appointment_fee_paise?: number | null;
@@ -1228,7 +1228,7 @@ export interface ExpertPayload {
   experience_years?: number | null;
   qualifications?: string | null;
   about_text?: string | null;
-  consultation_modes?: ConsultationMode[] | null;
+  consultation_modes?: ExpertConsultationMode[] | null;
   languages?: string[] | null;
   session_duration_mins?: number | null;
   appointment_fee_paise?: number | null;

@@ -23,7 +23,6 @@ import type {
 import { Modal } from "../../shared/ui/Modal";
 import {
   getScheduleTitle,
-  getTypeConfig,
   showBloodCabinsInSchedule,
   showBloodModeUnsetPanel,
   showConsultationCabinsInSchedule,

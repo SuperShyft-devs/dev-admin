@@ -116,7 +116,7 @@ export function showConsultationCabinsInSchedule(
 
 export function needsScheduleStep(
   kind: EngagementKind | string | null,
-  bloodMode?: BloodCollectionType | string | null,
+  _bloodMode?: BloodCollectionType | string | null,
   consultationMode?: ConsultationMode | string | null
 ): boolean {
   const c = getTypeConfig(kind);
@@ -152,7 +152,6 @@ export function getScheduleStepLabel(
   bloodMode: BloodCollectionType | string | null | undefined,
   consultationMode?: ConsultationMode | string | null
 ): string {
-  const c = getTypeConfig(kind);
   const showBlood = showBloodCabinsInSchedule(kind, bloodMode);
   const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
   if (showBlood && showConsult) return "On-site schedule";
@@ -168,7 +167,6 @@ export function getScheduleTitle(
   bloodMode: BloodCollectionType | string | null | undefined,
   consultationMode?: ConsultationMode | string | null
 ): string {
-  const c = getTypeConfig(kind);
   const showBlood = showBloodCabinsInSchedule(kind, bloodMode);
   const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
   if (showBlood && showConsult) return "On-site dates & cabins";

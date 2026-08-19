@@ -9,7 +9,7 @@ import {
   getApiError,
   uploadsApi,
   usersApi,
-  type ConsultationMode,
+  type ExpertConsultationMode,
   type ExpertDetail,
   type ExpertListItem,
   type ExpertPayload,
@@ -18,7 +18,7 @@ import {
   type UserListItem,
 } from "../../lib/api";
 
-const MODES: ConsultationMode[] = ["video", "voice", "chat"];
+const MODES: ExpertConsultationMode[] = ["video", "voice", "chat"];
 
 function formatUserDropdownLabel(u: UserListItem): string {
   const first = (u.first_name ?? "").trim();
@@ -266,15 +266,15 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [viewUser, setViewUser] = useState<UserListItem | null>(null);
 
-  const syncModesFromPayload = (modes: ConsultationMode[] | string[] | null | undefined) => {
+  const syncModesFromPayload = (modes: ExpertConsultationMode[] | string[] | null | undefined) => {
     const set = new Set((modes ?? []).map((m) => String(m).toLowerCase()));
     setModeVideo(set.has("video"));
     setModeVoice(set.has("voice"));
     setModeChat(set.has("chat"));
   };
 
-  const modesFromCheckboxes = (): ConsultationMode[] | null => {
-    const out: ConsultationMode[] = [];
+  const modesFromCheckboxes = (): ExpertConsultationMode[] | null => {
+    const out: ExpertConsultationMode[] = [];
     if (modeVideo) out.push("video");
     if (modeVoice) out.push("voice");
     if (modeChat) out.push("chat");
@@ -393,7 +393,7 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
           experience_years: e.experience_years ?? undefined,
           qualifications: e.qualifications ?? "",
           about_text: e.about_text ?? "",
-          consultation_modes: (e.consultation_modes as ConsultationMode[] | null) ?? null,
+          consultation_modes: (e.consultation_modes as ExpertConsultationMode[] | null) ?? null,
           languages: (e.languages as string[] | null) ?? null,
           session_duration_mins: e.session_duration_mins ?? undefined,
           appointment_fee_paise: e.appointment_fee_paise ?? undefined,
@@ -403,7 +403,7 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
           effective_until: e.effective_until ?? undefined,
         });
         setLanguagesText((e.languages as string[] | undefined)?.join(", ") ?? "");
-        syncModesFromPayload(e.consultation_modes as ConsultationMode[] | null);
+        syncModesFromPayload(e.consultation_modes as ExpertConsultationMode[] | null);
         setTags(e.expertise_tags ?? []);
         setNewTagName("");
         setModalMode("edit");
