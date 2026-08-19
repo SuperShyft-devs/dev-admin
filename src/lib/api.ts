@@ -1447,6 +1447,7 @@ export const expertsConsultationsApi = {
     expert_id?: number;
     date: string;
     slot: string;
+    cabin?: string;
   }) => api.post<{ data: { message: string } }>("/experts/consultations/book", payload),
 };
 
@@ -1529,6 +1530,7 @@ export interface ChecklistReadiness {
 export type EngagementKind = "bio_ai" | "blood_test" | "consultation" | "blood_test_with_consultation" | "bio_ai_with_consultation" | "vifc";
 export type EngagementStatus = "draft" | "scheduled" | "running" | "completed" | "cancelled";
 export type BloodCollectionType = "home_collection" | "camp_collection";
+export type ConsultationMode = "online" | "offline";
 
 export interface EngagementLocationFields {
   city?: string | null;
@@ -1596,6 +1598,7 @@ export interface Engagement {
   healthians_zone_id?: string | null;
   external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
+  consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   /** @deprecated Use notifications array instead */
@@ -1649,6 +1652,7 @@ export interface EngagementListItem {
   healthians_zone_id?: string | null;
   external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
+  consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
   onboarding_notification?: string | null;
@@ -1687,6 +1691,7 @@ export interface EngagementCreate {
   healthians_zone_id?: string | null;
   external_camp_id?: number | null;
   blood_collection_type?: BloodCollectionType | string | null;
+  consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
   /** @deprecated Use notifications array instead */

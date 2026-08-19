@@ -45,6 +45,12 @@ const BLOOD_COLLECTION_TYPE_OPTIONS = [
   { value: "camp_collection", label: "Camp Collection" },
 ] as const;
 
+const CONSULTATION_MODE_OPTIONS = [
+  { value: "", label: "Select mode" },
+  { value: "offline", label: "Offline (on-site cabins)" },
+  { value: "online", label: "Online (expert calendar)" },
+] as const;
+
 type StepKey = "basics" | "location" | "offerings" | "schedule" | "notifications";
 
 const inputClass =
@@ -58,15 +64,19 @@ function toNumberOrNull(value: string): number | null {
 
 function buildSteps(
   kind: EngagementKind | null,
-  bloodMode: string | null | undefined
+  bloodMode: string | null | undefined,
+  consultationMode: string | null | undefined
 ): { key: StepKey; label: string }[] {
   const steps: { key: StepKey; label: string }[] = [
     { key: "basics", label: "Type & basics" },
     { key: "location", label: "Location" },
     { key: "offerings", label: "Offerings" },
   ];
-  if (needsScheduleStep(kind)) {
-    steps.push({ key: "schedule", label: getScheduleStepLabel(kind, bloodMode) });
+  if (needsScheduleStep(kind, bloodMode, consultationMode)) {
+    steps.push({
+      key: "schedule",
+      label: getScheduleStepLabel(kind, bloodMode, consultationMode),
+    });
   }
   steps.push({ key: "notifications", label: "Notifications" });
   return steps;
@@ -285,8 +295,8 @@ export function EngagementFormModal({
   );
 
   const steps = useMemo(
-    () => buildSteps(selectedTypeCode, formData.blood_collection_type),
-    [selectedTypeCode, formData.blood_collection_type]
+    () => buildSteps(selectedTypeCode, formData.blood_collection_type, formData.consultation_mode),
+    [selectedTypeCode, formData.blood_collection_type, formData.consultation_mode]
   );
 
   useEffect(() => {
@@ -300,9 +310,13 @@ export function EngagementFormModal({
   const isLastStep = stepIndex >= steps.length - 1;
 
   const applySlotDetailPrune = useCallback(
-    (kind: EngagementKind | null, bloodMode: string | null | undefined) => {
+    (
+      kind: EngagementKind | null,
+      bloodMode: string | null | undefined,
+      consultationMode: string | null | undefined
+    ) => {
       setSlotDetail((prev) => {
-        const pruned = pruneSlotDetailForType(prev, kind, bloodMode);
+        const pruned = pruneSlotDetailForType(prev, kind, bloodMode, consultationMode);
         setCollectionDates(datesAfterPrune(pruned));
         return pruned;
       });
@@ -321,6 +335,9 @@ export function EngagementFormModal({
       assessment_package_id: config.needsAssessment ? prev.assessment_package_id : undefined,
       diagnostic_package_id: config.needsDiagnostic ? prev.diagnostic_package_id : undefined,
       consultations: config.needsConsultation ? prev.consultations : undefined,
+      consultation_mode: config.needsConsultation
+        ? prev.consultation_mode ?? "offline"
+        : undefined,
       blood_collection_type: config.needsBloodCollection ? prev.blood_collection_type : undefined,
       external_camp_id:
         config.needsBloodCollection && prev.blood_collection_type === "camp_collection"
@@ -336,7 +353,7 @@ export function EngagementFormModal({
         : false,
     }));
 
-    applySlotDetailPrune(newCode, formData.blood_collection_type);
+    applySlotDetailPrune(newCode, formData.blood_collection_type, formData.consultation_mode);
   };
 
   const handleBloodModeChange = (next: string | undefined) => {
@@ -345,7 +362,15 @@ export function EngagementFormModal({
       blood_collection_type: next,
       external_camp_id: next === "camp_collection" ? prev.external_camp_id : undefined,
     }));
-    applySlotDetailPrune(selectedTypeCode, next ?? null);
+    applySlotDetailPrune(selectedTypeCode, next ?? null, formData.consultation_mode);
+  };
+
+  const handleConsultationModeChange = (next: string | undefined) => {
+    setFormData((prev) => ({
+      ...prev,
+      consultation_mode: next,
+    }));
+    applySlotDetailPrune(selectedTypeCode, formData.blood_collection_type, next ?? null);
   };
 
   const validateBasics = () => {
@@ -396,6 +421,11 @@ export function EngagementFormModal({
         setStepError("Select at least 1 expert type");
         return false;
       }
+    }
+
+    if (typeConfig.needsConsultation && !formData.consultation_mode) {
+      setStepError("Select a consultation mode (Online or Offline)");
+      return false;
     }
 
     setStepError(null);
@@ -547,11 +577,19 @@ export function EngagementFormModal({
     const kind = selectedTypeCode;
     const showCamp =
       typeConfig.needsBloodCollection && formData.blood_collection_type === "camp_collection";
+    const prunedSlotDetail = slotDetailForSubmit(
+      pruneSlotDetailForType(
+        slotDetail,
+        kind,
+        formData.blood_collection_type,
+        formData.consultation_mode
+      )
+    );
 
     onSubmit({
       ...formData,
       consultations,
-      slot_detail: slotDetailForSubmit(slotDetail),
+      slot_detail: prunedSlotDetail,
       notifications,
       assessment_package_id:
         kind && typeConfig.needsAssessment ? formData.assessment_package_id ?? null : null,
@@ -559,6 +597,9 @@ export function EngagementFormModal({
         kind && typeConfig.needsDiagnostic ? formData.diagnostic_package_id ?? null : null,
       blood_collection_type: typeConfig.needsBloodCollection
         ? formData.blood_collection_type || null
+        : null,
+      consultation_mode: typeConfig.needsConsultation
+        ? formData.consultation_mode || null
         : null,
       external_camp_id: showCamp ? formData.external_camp_id ?? null : null,
       healthians_zone_id: typeConfig.needsHealthiansZone
@@ -839,7 +880,11 @@ export function EngagementFormModal({
             {showOfferingsEmpty && (
               <p className="md:col-span-2 text-sm text-zinc-500">
                 No type-specific offerings for this engagement type.
-                {!needsScheduleStep(selectedTypeCode) && (
+                {!needsScheduleStep(
+                  selectedTypeCode,
+                  formData.blood_collection_type,
+                  formData.consultation_mode
+                ) && (
                   <span> On-site scheduling is not used — continue to notifications.</span>
                 )}
               </p>
@@ -930,6 +975,29 @@ export function EngagementFormModal({
                     </label>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {typeConfig.needsConsultation && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Consultation mode *
+                </label>
+                <select
+                  value={formData.consultation_mode ?? ""}
+                  onChange={(e) => handleConsultationModeChange(e.target.value || undefined)}
+                  className={inputClass}
+                >
+                  {CONSULTATION_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Offline uses on-site consultation cabins. Online uses each expert&apos;s calendar
+                  availability.
+                </p>
               </div>
             )}
 
@@ -1101,6 +1169,7 @@ export function EngagementFormModal({
           <EngagementScheduleStep
             kind={selectedTypeCode}
             bloodCollectionType={formData.blood_collection_type}
+            consultationMode={formData.consultation_mode}
             startDate={formData.start_date}
             endDate={formData.end_date}
             slotDetail={slotDetail}

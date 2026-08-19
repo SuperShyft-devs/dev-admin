@@ -1,4 +1,4 @@
-import type { BloodCollectionType, EngagementKind, SlotDetail } from "../../lib/api";
+import type { BloodCollectionType, ConsultationMode, EngagementKind, SlotDetail } from "../../lib/api";
 import { collectDates, normalizeSlotDetail } from "./slotDetailUtils";
 
 export type EngagementTypeConfig = {
@@ -107,9 +107,23 @@ export function hasOfferingsFields(kind: EngagementKind | string | null): boolea
   );
 }
 
-export function needsScheduleStep(kind: EngagementKind | string | null): boolean {
+export function showConsultationCabinsInSchedule(
+  kind: EngagementKind | string | null,
+  consultationMode: ConsultationMode | string | null | undefined
+): boolean {
+  return getTypeConfig(kind).needsConsultationCabins && consultationMode === "offline";
+}
+
+export function needsScheduleStep(
+  kind: EngagementKind | string | null,
+  bloodMode?: BloodCollectionType | string | null,
+  consultationMode?: ConsultationMode | string | null
+): boolean {
   const c = getTypeConfig(kind);
-  return c.needsBloodCabins || c.needsConsultationCabins;
+  return (
+    c.needsBloodCabins ||
+    showConsultationCabinsInSchedule(kind, consultationMode ?? "offline")
+  );
 }
 
 export function showBloodCabinsInSchedule(
@@ -135,11 +149,12 @@ export function showBloodModeUnsetPanel(
 
 export function getScheduleStepLabel(
   kind: EngagementKind | string | null,
-  bloodMode: BloodCollectionType | string | null | undefined
+  bloodMode: BloodCollectionType | string | null | undefined,
+  consultationMode?: ConsultationMode | string | null
 ): string {
   const c = getTypeConfig(kind);
   const showBlood = showBloodCabinsInSchedule(kind, bloodMode);
-  const showConsult = c.needsConsultationCabins;
+  const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
   if (showBlood && showConsult) return "On-site schedule";
   if (showBlood) return "Blood test schedule";
   if (showConsult) return "Consultation schedule";
@@ -150,11 +165,12 @@ export function getScheduleStepLabel(
 
 export function getScheduleTitle(
   kind: EngagementKind | string | null,
-  bloodMode: BloodCollectionType | string | null | undefined
+  bloodMode: BloodCollectionType | string | null | undefined,
+  consultationMode?: ConsultationMode | string | null
 ): string {
   const c = getTypeConfig(kind);
   const showBlood = showBloodCabinsInSchedule(kind, bloodMode);
-  const showConsult = c.needsConsultationCabins;
+  const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
   if (showBlood && showConsult) return "On-site dates & cabins";
   if (showBlood) return "Blood test dates & cabins";
   if (showConsult) return "Consultation dates & cabins";
@@ -167,7 +183,8 @@ export function getScheduleTitle(
 export function pruneSlotDetailForType(
   slotDetail: SlotDetail,
   kind: EngagementKind | string | null,
-  bloodMode: BloodCollectionType | string | null | undefined
+  bloodMode: BloodCollectionType | string | null | undefined,
+  consultationMode?: ConsultationMode | string | null
 ): SlotDetail {
   const normalized = normalizeSlotDetail(slotDetail);
   const next: SlotDetail = { ...normalized };
@@ -176,7 +193,7 @@ export function pruneSlotDetailForType(
   if (!c.needsBloodCabins || bloodMode !== "camp_collection") {
     delete next.blood_collection;
   }
-  if (!c.needsConsultationCabins) {
+  if (!showConsultationCabinsInSchedule(kind, consultationMode)) {
     delete next.consultation;
   }
   return next;
@@ -218,5 +235,13 @@ export function formatBloodCollectionLabel(
 ): string {
   if (value === "home_collection") return "Home collection";
   if (value === "camp_collection") return "Camp collection";
+  return "Not set";
+}
+
+export function formatConsultationModeLabel(
+  value: ConsultationMode | string | null | undefined
+): string {
+  if (value === "online") return "Online";
+  if (value === "offline") return "Offline";
   return "Not set";
 }

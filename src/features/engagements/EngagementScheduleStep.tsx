@@ -15,6 +15,7 @@ import type {
   BloodCollectionType,
   CabinBreak,
   CabinSlotConfig,
+  ConsultationMode,
   EngagementKind,
   ExpertTypeItem,
   SlotDetail,
@@ -25,6 +26,7 @@ import {
   getTypeConfig,
   showBloodCabinsInSchedule,
   showBloodModeUnsetPanel,
+  showConsultationCabinsInSchedule,
   showHomeCollectionPanel,
 } from "./engagementTypeConfig";
 import {
@@ -49,6 +51,7 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 type Props = {
   kind: EngagementKind | null;
   bloodCollectionType: BloodCollectionType | string | null | undefined;
+  consultationMode?: ConsultationMode | string | null | undefined;
   startDate: string;
   endDate: string;
   slotDetail: SlotDetail;
@@ -111,6 +114,7 @@ function expertTypeLabel(typeKey: string | undefined, expertTypes: ExpertTypeIte
 export function EngagementScheduleStep({
   kind,
   bloodCollectionType,
+  consultationMode,
   startDate,
   endDate,
   slotDetail,
@@ -120,10 +124,10 @@ export function EngagementScheduleStep({
   expertTypes = [],
 }: Props) {
   const showBlood = showBloodCabinsInSchedule(kind, bloodCollectionType);
-  const showConsult = getTypeConfig(kind).needsConsultationCabins;
+  const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
   const showHomePanel = showHomeCollectionPanel(kind, bloodCollectionType);
   const showUnsetPanel = showBloodModeUnsetPanel(kind, bloodCollectionType);
-  const title = getScheduleTitle(kind, bloodCollectionType);
+  const title = getScheduleTitle(kind, bloodCollectionType, consultationMode);
 
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {

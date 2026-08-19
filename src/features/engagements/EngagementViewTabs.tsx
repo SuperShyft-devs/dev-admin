@@ -26,6 +26,7 @@ import {
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import {
   formatBloodCollectionLabel,
+  formatConsultationModeLabel,
   summarizeSlotDetail,
 } from "./engagementTypeConfig";
 import { Field, formatEngagementStatusLabel, isB2BEngagement } from "./engagementViewShared";
@@ -292,6 +293,12 @@ export function EngagementDetailsTab({
           <Field label="Blood collection">
             {formatBloodCollectionLabel(engagement.blood_collection_type)}
           </Field>
+          {engagement.consultations &&
+          Object.values(engagement.consultations).some(Boolean) ? (
+            <Field label="Consultation mode">
+              {formatConsultationModeLabel(engagement.consultation_mode)}
+            </Field>
+          ) : null}
           {engagement.external_camp_id != null ? (
             <Field label="Healthians Camp ID">{String(engagement.external_camp_id)}</Field>
           ) : null}
