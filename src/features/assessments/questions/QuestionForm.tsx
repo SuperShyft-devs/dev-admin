@@ -60,12 +60,12 @@ export function QuestionForm({
   const options = value.options ?? [];
   const syncSuggestion =
     mode === "edit" && value.question_type
-      ? getMetsightsSyncSuggestion(value.question_type)
+      ? getMetsightsSyncSuggestion(value.question_type, value.question_key)
       : null;
   const showSyncWarning =
     mode === "edit" &&
     !!currentMetsightsSync &&
-    hasMetsightsSyncMismatch(value.question_type, currentMetsightsSync);
+    hasMetsightsSyncMismatch(value.question_type, currentMetsightsSync, value.question_key);
   const visibilityRules = value.visibility_rules ?? null;
   const visibilityConditions = Array.isArray(visibilityRules?.conditions) ? visibilityRules.conditions : [];
   const hasConditionalVisibility = visibilityConditions.length > 0;

@@ -37,11 +37,12 @@ export function MetsightsSyncConfigModal({
   const [suggestionApplied, setSuggestionApplied] = useState(false);
 
   const questionType = question?.question_type ?? "";
-  const syncSuggestion = questionType ? getMetsightsSyncSuggestion(questionType) : null;
+  const questionKey = question?.question_key ?? "";
+  const syncSuggestion = questionType ? getMetsightsSyncSuggestion(questionType, questionKey) : null;
   const showSuggestionBanner =
     !suggestionApplied &&
     !!syncSuggestion &&
-    hasMetsightsSyncMismatch(questionType, syncConfig);
+    hasMetsightsSyncMismatch(questionType, syncConfig, questionKey);
 
   useEffect(() => {
     if (!open || !question) return;

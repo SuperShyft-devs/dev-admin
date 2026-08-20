@@ -48,8 +48,23 @@ export const STRATEGY_HAS_JSON_PARAMS = new Set([
  * Used to surface auto-suggestions when the question type changes in the edit form.
  */
 export function getMetsightsSyncSuggestion(
-  questionType: string
+  questionType: string,
+  questionKey?: string | null
 ): MetsightsSyncConfig | null {
+  const qkey = (questionKey ?? "").trim();
+  if (qkey === "health_priorities") {
+    return {
+      pull: { enabled: true, strategy: "passthrough" },
+      push: {
+        enabled: true,
+        strategy: "single_to_list",
+        min_list_size: 2,
+        max_list_size: 2,
+        fill_strategy: "deterministic_next",
+        fill_from_option_values: ["0", "1", "2", "3", "4", "5"],
+      },
+    };
+  }
   if (questionType === "single_choice") {
     return {
       pull: { enabled: true, strategy: "list_to_single" },
@@ -83,10 +98,11 @@ export function getMetsightsSyncSuggestion(
  */
 export function hasMetsightsSyncMismatch(
   questionType: string,
-  currentSync: MetsightsSyncConfig | null | undefined
+  currentSync: MetsightsSyncConfig | null | undefined,
+  questionKey?: string | null
 ): boolean {
   if (!currentSync) return false;
-  const suggestion = getMetsightsSyncSuggestion(questionType);
+  const suggestion = getMetsightsSyncSuggestion(questionType, questionKey);
   if (!suggestion) return false;
   const pullMismatch =
     currentSync.pull?.strategy !== undefined &&
