@@ -23,13 +23,15 @@ export function Login() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!phone.trim()) {
+    const normalizedPhone = phone.replace(/\D/g, "");
+    if (!normalizedPhone) {
       setError("Please enter your phone number");
       return;
     }
     setLoading(true);
     try {
-      await sendOtp(phone.trim());
+      await sendOtp(normalizedPhone);
+      setPhone(normalizedPhone);
       setStep("otp");
       setOtp("");
     } catch (err) {
@@ -48,7 +50,7 @@ export function Login() {
     }
     setLoading(true);
     try {
-      const role = await login(phone.trim(), otp.trim());
+      const role = await login(phone.replace(/\D/g, ""), otp.trim());
       navigate(resolvePostLoginPath(role, redirectTarget), { replace: true });
     } catch (err) {
       setError(getApiError(err, "auth"));
