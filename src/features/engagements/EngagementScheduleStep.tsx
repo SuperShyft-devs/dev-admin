@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Home, Info, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Home, Info, Plus, X, Download } from "lucide-react";
 import type {
   BloodCollectionType,
   CabinBreak,
@@ -41,6 +41,7 @@ import {
   validateBreak,
   validateCabin,
 } from "./slotDetailUtils";
+import { ImportSlotDetailModal } from "./ImportSlotDetailModal";
 
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900";
@@ -53,6 +54,9 @@ type Props = {
   consultationMode?: ConsultationMode | string | null | undefined;
   startDate: string;
   endDate: string;
+  organizationId?: number | null;
+  currentEngagementId?: number | null;
+  enabledConsultations?: Record<string, boolean> | null;
   slotDetail: SlotDetail;
   dates: string[];
   onDatesChange: (dates: string[]) => void;
@@ -116,6 +120,9 @@ export function EngagementScheduleStep({
   consultationMode,
   startDate,
   endDate,
+  organizationId,
+  currentEngagementId,
+  enabledConsultations,
   slotDetail,
   dates,
   onDatesChange,
@@ -139,6 +146,7 @@ export function EngagementScheduleStep({
   const [editingBreak, setEditingBreak] = useState<EditingBreak | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [cabinError, setCabinError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -208,6 +216,13 @@ export function EngagementScheduleStep({
       originalKey: cabin.cabin_key,
       isNew: false,
     });
+  };
+
+  const openImportedCabinEditor = (section: CabinSectionKey, date: string, cabinKey: string) => {
+    const cabin = getCabinsForDate(slotDetail, section, date).find((c) => c.cabin_key === cabinKey);
+    if (!cabin) return;
+    setSelectedDate(date);
+    startEditCabin(section, date, cabin);
   };
 
   const updateEditingCabin = (cabin: CabinSlotConfig) => {
@@ -363,8 +378,25 @@ export function EngagementScheduleStep({
             onDeleteCabin={deleteCabin}
             selectedDateHasNoCabins={selectedDateHasNoCabins}
             expertTypes={expertTypes}
+            onOpenImport={() => setImportOpen(true)}
           />
         )}
+        <ImportSlotDetailModal
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          kind={kind}
+          bloodCollectionType={bloodCollectionType}
+          startDate={startDate}
+          endDate={endDate}
+          organizationId={organizationId}
+          currentEngagementId={currentEngagementId}
+          enabledConsultations={enabledConsultations}
+          slotDetail={slotDetail}
+          dates={dates}
+          onDatesChange={onDatesChange}
+          onSlotDetailChange={onSlotDetailChange}
+          onEditImportedCabin={openImportedCabinEditor}
+        />
         <Modal
           open={editingCabin != null}
           onClose={closeCabinModal}
@@ -454,6 +486,24 @@ export function EngagementScheduleStep({
         selectedDateHasNoCabins={selectedDateHasNoCabins}
         unsetBloodPanel={showUnsetPanel}
         expertTypes={expertTypes}
+        onOpenImport={() => setImportOpen(true)}
+      />
+
+      <ImportSlotDetailModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        kind={kind}
+        bloodCollectionType={bloodCollectionType}
+        startDate={startDate}
+        endDate={endDate}
+        organizationId={organizationId}
+        currentEngagementId={currentEngagementId}
+        enabledConsultations={enabledConsultations}
+        slotDetail={slotDetail}
+        dates={dates}
+        onDatesChange={onDatesChange}
+        onSlotDetailChange={onSlotDetailChange}
+        onEditImportedCabin={openImportedCabinEditor}
       />
 
       <Modal
@@ -519,6 +569,7 @@ function ConsultationScheduleSection({
   selectedDateHasNoCabins,
   unsetBloodPanel,
   expertTypes = [],
+  onOpenImport,
 }: {
   title: string;
   showBlood: boolean;
@@ -545,14 +596,27 @@ function ConsultationScheduleSection({
   selectedDateHasNoCabins: boolean;
   unsetBloodPanel?: boolean;
   expertTypes?: ExpertTypeItem[];
+  onOpenImport?: () => void;
 }) {
   return (
     <>
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-        <p className="text-sm text-zinc-500 mt-1">
-          Add dates and cabins now, or skip and configure later when editing.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+          <p className="text-sm text-zinc-500 mt-1">
+            Add dates and cabins now, or skip and configure later when editing.
+          </p>
+        </div>
+        {onOpenImport && (
+          <button
+            type="button"
+            onClick={onOpenImport}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+          >
+            <Download className="w-4 h-4" />
+            Import from engagement
+          </button>
+        )}
       </div>
 
       {unsetBloodPanel && showConsult && (

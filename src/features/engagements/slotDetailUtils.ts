@@ -229,3 +229,64 @@ export function normalizeCabinTimes(cabin: CabinSlotConfig): CabinSlotConfig {
     })),
   };
 }
+
+export type ImportableCabin = {
+  section: CabinSectionKey;
+  date: string;
+  cabin: CabinSlotConfig;
+};
+
+export function importableCabinsFromSlotDetail(slotDetail: SlotDetail): ImportableCabin[] {
+  const items: ImportableCabin[] = [];
+  for (const section of ["blood_collection", "consultation"] as const) {
+    const sectionData = slotDetail[section];
+    if (!sectionData) continue;
+    for (const [date, cabins] of Object.entries(sectionData)) {
+      for (const cabin of cabins) {
+        items.push({ section, date, cabin: normalizeCabinTimes({ ...cabin }) });
+      }
+    }
+  }
+  return items.sort((a, b) => a.date.localeCompare(b.date) || a.section.localeCompare(b.section));
+}
+
+export function cloneCabinForImport(
+  cabin: CabinSlotConfig,
+  slotDetail: SlotDetail,
+  section: CabinSectionKey
+): CabinSlotConfig {
+  const baseKey = cabin.cabin_key || cabinKeyFromName(cabin.cabin_name);
+  const cabin_key = uniqueCabinKey(slotDetail, baseKey);
+  return normalizeCabinTimes({
+    ...cabin,
+    cabin_key,
+    ...(section === "consultation" ? { expert_type: cabin.expert_type ?? "" } : {}),
+  });
+}
+
+export function importCabinIntoSlotDetail(
+  slotDetail: SlotDetail,
+  section: CabinSectionKey,
+  date: string,
+  cabin: CabinSlotConfig
+): SlotDetail {
+  const cloned = cloneCabinForImport(cabin, slotDetail, section);
+  return upsertCabin(slotDetail, section, date, cloned);
+}
+
+export function cabinAlreadyImported(
+  slotDetail: SlotDetail,
+  section: CabinSectionKey,
+  date: string,
+  sourceCabinKey: string
+): boolean {
+  return getCabinsForDate(slotDetail, section, date).some((c) => c.cabin_key === sourceCabinKey);
+}
+
+export function isDateWithinRange(date: string, startDate: string, endDate: string): boolean {
+  const d = date.slice(0, 10);
+  const start = startDate.slice(0, 10);
+  const end = endDate.slice(0, 10);
+  if (!start || !end) return true;
+  return d >= start && d <= end;
+}
