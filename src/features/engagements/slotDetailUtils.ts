@@ -39,20 +39,35 @@ function allCabinKeys(slotDetail: SlotDetail): Set<string> {
   return keys;
 }
 
-/** "Cabin Name 123" → "cabin_name123" */
+const SLUG_KEY_RE = /^[a-z0-9_]+$/;
+
+/** "Room 1" → "room_1" (matches backend common.slug.slugify_cabin_key). */
 export function cabinKeyFromName(name: string): string {
-  let out = "";
-  for (const ch of name.toLowerCase().trim()) {
-    if (/[a-z]/.test(ch)) {
-      out += ch;
-    } else if (/[0-9]/.test(ch)) {
-      if (out.endsWith("_")) out = out.slice(0, -1);
-      out += ch;
-    } else if (out.length && /[a-z]$/.test(out)) {
-      out += "_";
-    }
-  }
-  return out.replace(/^_+|_+$/g, "");
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) return "";
+  return normalized
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** Normalize manual cabin key input to API SlugKey format. */
+export function normalizeCabinKeyInput(value: string): string {
+  return cabinKeyFromName(value.replace(/-/g, "_"));
+}
+export function isValidCabinKey(key: string): boolean {
+  const normalized = normalizeCabinKeyInput(key);
+  return normalized.length > 0 && normalized.length <= 100 && SLUG_KEY_RE.test(normalized);
+}
+
+export function cabinKeyConflict(
+  slotDetail: SlotDetail,
+  cabinKey: string,
+  excludeKey?: string
+): boolean {
+  const existing = allCabinKeys(slotDetail);
+  if (excludeKey) existing.delete(excludeKey);
+  return existing.has(cabinKey);
 }
 
 export function uniqueCabinKey(
@@ -187,7 +202,11 @@ export function validateCabin(cabin: CabinSlotConfig, section?: CabinSectionKey)
   const start = normalizeTime(cabin.start_time);
   const end = normalizeTime(cabin.end_time);
   if (!cabin.cabin_name.trim()) return "Cabin name is required";
-  if (!cabin.cabin_key.trim()) return "Cabin key could not be generated from the cabin name";
+  const cabinKey = normalizeCabinKeyInput(cabin.cabin_key);
+  if (!cabinKey) return "Cabin key is required";
+  if (!isValidCabinKey(cabin.cabin_key)) {
+    return "Cabin key must be lowercase letters, numbers, and underscores only (max 100 characters)";
+  }
   if (section === "consultation" && !cabin.expert_type?.trim()) return "Expert type is required";
   if (!start || !end) return "Start and end time are required";
   if (end <= start) return "End time must be after start time";
