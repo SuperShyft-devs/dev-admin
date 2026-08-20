@@ -407,6 +407,17 @@ export function QuestionForm({
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">Sub Text</label>
+          <textarea
+            rows={2}
+            value={value.sub_text ?? ""}
+            onChange={(e) => setField({ sub_text: e.target.value })}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 resize-none"
+            placeholder="Optional supporting text shown below the question..."
+          />
+        </div>
+
         <p className="text-xs text-zinc-500">
           Category mapping is managed from{" "}
           <span className="font-medium text-zinc-700">Categories → Manage Questions</span>.

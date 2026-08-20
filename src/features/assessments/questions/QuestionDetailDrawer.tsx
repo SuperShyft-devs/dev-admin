@@ -167,6 +167,12 @@ export function QuestionDetailDrawer({
                     <p className="text-zinc-700 mt-1">{question.help_text}</p>
                   </div>
                 )}
+                {question.sub_text && (
+                  <div className="sm:col-span-2">
+                    <p className="text-zinc-500">Sub text</p>
+                    <p className="text-zinc-700 mt-1">{question.sub_text}</p>
+                  </div>
+                )}
               </div>
 
               {question.options && question.options.length > 0 && (

@@ -2059,6 +2059,7 @@ export interface QuestionnaireQuestion {
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;
+  sub_text?: string | null;
   options?: QuestionnaireOption[] | null;
   visibility_rules?: QuestionnaireVisibilityRules | null;
   prefill_from?: QuestionnairePrefillFrom | null;
@@ -2077,6 +2078,7 @@ export interface QuestionnaireQuestionCreate {
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;
+  sub_text?: string | null;
   options?: QuestionnaireOption[] | null;
   visibility_rules?: QuestionnaireVisibilityRules | null;
   prefill_from?: QuestionnairePrefillFrom | null;
@@ -2090,6 +2092,7 @@ export interface QuestionnaireQuestionUpdate {
   is_required?: boolean;
   is_read_only?: boolean;
   help_text?: string | null;
+  sub_text?: string | null;
   options?: QuestionnaireOption[] | null;
   visibility_rules?: QuestionnaireVisibilityRules | null;
   prefill_from?: QuestionnairePrefillFrom | null;

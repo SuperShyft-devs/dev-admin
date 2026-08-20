@@ -104,6 +104,7 @@ export const BLANK_QUESTION: QuestionnaireQuestionCreate = {
   is_required: false,
   is_read_only: false,
   help_text: "",
+  sub_text: "",
   options: null,
   visibility_rules: null,
   prefill_from: null,
