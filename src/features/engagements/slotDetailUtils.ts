@@ -274,6 +274,56 @@ export function importCabinIntoSlotDetail(
   return upsertCabin(slotDetail, section, date, cloned);
 }
 
+export type ImportAllCabinsResult = {
+  nextSlotDetail: SlotDetail;
+  addedCount: number;
+  skippedOutOfRange: number;
+  skippedAlreadyAdded: number;
+  datesToAdd: string[];
+};
+
+export function importAllCabinsIntoSlotDetail(
+  slotDetail: SlotDetail,
+  cabins: ImportableCabin[],
+  startDate: string,
+  endDate: string
+): ImportAllCabinsResult {
+  let nextSlotDetail = slotDetail;
+  let addedCount = 0;
+  let skippedOutOfRange = 0;
+  let skippedAlreadyAdded = 0;
+  const datesToAdd: string[] = [];
+
+  for (const item of cabins) {
+    if (!isDateWithinRange(item.date, startDate, endDate)) {
+      skippedOutOfRange += 1;
+      continue;
+    }
+    if (cabinAlreadyImported(nextSlotDetail, item.section, item.date, item.cabin.cabin_key)) {
+      skippedAlreadyAdded += 1;
+      continue;
+    }
+    nextSlotDetail = importCabinIntoSlotDetail(
+      nextSlotDetail,
+      item.section,
+      item.date,
+      item.cabin
+    );
+    addedCount += 1;
+    if (!datesToAdd.includes(item.date)) {
+      datesToAdd.push(item.date);
+    }
+  }
+
+  return {
+    nextSlotDetail,
+    addedCount,
+    skippedOutOfRange,
+    skippedAlreadyAdded,
+    datesToAdd,
+  };
+}
+
 export function cabinAlreadyImported(
   slotDetail: SlotDetail,
   section: CabinSectionKey,

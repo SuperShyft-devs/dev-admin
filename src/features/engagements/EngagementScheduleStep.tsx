@@ -56,7 +56,6 @@ type Props = {
   endDate: string;
   organizationId?: number | null;
   currentEngagementId?: number | null;
-  enabledConsultations?: Record<string, boolean> | null;
   slotDetail: SlotDetail;
   dates: string[];
   onDatesChange: (dates: string[]) => void;
@@ -122,7 +121,6 @@ export function EngagementScheduleStep({
   endDate,
   organizationId,
   currentEngagementId,
-  enabledConsultations,
   slotDetail,
   dates,
   onDatesChange,
@@ -384,13 +382,10 @@ export function EngagementScheduleStep({
         <ImportSlotDetailModal
           open={importOpen}
           onClose={() => setImportOpen(false)}
-          kind={kind}
-          bloodCollectionType={bloodCollectionType}
           startDate={startDate}
           endDate={endDate}
           organizationId={organizationId}
           currentEngagementId={currentEngagementId}
-          enabledConsultations={enabledConsultations}
           slotDetail={slotDetail}
           dates={dates}
           onDatesChange={onDatesChange}
@@ -492,13 +487,10 @@ export function EngagementScheduleStep({
       <ImportSlotDetailModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        kind={kind}
-        bloodCollectionType={bloodCollectionType}
         startDate={startDate}
         endDate={endDate}
         organizationId={organizationId}
         currentEngagementId={currentEngagementId}
-        enabledConsultations={enabledConsultations}
         slotDetail={slotDetail}
         dates={dates}
         onDatesChange={onDatesChange}

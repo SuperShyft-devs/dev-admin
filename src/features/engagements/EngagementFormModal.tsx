@@ -1174,7 +1174,6 @@ export function EngagementFormModal({
             endDate={formData.end_date}
             organizationId={formData.organization_id}
             currentEngagementId={mode === "edit" ? engagementId ?? null : null}
-            enabledConsultations={formData.consultations ?? null}
             slotDetail={slotDetail}
             dates={collectionDates}
             onDatesChange={setCollectionDates}

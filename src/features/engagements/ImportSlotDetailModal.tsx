@@ -3,20 +3,17 @@ import { Loader2 } from "lucide-react";
 import {
   engagementsApi,
   getApiError,
-  type BloodCollectionType,
-  type EngagementKind,
   type SlotDetail,
 } from "../../lib/api";
 import { EngagementSearchPicker } from "../../shared/ui/EngagementSearchPicker";
 import { Modal } from "../../shared/ui/Modal";
-import { pruneSlotDetailForType } from "./engagementTypeConfig";
 import {
   type CabinSectionKey,
   type ImportableCabin,
   cabinAlreadyImported,
   cloneCabinForImport,
   getCabinsForDate,
-  importCabinIntoSlotDetail,
+  importAllCabinsIntoSlotDetail,
   importableCabinsFromSlotDetail,
   isDateWithinRange,
   normalizeSlotDetail,
@@ -26,13 +23,10 @@ import {
 type Props = {
   open: boolean;
   onClose: () => void;
-  kind: EngagementKind | null;
-  bloodCollectionType: BloodCollectionType | string | null | undefined;
   startDate: string;
   endDate: string;
   organizationId?: number | null;
   currentEngagementId?: number | null;
-  enabledConsultations?: Record<string, boolean> | null;
   slotDetail: SlotDetail;
   dates: string[];
   onDatesChange: (dates: string[]) => void;
@@ -54,16 +48,33 @@ function formatDateLabel(iso: string): string {
   });
 }
 
+function buildImportStatusMessage(result: {
+  addedCount: number;
+  skippedOutOfRange: number;
+  skippedAlreadyAdded: number;
+}): string {
+  const parts: string[] = [];
+  if (result.addedCount > 0) {
+    parts.push(`Added ${result.addedCount} cabin${result.addedCount === 1 ? "" : "s"}`);
+  } else {
+    parts.push("No new cabins added");
+  }
+  if (result.skippedAlreadyAdded > 0) {
+    parts.push(`${result.skippedAlreadyAdded} already added`);
+  }
+  if (result.skippedOutOfRange > 0) {
+    parts.push(`${result.skippedOutOfRange} outside date range`);
+  }
+  return parts.join(" · ");
+}
+
 export function ImportSlotDetailModal({
   open,
   onClose,
-  kind,
-  bloodCollectionType,
   startDate,
   endDate,
   organizationId,
   currentEngagementId,
-  enabledConsultations,
   slotDetail,
   dates,
   onDatesChange,
@@ -110,13 +121,12 @@ export function ImportSlotDetailModal({
           return;
         }
         const normalized = normalizeSlotDetail(engagement.slot_detail);
-        const pruned = pruneSlotDetailForType(normalized, kind, bloodCollectionType);
-        if (!pruned.blood_collection && !pruned.consultation) {
+        if (!normalized.blood_collection && !normalized.consultation) {
           setSourceSlotDetail(null);
-          setFetchError("Selected engagement has no importable cabin schedule.");
+          setFetchError("Selected engagement has no cabin schedule.");
           return;
         }
-        setSourceSlotDetail(pruned);
+        setSourceSlotDetail(normalized);
       } catch (err) {
         setSourceSlotDetail(null);
         setFetchError(getApiError(err));
@@ -124,7 +134,7 @@ export function ImportSlotDetailModal({
         setLoading(false);
       }
     },
-    [bloodCollectionType, currentEngagementId, kind, organizationId]
+    [currentEngagementId, organizationId]
   );
 
   useEffect(() => {
@@ -134,14 +144,8 @@ export function ImportSlotDetailModal({
 
   const importableCabins = useMemo(() => {
     if (!sourceSlotDetail) return [] as ImportableCabin[];
-    return importableCabinsFromSlotDetail(sourceSlotDetail).filter((item) => {
-      if (item.section === "consultation" && enabledConsultations) {
-        const expertType = item.cabin.expert_type?.trim();
-        if (expertType && enabledConsultations[expertType] !== true) return false;
-      }
-      return true;
-    });
-  }, [enabledConsultations, sourceSlotDetail]);
+    return importableCabinsFromSlotDetail(sourceSlotDetail);
+  }, [sourceSlotDetail]);
 
   const groupedCabins = useMemo(() => {
     const groups = new Map<string, ImportableCabin[]>();
@@ -154,21 +158,32 @@ export function ImportSlotDetailModal({
     return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [importableCabins]);
 
-  const handleAddCabin = (item: ImportableCabin) => {
-    if (!isDateWithinRange(item.date, startDate, endDate)) {
-      setActionMessage("This date is outside the current engagement start/end range.");
-      return;
+  const pendingAddCount = useMemo(() => {
+    return importableCabins.filter(
+      (item) =>
+        isDateWithinRange(item.date, startDate, endDate) &&
+        !cabinAlreadyImported(slotDetail, item.section, item.date, item.cabin.cabin_key)
+    ).length;
+  }, [endDate, importableCabins, slotDetail, startDate]);
+
+  const handleAddAllCabins = () => {
+    const result = importAllCabinsIntoSlotDetail(
+      slotDetail,
+      importableCabins,
+      startDate,
+      endDate
+    );
+    if (result.addedCount > 0) {
+      onSlotDetailChange(result.nextSlotDetail);
+      const mergedDates = new Set(dates);
+      for (const date of result.datesToAdd) {
+        mergedDates.add(date);
+      }
+      if (result.datesToAdd.length > 0) {
+        onDatesChange(Array.from(mergedDates).sort());
+      }
     }
-    if (cabinAlreadyImported(slotDetail, item.section, item.date, item.cabin.cabin_key)) {
-      setActionMessage("This cabin is already added for that date.");
-      return;
-    }
-    const nextSlotDetail = importCabinIntoSlotDetail(slotDetail, item.section, item.date, item.cabin);
-    onSlotDetailChange(nextSlotDetail);
-    if (!dates.includes(item.date)) {
-      onDatesChange([...dates, item.date].sort());
-    }
-    setActionMessage(`Added ${item.cabin.cabin_name} for ${formatDateLabel(item.date)}.`);
+    setActionMessage(buildImportStatusMessage(result));
   };
 
   const handleEditCabin = (item: ImportableCabin) => {
@@ -201,8 +216,8 @@ export function ImportSlotDetailModal({
     <Modal open={open} onClose={onClose} title="Import cabin schedule" maxWidthClassName="max-w-2xl">
       <div className="space-y-4">
         <p className="text-sm text-zinc-600">
-          Pick another engagement to browse its blood test and consultation cabins. Add cabins into
-          this engagement, then edit them if needed.
+          Pick another engagement to import all of its blood-test and consultation cabins into this
+          engagement. One Add imports every cabin; edit them afterward if needed.
         </p>
 
         <EngagementSearchPicker
@@ -231,73 +246,83 @@ export function ImportSlotDetailModal({
         )}
 
         {!loading && sourceSlotDetail && groupedCabins.length === 0 && !fetchError && (
-          <p className="text-sm text-zinc-500">No cabins match the current engagement type and offerings.</p>
+          <p className="text-sm text-zinc-500">Selected engagement has no cabins to import.</p>
         )}
 
         {!loading && groupedCabins.length > 0 && (
-          <div className="max-h-[24rem] overflow-y-auto space-y-4 border border-zinc-200 rounded-lg p-3">
-            {groupedCabins.map(([groupKey, cabins]) => {
-              const [date, section] = groupKey.split("|") as [string, CabinSectionKey];
-              const inRange = isDateWithinRange(date, startDate, endDate);
-              return (
-                <div key={groupKey}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    {formatDateLabel(date)} · {sectionLabel(section)}
-                  </p>
-                  <ul className="mt-2 space-y-2">
-                    {cabins.map((item) => {
-                      const added = cabinAlreadyImported(
-                        slotDetail,
-                        item.section,
-                        item.date,
-                        item.cabin.cabin_key
-                      );
-                      return (
-                        <li
-                          key={`${item.section}-${item.date}-${item.cabin.cabin_key}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-zinc-900">{item.cabin.cabin_name}</p>
-                            <p className="text-xs text-zinc-500">
-                              {item.cabin.cabin_key} · {item.cabin.start_time}–{item.cabin.end_time}
-                              {item.section === "consultation" && item.cabin.expert_type
-                                ? ` · ${item.cabin.expert_type}`
-                                : ""}
-                            </p>
-                            {!inRange && (
-                              <p className="text-xs text-amber-700 mt-0.5">
-                                Outside current engagement date range
+          <>
+            <div className="max-h-[24rem] overflow-y-auto space-y-4 border border-zinc-200 rounded-lg p-3">
+              {groupedCabins.map(([groupKey, cabins]) => {
+                const [date, section] = groupKey.split("|") as [string, CabinSectionKey];
+                const inRange = isDateWithinRange(date, startDate, endDate);
+                return (
+                  <div key={groupKey}>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      {formatDateLabel(date)} · {sectionLabel(section)}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {cabins.map((item) => {
+                        const added = cabinAlreadyImported(
+                          slotDetail,
+                          item.section,
+                          item.date,
+                          item.cabin.cabin_key
+                        );
+                        return (
+                          <li
+                            key={`${item.section}-${item.date}-${item.cabin.cabin_key}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-900">{item.cabin.cabin_name}</p>
+                              <p className="text-xs text-zinc-500">
+                                {item.cabin.cabin_key} · {item.cabin.start_time}–{item.cabin.end_time}
+                                {item.section === "consultation" && item.cabin.expert_type
+                                  ? ` · ${item.cabin.expert_type}`
+                                  : ""}
                               </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              disabled={!inRange || added}
-                              onClick={() => handleAddCabin(item)}
-                              className="px-3 py-1.5 rounded-md bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800 disabled:opacity-40"
-                            >
-                              {added ? "Added" : "Add"}
-                            </button>
-                            {added && (
-                              <button
-                                type="button"
-                                onClick={() => handleEditCabin(item)}
-                                className="px-3 py-1.5 rounded-md border border-zinc-300 text-zinc-700 text-xs font-medium hover:bg-zinc-50"
-                              >
-                                Edit
-                              </button>
-                            )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
+                              {!inRange && (
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  Outside current engagement date range
+                                </p>
+                              )}
+                              {added && (
+                                <p className="text-xs text-emerald-700 mt-0.5">Added</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {added && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditCabin(item)}
+                                  className="px-3 py-1.5 rounded-md border border-zinc-300 text-zinc-700 text-xs font-medium hover:bg-zinc-50"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={pendingAddCount === 0}
+                onClick={handleAddAllCabins}
+                className="px-4 py-2 rounded-md bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40"
+              >
+                {pendingAddCount > 0
+                  ? `Add all cabins (${pendingAddCount})`
+                  : "All cabins added"}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </Modal>
