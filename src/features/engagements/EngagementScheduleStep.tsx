@@ -30,9 +30,11 @@ import {
 } from "./engagementTypeConfig";
 import {
   type CabinSectionKey,
+  cabinKeyConflict,
   cabinKeyFromName,
   createEmptyCabin,
   getCabinsForDate,
+  normalizeCabinKeyInput,
   normalizeCabinTimes,
   removeCabin,
   removeDate,
@@ -69,6 +71,7 @@ type EditingCabin = {
   cabin: CabinSlotConfig;
   originalKey: string;
   isNew: boolean;
+  keyManuallyEdited: boolean;
 };
 
 type EditingBreak = {
@@ -201,6 +204,7 @@ export function EngagementScheduleStep({
       cabin: createEmptyCabin(section),
       originalKey: "",
       isNew: true,
+      keyManuallyEdited: false,
     });
   };
 
@@ -213,6 +217,7 @@ export function EngagementScheduleStep({
       cabin: { ...cabin, breaks: cabin.breaks.map((b) => ({ ...b })) },
       originalKey: cabin.cabin_key,
       isNew: false,
+      keyManuallyEdited: false,
     });
   };
 
@@ -230,12 +235,26 @@ export function EngagementScheduleStep({
   const updateCabinName = (cabinName: string) => {
     setEditingCabin((prev) => {
       if (!prev) return prev;
-      const cabin_key = uniqueCabinKey(
-        slotDetail,
-        cabinKeyFromName(cabinName),
-        prev.originalKey || undefined
-      );
-      return { ...prev, cabin: { ...prev.cabin, cabin_name: cabinName, cabin_key } };
+      const nextCabin = { ...prev.cabin, cabin_name: cabinName };
+      if (!prev.keyManuallyEdited) {
+        nextCabin.cabin_key = uniqueCabinKey(
+          slotDetail,
+          cabinKeyFromName(cabinName),
+          prev.originalKey || undefined
+        );
+      }
+      return { ...prev, cabin: nextCabin };
+    });
+  };
+
+  const updateCabinKey = (cabinKey: string) => {
+    setEditingCabin((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        keyManuallyEdited: true,
+        cabin: { ...prev.cabin, cabin_key: cabinKey },
+      };
     });
   };
 
@@ -248,17 +267,15 @@ export function EngagementScheduleStep({
   const saveCabin = () => {
     if (!editingCabin) return;
     const cabin = normalizeCabinTimes(editingCabin.cabin);
-    const withKey = {
-      ...cabin,
-      cabin_key: uniqueCabinKey(
-        slotDetail,
-        cabinKeyFromName(cabin.cabin_name),
-        editingCabin.originalKey || undefined
-      ),
-    };
+    const cabin_key = normalizeCabinKeyInput(cabin.cabin_key);
+    const withKey = { ...cabin, cabin_key };
     const err = validateCabin(withKey, editingCabin.section);
     if (err) {
       setCabinError(err);
+      return;
+    }
+    if (cabinKeyConflict(slotDetail, cabin_key, editingCabin.originalKey || undefined)) {
+      setCabinError("Cabin key must be unique across all dates and sections");
       return;
     }
     setCabinError(null);
@@ -412,6 +429,7 @@ export function EngagementScheduleStep({
               expertTypes={expertTypes}
               onChange={updateEditingCabin}
               onNameChange={updateCabinName}
+              onKeyChange={updateCabinKey}
               onSave={saveCabin}
               onCancel={closeCabinModal}
               onAddBreak={startAddBreak}
@@ -518,6 +536,7 @@ export function EngagementScheduleStep({
             expertTypes={expertTypes}
             onChange={updateEditingCabin}
             onNameChange={updateCabinName}
+            onKeyChange={updateCabinKey}
             onSave={saveCabin}
             onCancel={closeCabinModal}
             onAddBreak={startAddBreak}
@@ -993,6 +1012,7 @@ function CabinEditor({
   expertTypes = [],
   onChange,
   onNameChange,
+  onKeyChange,
   onSave,
   onCancel,
   onAddBreak,
@@ -1008,6 +1028,7 @@ function CabinEditor({
   expertTypes?: ExpertTypeItem[];
   onChange: (cabin: CabinSlotConfig) => void;
   onNameChange: (cabinName: string) => void;
+  onKeyChange: (cabinKey: string) => void;
   onSave: () => void;
   onCancel: () => void;
   onAddBreak: () => void;
@@ -1053,7 +1074,17 @@ function CabinEditor({
         )}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-zinc-700 mb-1">Cabin key</label>
-          <input type="text" value={cabin.cabin_key} readOnly className={`${inputClass} bg-zinc-50 text-zinc-500`} />
+          <input
+            type="text"
+            value={cabin.cabin_key}
+            onChange={(e) => onKeyChange(e.target.value)}
+            className={inputClass}
+            placeholder="e.g. room_2"
+            spellCheck={false}
+          />
+          <p className="text-xs text-zinc-500 mt-1">
+            Lowercase letters, numbers, and underscores only. Must be unique across all cabins.
+          </p>
         </div>
         <div>
           <label className="block text-sm font-medium text-zinc-700 mb-1">Start time</label>

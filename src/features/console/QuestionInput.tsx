@@ -81,19 +81,25 @@ export function QuestionInput({ question, value, onChange, disabled }: QuestionI
     questionType === "checkbox" ||
     questionType === "multi_select"
   ) {
+    const questionKey = String(question.question_key ?? "").trim();
+    const maxSelections = questionKey === "health_priorities" ? 2 : undefined;
     const selected = new Set(
       (Array.isArray(value) ? value : []).map((v) => String(v ?? "").trim())
     );
     return (
       <div className="space-y-2">
+        {maxSelections != null && (
+          <p className="text-xs text-zinc-500">Select up to {maxSelections} priorities.</p>
+        )}
         {(question.options ?? []).map((opt) => {
           const optValue = String(opt.option_value ?? "").trim();
           const isSelected = selected.has(optValue);
+          const atMax = maxSelections != null && selected.size >= maxSelections && !isSelected;
           return (
             <button
               key={optValue || optionLabel(opt)}
               type="button"
-              disabled={disabled}
+              disabled={disabled || atMax}
               onClick={() => {
                 const next = new Set(selected);
                 if (next.has(optValue)) next.delete(optValue);
