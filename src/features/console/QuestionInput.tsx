@@ -1,4 +1,5 @@
 import type { ConsoleQuestionnaireQuestion } from "../../lib/api";
+import { getAnthropometryScaleRange } from "./consoleQuestionnaireUtils";
 
 type QuestionInputProps = {
   question: ConsoleQuestionnaireQuestion;
@@ -138,39 +139,61 @@ export function QuestionInput({ question, value, onChange, disabled }: QuestionI
     const num = scaleValue.value ?? "";
     const rawUnit = String(scaleValue.unit ?? "").trim();
     const unit = rawUnit || fallbackUnit;
+    const numericValue = num === "" || num === null || num === undefined ? null : Number(num);
+    const range = getAnthropometryScaleRange(question.question_key, unit);
+    const outOfRange =
+      range != null &&
+      numericValue != null &&
+      Number.isFinite(numericValue) &&
+      (numericValue < range.min || numericValue > range.max);
+    const rangeHint =
+      range != null ? `Value must be between ${range.min} and ${range.max} ${range.label}` : null;
+
     return (
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          type="number"
-          value={num === null || num === undefined ? "" : String(num)}
-          disabled={disabled}
-          onChange={(e) =>
-            onChange({
-              value: e.target.value === "" ? null : Number(e.target.value),
-              unit,
-            })
-          }
-          className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-        />
-        {(question.options ?? []).length > 0 && (
-          <select
-            value={unit}
+      <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="number"
+            value={num === null || num === undefined ? "" : String(num)}
             disabled={disabled}
+            min={range?.min}
+            max={range?.max}
+            step="any"
             onChange={(e) =>
               onChange({
-                value: num === "" || num === null ? null : Number(num),
-                unit: e.target.value,
+                value: e.target.value === "" ? null : Number(e.target.value),
+                unit,
               })
             }
-            className="sm:w-40 border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-          >
-            {(question.options ?? []).map((opt) => (
-              <option key={String(opt.option_value)} value={String(opt.option_value ?? "")}>
-                {optionLabel(opt)}
-              </option>
-            ))}
-          </select>
-        )}
+            className={`flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 ${
+              outOfRange ? "border-red-500" : "border-zinc-300"
+            }`}
+          />
+          {(question.options ?? []).length > 0 && (
+            <select
+              value={unit}
+              disabled={disabled}
+              onChange={(e) =>
+                onChange({
+                  value: num === "" || num === null ? null : Number(num),
+                  unit: e.target.value,
+                })
+              }
+              className="sm:w-40 border border-zinc-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            >
+              {(question.options ?? []).map((opt) => (
+                <option key={String(opt.option_value)} value={String(opt.option_value ?? "")}>
+                  {optionLabel(opt)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {outOfRange && rangeHint ? (
+          <p className="text-sm text-red-600">{rangeHint}</p>
+        ) : rangeHint ? (
+          <p className="text-xs text-zinc-500">{rangeHint}</p>
+        ) : null}
       </div>
     );
   }

@@ -214,3 +214,64 @@ export function getVisibleQuestions(questions: ConsoleQuestionnaireQuestion[]): 
 export function isAnswerEmpty(value: unknown): boolean {
   return isEmptyAnswer(value);
 }
+
+/** Metsights anthropometry scale bounds by question_key + unit (matches API). */
+const ANTHROPOMETRY_SCALE_RANGES: Record<string, Array<{ units: string[]; min: number; max: number; label: string }>> = {
+  weight: [
+    { units: ["0", "kg"], min: 20, max: 300, label: "kg" },
+    { units: ["1", "lb", "lbs"], min: 44, max: 660, label: "lb" },
+  ],
+  height: [
+    { units: ["0", "cm"], min: 50, max: 250, label: "cm" },
+    { units: ["2", "ft/in", "ft", "feet", "ftin"], min: 1.5, max: 8.5, label: "ft/in" },
+  ],
+  waist_circumference: [
+    { units: ["0", "cm"], min: 60, max: 150, label: "cm" },
+    { units: ["1", "in", "inch", "inches"], min: 23.62, max: 59.05, label: "in" },
+  ],
+  hip_circumference: [
+    { units: ["0", "cm"], min: 70, max: 160, label: "cm" },
+    { units: ["1", "in", "inch", "inches"], min: 27.56, max: 62.99, label: "in" },
+  ],
+  body_fat: [{ units: ["0", "%", "percent", "pct", "percentage"], min: 1, max: 60, label: "%" }],
+};
+
+function normalizeUnitToken(unit: string): string {
+  return unit.trim().toLowerCase();
+}
+
+export function getAnthropometryScaleRange(
+  questionKey: string | null | undefined,
+  unit: string | null | undefined
+): { min: number; max: number; label: string } | null {
+  const key = String(questionKey ?? "").trim().toLowerCase();
+  const ranges = ANTHROPOMETRY_SCALE_RANGES[key];
+  if (!ranges) return null;
+  const token = normalizeUnitToken(String(unit ?? ""));
+  for (const entry of ranges) {
+    if (entry.units.some((u) => u === token)) {
+      return { min: entry.min, max: entry.max, label: entry.label };
+    }
+  }
+  return null;
+}
+
+export function validateAnthropometryScaleAnswer(
+  question: ConsoleQuestionnaireQuestion,
+  rawAnswer: unknown
+): string | null {
+  if (normalizeQuestionType(question.question_type) !== "scale") return null;
+  const normalized = normalizeAnswerForQuestion(question, rawAnswer);
+  if (normalized == null || typeof normalized !== "object" || Array.isArray(normalized)) {
+    return null;
+  }
+  const { value, unit } = normalized as { value?: unknown; unit?: unknown };
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const range = getAnthropometryScaleRange(question.question_key, String(unit ?? ""));
+  if (!range) return null;
+  if (num < range.min || num > range.max) {
+    return `Value must be between ${range.min} and ${range.max} ${range.label}`;
+  }
+  return null;
+}

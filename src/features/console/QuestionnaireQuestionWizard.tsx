@@ -10,6 +10,7 @@ import {
   getVisibleQuestions,
   isAnswerEmpty,
   normalizeAnswerForQuestion,
+  validateAnthropometryScaleAnswer,
 } from "./consoleQuestionnaireUtils";
 import { QuestionInput } from "./QuestionInput";
 
@@ -111,6 +112,11 @@ export function QuestionnaireQuestionWizard({
 
   const validateCurrent = (): boolean => {
     if (!currentQuestion) return true;
+    const rangeError = validateAnthropometryScaleAnswer(currentQuestion, currentAnswer);
+    if (rangeError) {
+      setValidationError(rangeError);
+      return false;
+    }
     if (!currentQuestion.is_required) return true;
     const normalized = normalizeAnswerForQuestion(currentQuestion, currentAnswer);
     if (isAnswerEmpty(normalized)) {
