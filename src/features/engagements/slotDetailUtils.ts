@@ -160,11 +160,9 @@ export function getCabinsForDate(
  */
 export function isDateEnabled(slotDetail: SlotDetail, date: string): boolean {
   const sections: CabinSectionKey[] = ["blood_collection", "consultation"];
-  let sawEntry = false;
   for (const section of sections) {
     const entry = slotDetail[section]?.[date];
     if (!entry) continue;
-    sawEntry = true;
     if (entry.is_enable === false) return false;
   }
   return true;
