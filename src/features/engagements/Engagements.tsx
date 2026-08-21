@@ -12,10 +12,12 @@ import {
   Pencil,
   ArrowRightLeft,
   Settings,
+  Database,
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
 import { EngagementDrawer } from "./EngagementDrawer";
 import { ManageEngagementParticipantsModal } from "./ManageEngagementParticipantsModal";
+import { EngagementDataCompletenessSummaryModal } from "./EngagementDataCompletenessSummaryModal";
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
@@ -1048,6 +1050,7 @@ export function Engagements({
 
   const [typesModalOpen, setTypesModalOpen] = useState(false);
   const [manageParticipantsOpen, setManageParticipantsOpen] = useState(false);
+  const [completenessSummaryOpen, setCompletenessSummaryOpen] = useState(false);
 
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const [checklistEngagement, setChecklistEngagement] = useState<EngagementListItem | null>(null);
@@ -1889,6 +1892,13 @@ export function Engagements({
             <Settings className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Manage Types</span>
           </button>
+          <button
+            onClick={() => setCompletenessSummaryOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
+          >
+            <Database className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Data Completeness</span>
+          </button>
           {listTab === "organizations" ? (
             <button
               onClick={() => void openAdd()}
@@ -2342,6 +2352,22 @@ export function Engagements({
         open={manageParticipantsOpen}
         onClose={() => setManageParticipantsOpen(false)}
         onChanged={() => void fetchList()}
+      />
+
+      <EngagementDataCompletenessSummaryModal
+        open={completenessSummaryOpen}
+        onClose={() => setCompletenessSummaryOpen(false)}
+        tabLabel={listTab === "organizations" ? "Organizations" : "Users"}
+        filters={{
+          audience: listTab === "organizations" ? "b2b" : "b2c",
+          search: search.trim() || undefined,
+          engagement_type: typeFilter || undefined,
+          city: cityFilter || undefined,
+        }}
+        onViewEngagement={(engagementId) => {
+          setCompletenessSummaryOpen(false);
+          setDrawerEngagementId(engagementId);
+        }}
       />
 
       <EngagementTypesModal

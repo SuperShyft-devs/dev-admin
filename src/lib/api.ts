@@ -2358,10 +2358,54 @@ export interface EngagementDataCompletenessResponse {
   participants: EngagementDataCompletenessParticipant[];
 }
 
+export interface EngagementDataCompletenessSummaryRollup {
+  engagement_count: number;
+  total_participants: number;
+  blood_report: number;
+  blood_values: number;
+  bio_ai_report: number;
+  bio_ai_json: number;
+  questionnaire_filled: number;
+  questionnaire_partially_filled: number;
+  questionnaire_not_started: number;
+}
+
+export interface EngagementDataCompletenessSummaryItem {
+  engagement_id: number;
+  engagement_name?: string | null;
+  engagement_code?: string | null;
+  city?: string | null;
+  status?: string | null;
+  organization_id?: number | null;
+  summary: EngagementDataCompletenessResponse["summary"];
+}
+
+export interface EngagementDataCompletenessSummaryResponse {
+  rollup: EngagementDataCompletenessSummaryRollup;
+  engagements: EngagementDataCompletenessSummaryItem[];
+}
+
+export interface EngagementDataCompletenessSummaryParams {
+  audience?: "b2b" | "b2c";
+  status?: string;
+  search?: string;
+  engagement_type?: string;
+  city?: string;
+  org_id?: number;
+  camp_no?: number;
+  sort_by?: string;
+  sort_dir?: string;
+}
+
 export const engagementDataCompletenessApi = {
   get: (engagementId: number) =>
     api.get<{ data: EngagementDataCompletenessResponse }>(
       `/engagements/${engagementId}/data-completeness`
+    ),
+  listSummary: (params?: EngagementDataCompletenessSummaryParams) =>
+    api.get<{ data: EngagementDataCompletenessSummaryResponse }>(
+      "/engagements/data-completeness-summary",
+      { params }
     ),
 };
 
