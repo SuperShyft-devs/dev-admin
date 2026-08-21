@@ -217,14 +217,18 @@ export function summarizeSlotDetail(slotDetail: SlotDetail | null | undefined): 
   };
   if (!slotDetail) return empty;
 
-  const bloodSection = slotDetail.blood_collection ?? {};
-  const consultSection = slotDetail.consultation ?? {};
+  const normalized = normalizeSlotDetail(slotDetail);
+  const bloodSection = normalized.blood_collection ?? {};
+  const consultSection = normalized.consultation ?? {};
 
   return {
     bloodDates: Object.keys(bloodSection).length,
     consultDates: Object.keys(consultSection).length,
-    bloodCabins: Object.values(bloodSection).reduce((n, cabins) => n + cabins.length, 0),
-    consultCabins: Object.values(consultSection).reduce((n, cabins) => n + cabins.length, 0),
+    bloodCabins: Object.values(bloodSection).reduce((n, entry) => n + (entry.cabins?.length ?? 0), 0),
+    consultCabins: Object.values(consultSection).reduce(
+      (n, entry) => n + (entry.cabins?.length ?? 0),
+      0
+    ),
   };
 }
 

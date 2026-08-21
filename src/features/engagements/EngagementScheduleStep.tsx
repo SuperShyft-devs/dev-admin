@@ -34,10 +34,12 @@ import {
   cabinKeyFromName,
   createEmptyCabin,
   getCabinsForDate,
+  isDateEnabled,
   normalizeCabinKeyInput,
   normalizeCabinTimes,
   removeCabin,
   removeDate,
+  setDateEnabled,
   uniqueCabinKey,
   upsertCabin,
   validateBreak,
@@ -193,6 +195,15 @@ export function EngagementScheduleStep({
     if (selectedDate === date) {
       setSelectedDate([...remaining].sort()[0] ?? null);
     }
+  };
+
+  const handleToggleDateEnabled = (date: string) => {
+    const sections: CabinSectionKey[] = [];
+    if (showBlood) sections.push("blood_collection");
+    if (showConsult) sections.push("consultation");
+    if (sections.length === 0) return;
+    const enabled = isDateEnabled(slotDetail, date);
+    onSlotDetailChange(setDateEnabled(slotDetail, date, !enabled, sections));
   };
 
   const startNewCabin = (section: CabinSectionKey, date: string) => {
@@ -391,6 +402,7 @@ export function EngagementScheduleStep({
             onStartNewCabin={startNewCabin}
             onEditCabin={startEditCabin}
             onDeleteCabin={deleteCabin}
+            onToggleDateEnabled={handleToggleDateEnabled}
             selectedDateHasNoCabins={selectedDateHasNoCabins}
             expertTypes={expertTypes}
             onOpenImport={() => setImportOpen(true)}
@@ -496,6 +508,7 @@ export function EngagementScheduleStep({
         onStartNewCabin={startNewCabin}
         onEditCabin={startEditCabin}
         onDeleteCabin={deleteCabin}
+        onToggleDateEnabled={handleToggleDateEnabled}
         selectedDateHasNoCabins={selectedDateHasNoCabins}
         unsetBloodPanel={showUnsetPanel}
         expertTypes={expertTypes}
@@ -577,6 +590,7 @@ function ConsultationScheduleSection({
   onStartNewCabin,
   onEditCabin,
   onDeleteCabin,
+  onToggleDateEnabled,
   selectedDateHasNoCabins,
   unsetBloodPanel,
   expertTypes = [],
@@ -604,11 +618,15 @@ function ConsultationScheduleSection({
   onStartNewCabin: (section: CabinSectionKey, date: string) => void;
   onEditCabin: (section: CabinSectionKey, date: string, cabin: CabinSlotConfig) => void;
   onDeleteCabin: (section: CabinSectionKey, date: string, cabinKey: string) => void;
+  onToggleDateEnabled: (date: string) => void;
   selectedDateHasNoCabins: boolean;
   unsetBloodPanel?: boolean;
   expertTypes?: ExpertTypeItem[];
   onOpenImport?: () => void;
 }) {
+  const selectedDateEnabled =
+    selectedDate != null ? isDateEnabled(slotDetail, selectedDate) : true;
+
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -645,6 +663,7 @@ function ConsultationScheduleSection({
           const selected = date === selectedDate;
           const counts = cabinCountForDate(slotDetail, date);
           const totalCabins = counts.blood + counts.consult;
+          const dateEnabled = isDateEnabled(slotDetail, date);
           return (
             <div
               key={date}
@@ -660,25 +679,35 @@ function ConsultationScheduleSection({
               className={`relative min-w-[9.5rem] rounded-lg border px-3 py-2 pr-8 cursor-pointer ${
                 selected
                   ? "border-zinc-900 bg-zinc-900 text-white"
-                  : totalCabins === 0
-                    ? "border-amber-300 bg-amber-50 text-zinc-900 hover:border-amber-400"
-                    : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400"
+                  : !dateEnabled
+                    ? "border-zinc-300 bg-zinc-100 text-zinc-600 hover:border-zinc-400"
+                    : totalCabins === 0
+                      ? "border-amber-300 bg-amber-50 text-zinc-900 hover:border-amber-400"
+                      : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400"
               }`}
             >
               <p className="text-sm font-medium">{formatDateLabel(date)}</p>
               <p
                 className={`text-xs mt-0.5 ${
-                  selected ? "text-white/70" : totalCabins === 0 ? "text-amber-700" : "text-zinc-500"
+                  selected
+                    ? "text-white/70"
+                    : !dateEnabled
+                      ? "text-zinc-500"
+                      : totalCabins === 0
+                        ? "text-amber-700"
+                        : "text-zinc-500"
                 }`}
               >
-                {totalCabins === 0
-                  ? "No cabins"
-                  : [
-                      counts.blood > 0 ? `${counts.blood} blood` : null,
-                      counts.consult > 0 ? `${counts.consult} consult` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                {!dateEnabled
+                  ? "Disabled"
+                  : totalCabins === 0
+                    ? "No cabins"
+                    : [
+                        counts.blood > 0 ? `${counts.blood} blood` : null,
+                        counts.consult > 0 ? `${counts.consult} consult` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
               </p>
               <button
                 type="button"
@@ -731,53 +760,75 @@ function ConsultationScheduleSection({
 
       {selectedDate && (
         <div className="rounded-lg border border-zinc-200 p-4 space-y-3">
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-900">{formatDateLabel(selectedDate)}</h4>
-            {selectedDateHasNoCabins && (
-              <p className="text-xs text-amber-700 mt-1">
-                This date won&apos;t be saved until you add at least one cabin.
-              </p>
-            )}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-zinc-900">{formatDateLabel(selectedDate)}</h4>
+              {selectedDateEnabled && selectedDateHasNoCabins && (
+                <p className="text-xs text-amber-700 mt-1">
+                  This date won&apos;t be saved until you add at least one cabin.
+                </p>
+              )}
+              {!selectedDateEnabled && (
+                <p className="text-xs text-zinc-500 mt-1">
+                  Date disabled — cabin details are hidden and will not appear in the public schedule.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onToggleDateEnabled(selectedDate)}
+              className={`px-3 py-1.5 rounded-lg border text-sm font-medium ${
+                selectedDateEnabled
+                  ? "border-zinc-300 text-zinc-800 hover:bg-zinc-50"
+                  : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              {selectedDateEnabled ? "Disable" : "Enable"}
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {showBlood && (
-              <button
-                type="button"
-                onClick={() => onStartNewCabin("blood_collection", selectedDate)}
-                className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-              >
-                Add Blood-Test Cabin
-              </button>
-            )}
-            {showConsult && (
-              <button
-                type="button"
-                onClick={() => onStartNewCabin("consultation", selectedDate)}
-                className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-              >
-                Add Consultation Cabin
-              </button>
-            )}
-          </div>
+          {selectedDateEnabled && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {showBlood && (
+                  <button
+                    type="button"
+                    onClick={() => onStartNewCabin("blood_collection", selectedDate)}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+                  >
+                    Add Blood-Test Cabin
+                  </button>
+                )}
+                {showConsult && (
+                  <button
+                    type="button"
+                    onClick={() => onStartNewCabin("consultation", selectedDate)}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+                  >
+                    Add Consultation Cabin
+                  </button>
+                )}
+              </div>
 
-          {showBlood && (
-            <CabinList
-              title="Blood Test Cabins"
-              cabins={getCabinsForDate(slotDetail, "blood_collection", selectedDate)}
-              onEdit={(cabin) => onEditCabin("blood_collection", selectedDate, cabin)}
-              onDelete={(key) => onDeleteCabin("blood_collection", selectedDate, key)}
-            />
-          )}
+              {showBlood && (
+                <CabinList
+                  title="Blood Test Cabins"
+                  cabins={getCabinsForDate(slotDetail, "blood_collection", selectedDate)}
+                  onEdit={(cabin) => onEditCabin("blood_collection", selectedDate, cabin)}
+                  onDelete={(key) => onDeleteCabin("blood_collection", selectedDate, key)}
+                />
+              )}
 
-          {showConsult && (
-            <CabinList
-              title="Consultation Cabins"
-              cabins={getCabinsForDate(slotDetail, "consultation", selectedDate)}
-              expertTypes={expertTypes}
-              onEdit={(cabin) => onEditCabin("consultation", selectedDate, cabin)}
-              onDelete={(key) => onDeleteCabin("consultation", selectedDate, key)}
-            />
+              {showConsult && (
+                <CabinList
+                  title="Consultation Cabins"
+                  cabins={getCabinsForDate(slotDetail, "consultation", selectedDate)}
+                  expertTypes={expertTypes}
+                  onEdit={(cabin) => onEditCabin("consultation", selectedDate, cabin)}
+                  onDelete={(key) => onDeleteCabin("consultation", selectedDate, key)}
+                />
+              )}
+            </>
           )}
         </div>
       )}
