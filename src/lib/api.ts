@@ -2330,6 +2330,41 @@ export const engagementQuestionnaireStatusApi = {
     ),
 };
 
+// Engagement Data Completeness
+export interface EngagementDataCompletenessParticipant {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  has_blood_report: boolean;
+  has_blood_values: boolean;
+  has_bio_ai_report: boolean;
+  has_bio_ai_json: boolean;
+  questionnaire_state: "filled" | "partially_filled" | "not_started";
+}
+
+export interface EngagementDataCompletenessResponse {
+  summary: {
+    total_participants: number;
+    blood_report: number;
+    blood_values: number;
+    bio_ai_report: number;
+    bio_ai_json: number;
+    questionnaire_filled: number;
+    questionnaire_partially_filled: number;
+    questionnaire_not_started: number;
+  };
+  participants: EngagementDataCompletenessParticipant[];
+}
+
+export const engagementDataCompletenessApi = {
+  get: (engagementId: number) =>
+    api.get<{ data: EngagementDataCompletenessResponse }>(
+      `/engagements/${engagementId}/data-completeness`
+    ),
+};
+
 // Onboarding Assistants
 export interface OnboardingAssistant {
   employee_id: number;

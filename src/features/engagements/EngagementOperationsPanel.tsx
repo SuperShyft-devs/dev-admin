@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  Check,
   CheckCheck,
   ChevronDown,
   ChevronRight,
@@ -7,6 +8,7 @@ import {
   ClipboardList,
   Clock,
   CloudCog,
+  Database,
   Link2,
   Loader2,
   Minus,
@@ -17,6 +19,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { AssignParticipantsFromCsv } from "../../shared/ui/AssignParticipantsFromCsv";
@@ -24,6 +27,7 @@ import {
   assessmentPackagesApi,
   assessmentsApi,
   engagementAssessmentPackagesApi,
+  engagementDataCompletenessApi,
   engagementQuestionnaireStatusApi,
   engagementsApi,
   getApiError,
@@ -31,6 +35,7 @@ import {
   type AssessmentPackage,
   type Engagement,
   type EngagementAssessmentPackageSummary,
+  type EngagementDataCompletenessResponse,
   type EngagementQuestionnaireCategoryStatus,
   type EngagementQuestionnaireStatusResponse,
 } from "../../lib/api";
@@ -110,6 +115,109 @@ function OpsLegend() {
   );
 }
 
+function CompletenessFlagIcon({ present, label }: { present: boolean; label: string }) {
+  if (present) {
+    return (
+      <span title={label}>
+        <Check className="w-3.5 h-3.5 text-emerald-600" />
+      </span>
+    );
+  }
+  return (
+    <span title={label}>
+      <X className="w-3.5 h-3.5 text-zinc-300" />
+    </span>
+  );
+}
+
+function CompletenessQuestionnaireIcon({
+  state,
+}: {
+  state: "filled" | "partially_filled" | "not_started";
+}) {
+  if (state === "filled") {
+    return (
+      <span title="Questionnaire filled">
+        <Check className="w-3.5 h-3.5 text-emerald-600" />
+      </span>
+    );
+  }
+  if (state === "partially_filled") {
+    return (
+      <span title="Questionnaire partially filled">
+        <CircleDot className="w-3.5 h-3.5 text-amber-500" />
+      </span>
+    );
+  }
+  return (
+    <span title="Questionnaire not started">
+      <Minus className="w-3.5 h-3.5 text-zinc-400" />
+    </span>
+  );
+}
+
+function CompletenessSummaryCard({
+  label,
+  count,
+  total,
+  tone,
+}: {
+  label: string;
+  count: number;
+  total: number;
+  tone: "emerald" | "sky" | "violet" | "amber" | "zinc";
+}) {
+  const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+  const toneClasses = {
+    emerald: {
+      box: "bg-emerald-50 border-emerald-200",
+      count: "text-emerald-700",
+      label: "text-emerald-600",
+      bar: "bg-emerald-500",
+    },
+    sky: {
+      box: "bg-sky-50 border-sky-200",
+      count: "text-sky-700",
+      label: "text-sky-600",
+      bar: "bg-sky-500",
+    },
+    violet: {
+      box: "bg-violet-50 border-violet-200",
+      count: "text-violet-700",
+      label: "text-violet-600",
+      bar: "bg-violet-500",
+    },
+    amber: {
+      box: "bg-amber-50 border-amber-200",
+      count: "text-amber-700",
+      label: "text-amber-600",
+      bar: "bg-amber-500",
+    },
+    zinc: {
+      box: "bg-zinc-50 border-zinc-200",
+      count: "text-zinc-700",
+      label: "text-zinc-600",
+      bar: "bg-zinc-400",
+    },
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border px-3 py-2 ${toneClasses.box}`}>
+      <div className={`text-lg font-semibold tabular-nums ${toneClasses.count}`}>
+        {count}
+        <span className="text-sm font-normal text-zinc-500">/{total}</span>
+      </div>
+      <div className={`text-[11px] ${toneClasses.label}`}>{label}</div>
+      <div className="mt-1.5 h-1.5 w-full rounded bg-white/70 overflow-hidden">
+        <div
+          className={`h-full rounded transition-all ${toneClasses.bar}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 type Props = {
   engagement: Engagement;
   active: boolean;
@@ -122,6 +230,10 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
   const [qStatusData, setQStatusData] = useState<EngagementQuestionnaireStatusResponse | null>(null);
   const [qStatusLoading, setQStatusLoading] = useState(false);
   const [qStatusError, setQStatusError] = useState<string | null>(null);
+  const [completenessOpen, setCompletenessOpen] = useState(false);
+  const [completenessData, setCompletenessData] = useState<EngagementDataCompletenessResponse | null>(null);
+  const [completenessLoading, setCompletenessLoading] = useState(false);
+  const [completenessError, setCompletenessError] = useState<string | null>(null);
   const [assessmentsModalOpen, setAssessmentsModalOpen] = useState(false);
   const [assessmentsList, setAssessmentsList] = useState<EngagementAssessmentPackageSummary[]>([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(false);
@@ -184,8 +296,26 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
     setQStatusOpen(false);
     setQStatusData(null);
     setQStatusError(null);
+    setCompletenessOpen(false);
+    setCompletenessData(null);
+    setCompletenessError(null);
     setAdvSettingsPackages([]);
   }, [engagement.engagement_id]);
+
+  const loadCompleteness = useCallback(async (force = false) => {
+    if (completenessLoading) return;
+    if (!force && completenessData) return;
+    setCompletenessLoading(true);
+    setCompletenessError(null);
+    try {
+      const res = await engagementDataCompletenessApi.get(engagement.engagement_id);
+      setCompletenessData(res.data.data);
+    } catch (err) {
+      setCompletenessError(getApiError(err));
+    } finally {
+      setCompletenessLoading(false);
+    }
+  }, [completenessData, completenessLoading, engagement.engagement_id]);
 
   const loadAssessmentsForEngagement = useCallback(async (engagementId: number) => {
     setAssessmentsLoading(true);
@@ -489,6 +619,166 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
   return (
     <>
       <div className="space-y-4">
+{/* ── Data Completeness Section ── */}
+          <div className="pt-2 border-t border-zinc-100">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (completenessOpen) {
+                    setCompletenessOpen(false);
+                    return;
+                  }
+                  setCompletenessOpen(true);
+                  await loadCompleteness();
+                }}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-700 hover:text-zinc-900"
+              >
+                {completenessOpen ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+                <Database className="w-4 h-4" />
+                Data Completeness
+              </button>
+              {completenessOpen ? (
+                <button
+                  type="button"
+                  onClick={() => void loadCompleteness(true)}
+                  disabled={completenessLoading}
+                  className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${completenessLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+              ) : null}
+            </div>
+
+            {completenessOpen && (
+              <div className="mt-3">
+                {completenessLoading && !completenessData && (
+                  <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-xs">Loading…</span>
+                  </div>
+                )}
+
+                {!completenessLoading && completenessError && (
+                  <p className="text-sm text-red-600">{completenessError}</p>
+                )}
+
+                {completenessData && (
+                  <div className="space-y-3">
+                    {completenessData.summary.total_participants === 0 ? (
+                      <p className="text-xs text-zinc-400 italic">No participants enrolled in this engagement.</p>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                          <CompletenessSummaryCard
+                            label="Blood report"
+                            count={completenessData.summary.blood_report}
+                            total={completenessData.summary.total_participants}
+                            tone="sky"
+                          />
+                          <CompletenessSummaryCard
+                            label="Blood values"
+                            count={completenessData.summary.blood_values}
+                            total={completenessData.summary.total_participants}
+                            tone="sky"
+                          />
+                          <CompletenessSummaryCard
+                            label="Bio AI report"
+                            count={completenessData.summary.bio_ai_report}
+                            total={completenessData.summary.total_participants}
+                            tone="violet"
+                          />
+                          <CompletenessSummaryCard
+                            label="Bio AI JSON"
+                            count={completenessData.summary.bio_ai_json}
+                            total={completenessData.summary.total_participants}
+                            tone="violet"
+                          />
+                          <CompletenessSummaryCard
+                            label="Questionnaire filled"
+                            count={completenessData.summary.questionnaire_filled}
+                            total={completenessData.summary.total_participants}
+                            tone="emerald"
+                          />
+                          <CompletenessSummaryCard
+                            label="Questionnaire partial / not started"
+                            count={
+                              completenessData.summary.questionnaire_partially_filled
+                              + completenessData.summary.questionnaire_not_started
+                            }
+                            total={completenessData.summary.total_participants}
+                            tone="amber"
+                          />
+                        </div>
+
+                        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-zinc-200 bg-zinc-50">
+                                <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">Blood</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">Values</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">BioAI</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">JSON</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">Q</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {completenessData.participants.map((row) => {
+                                const name = [row.first_name, row.last_name].filter(Boolean).join(" ") || "—";
+                                return (
+                                  <tr
+                                    key={row.user_id}
+                                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                                  >
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium text-zinc-800">{name}</div>
+                                      <div className="text-zinc-400">{row.phone || row.email || ""}</div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessFlagIcon present={row.has_blood_report} label="Blood report" />
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessFlagIcon present={row.has_blood_values} label="Blood values" />
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessFlagIcon present={row.has_bio_ai_report} label="Bio AI report" />
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessFlagIcon present={row.has_bio_ai_json} label="Bio AI JSON" />
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessQuestionnaireIcon state={row.questionnaire_state} />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
 {/* ── Questionnaire Status Section ── */}
           <div className="pt-2 border-t border-zinc-100">
             <button

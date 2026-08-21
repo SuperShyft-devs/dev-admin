@@ -13,14 +13,17 @@ import type {
   ChecklistReadiness,
   DiagnosticPackageListItem,
   Engagement,
+  EngagementDataCompletenessResponse,
   EngagementNotificationItem,
   EngagementTypeItem,
   NotificationEventItem,
 } from "../../lib/api";
 import { normalizeNotificationServiceConfigs } from "../../shared/ui/NotificationEventServicesInput";
 import {
+  engagementDataCompletenessApi,
   engagementNotificationsApi,
   engagementTypesApi,
+  getApiError,
   notificationEventsApi,
 } from "../../lib/api";
 import { ConsoleUrlActions } from "./consoleUrlActions";
@@ -56,6 +59,42 @@ export function EngagementOverviewTab({
 }: OverviewProps) {
   const b2b = isB2BEngagement(engagement.organization_id);
   const rd = (engagement as Engagement & { readiness?: ChecklistReadiness | null }).readiness;
+  const [completeness, setCompleteness] = useState<EngagementDataCompletenessResponse | null>(null);
+  const [completenessLoading, setCompletenessLoading] = useState(false);
+  const [completenessError, setCompletenessError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCompleteness(null);
+    setCompletenessError(null);
+    setCompletenessLoading(true);
+    void engagementDataCompletenessApi
+      .get(engagement.engagement_id)
+      .then((res) => {
+        if (!cancelled) setCompleteness(res.data.data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCompletenessError(getApiError(err));
+      })
+      .finally(() => {
+        if (!cancelled) setCompletenessLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [engagement.engagement_id]);
+
+  const coverageLine = useMemo(() => {
+    if (!completeness || completeness.summary.total_participants === 0) return null;
+    const s = completeness.summary;
+    return [
+      `Blood ${s.blood_report}/${s.total_participants}`,
+      `Values ${s.blood_values}/${s.total_participants}`,
+      `BioAI ${s.bio_ai_report}/${s.total_participants}`,
+      `JSON ${s.bio_ai_json}/${s.total_participants}`,
+      `Q ${s.questionnaire_filled}/${s.total_participants}`,
+    ].join(" · ");
+  }, [completeness]);
 
   return (
     <div className="space-y-4">
@@ -110,6 +149,22 @@ export function EngagementOverviewTab({
             </div>
           </div>
         ) : null}
+
+        <div>
+          <div className="text-xs font-medium text-zinc-500 mb-1">Data completeness</div>
+          {completenessLoading ? (
+            <div className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Loading…
+            </div>
+          ) : completenessError ? (
+            <p className="text-xs text-red-600">{completenessError}</p>
+          ) : coverageLine ? (
+            <p className="text-xs text-zinc-700 tabular-nums">{coverageLine}</p>
+          ) : (
+            <p className="text-xs text-zinc-400">No participants enrolled yet.</p>
+          )}
+        </div>
 
         <div>
           <div className="text-xs font-medium text-zinc-500 mb-1">Console</div>
