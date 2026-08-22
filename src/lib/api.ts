@@ -2424,6 +2424,34 @@ export interface OnboardingAssistant {
   last_name?: string | null;
 }
 
+export interface CreatePhleboExistingUser {
+  user_id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  employee?: {
+    employee_id: number;
+    role?: string | null;
+    status?: string | null;
+  } | null;
+}
+
+export type CreatePhleboResponse =
+  | {
+      status: "confirmation_required";
+      existing_user: CreatePhleboExistingUser;
+    }
+  | {
+      status: "created" | "assigned";
+      user_id: number;
+      employee_id: number;
+      user_created: boolean;
+      employee_created: boolean;
+      engagement_id: number;
+      added_employee_ids: number[];
+      skipped_employee_ids: number[];
+    };
+
 // Occupied Slots
 export interface OccupiedSlots {
   occupied_slots: Record<string, string[]>;
@@ -2633,6 +2661,14 @@ export const onboardingAssistantsApi = {
     ),
   remove: (engagementId: number, employeeId: number) =>
     api.delete(`/engagements/${engagementId}/onboarding-assistants/${employeeId}`),
+  createPhlebo: (
+    engagementId: number,
+    payload: { name: string; phone: string; confirm_existing?: boolean }
+  ) =>
+    api.post<{ data: CreatePhleboResponse }>(
+      `/engagements/${engagementId}/onboarding-assistants/create-phlebo`,
+      payload
+    ),
 };
 
 export const questionnaireQuestionsApi = {

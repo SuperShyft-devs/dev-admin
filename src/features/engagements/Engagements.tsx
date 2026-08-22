@@ -15,6 +15,7 @@ import {
   Database,
 } from "lucide-react";
 import { EngagementFormModal } from "./EngagementFormModal";
+import { CreatePhleboModal } from "./CreatePhleboModal";
 import { EngagementDrawer } from "./EngagementDrawer";
 import { ManageEngagementParticipantsModal } from "./ManageEngagementParticipantsModal";
 import { EngagementDataCompletenessSummaryModal } from "./EngagementDataCompletenessSummaryModal";
@@ -1047,6 +1048,7 @@ export function Engagements({
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [createPhleboModalOpen, setCreatePhleboModalOpen] = useState(false);
 
   const [typesModalOpen, setTypesModalOpen] = useState(false);
   const [manageParticipantsOpen, setManageParticipantsOpen] = useState(false);
@@ -2499,14 +2501,23 @@ export function Engagements({
                 <p className="text-sm font-medium text-zinc-700">
                   Assigned ({assistants.length})
                 </p>
-                <button
-                  type="button"
-                  onClick={openAddAssistants}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Assistants
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreatePhleboModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 bg-white text-zinc-700 text-xs font-medium hover:bg-zinc-50"
+                  >
+                    Create and Add phlebo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openAddAssistants}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Assistants
+                  </button>
+                </div>
               </div>
 
               {assistantsLoading ? (
@@ -2670,6 +2681,18 @@ export function Engagements({
           )}
         </div>
       </Modal>
+
+      {assistantsEngagement && (
+        <CreatePhleboModal
+          open={createPhleboModalOpen}
+          onClose={() => setCreatePhleboModalOpen(false)}
+          engagementId={assistantsEngagement.engagement_id}
+          onSuccess={async () => {
+            setAssistantsError(null);
+            await fetchAssistants(assistantsEngagement.engagement_id);
+          }}
+        />
+      )}
 
     </>
   );
