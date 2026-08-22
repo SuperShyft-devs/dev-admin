@@ -239,6 +239,14 @@ function formatFieldLabel(key: string): string {
     "fitness.score": "Fitness score",
     "lifestyle.score": "Lifestyle score",
   };
+  if (key.endsWith(".in_range_percent")) {
+    const parts = key.split(".");
+    if (parts.length >= 3) {
+      const group = parts[0].replace(/_/g, " ");
+      const param = parts.slice(1, -1).join(" ").replace(/_/g, " ");
+      return `${group} · ${param} · In range %`;
+    }
+  }
   if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
 }
@@ -307,6 +315,10 @@ function BtsModalBody({
   const [openCompanyAveragePersonScores, setOpenCompanyAveragePersonScores] = useState<
     Record<string, boolean>
   >({});
+  const [openBloodLabGroups, setOpenBloodLabGroups] = useState<Record<string, boolean>>({});
+  const [openBloodLabParameters, setOpenBloodLabParameters] = useState<Record<string, boolean>>({});
+  const [openBloodLabPeople, setOpenBloodLabPeople] = useState<Record<string, boolean>>({});
+  const [openBloodLabExcluded, setOpenBloodLabExcluded] = useState(false);
 
   if (data == null) {
     return (
@@ -454,7 +466,12 @@ function BtsModalBody({
     : [];
   const isCompanyAverageScoresBts =
     method?.section_kind === "company_average_scores" ||
-    (details?.aggregation != null && details?.summary != null);
+    (details?.aggregation != null && details?.groups == null);
+  const isBloodAndLabIntelligenceBts =
+    method?.section_kind === "blood_and_lab_intelligence" ||
+    (details?.groups != null &&
+      details?.summary != null &&
+      typeof (details.summary as Record<string, unknown>).with_blood_results !== "undefined");
   const companyAverageSummary =
     details?.summary && typeof details.summary === "object"
       ? (details.summary as Record<string, unknown>)
@@ -483,6 +500,25 @@ function BtsModalBody({
     : [];
   const companyAverageExcludedTotal =
     companyAverageExcludedNoFitprint.length + companyAverageExcludedReportFailed.length;
+
+  const bloodLabSummary =
+    details?.summary && typeof details.summary === "object"
+      ? (details.summary as Record<string, unknown>)
+      : null;
+  const bloodLabGroups =
+    details?.groups && typeof details.groups === "object"
+      ? (details.groups as Record<string, Record<string, unknown>>)
+      : null;
+  const bloodLabExcluded =
+    details?.excluded && typeof details.excluded === "object"
+      ? (details.excluded as Record<string, unknown[]>)
+      : null;
+  const bloodLabNotes = Array.isArray(details?.notes)
+    ? details.notes.filter((n): n is string => typeof n === "string")
+    : [];
+  const bloodLabExcludedNoBlood = Array.isArray(bloodLabExcluded?.no_blood_results)
+    ? (bloodLabExcluded.no_blood_results as Record<string, unknown>[])
+    : [];
 
   const qgdExceptionSections: {
     key: string;
@@ -549,6 +585,16 @@ function BtsModalBody({
     const status = (category as Record<string, unknown>).status;
     if (status === "missing") return "text-amber-700";
     return "text-zinc-800";
+  }
+
+  function formatBloodValue(value: unknown): string {
+    if (value == null) return "—";
+    return String(value);
+  }
+
+  function formatBloodRange(lower: unknown, higher: unknown): string {
+    if (lower == null || higher == null) return "—";
+    return `${String(lower)} – ${String(higher)}`;
   }
 
   if (fields || status === "ok" || status === "mismatch") {
@@ -2098,6 +2144,302 @@ function BtsModalBody({
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-1">
             <p className="text-xs font-medium text-zinc-800">Notes</p>
             {companyAverageNotes.map((note) => (
+              <p key={note} className="text-[12px] text-zinc-600 leading-relaxed">
+                {note}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {isBloodAndLabIntelligenceBts && bloodLabSummary && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-zinc-800">Summary</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-zinc-600">
+              <span>Total enrolled in scope</span>
+              <span className="tabular-nums text-right">
+                {String(bloodLabSummary.total_enrolled ?? "—")}
+              </span>
+              <span>With blood results</span>
+              <span className="tabular-nums text-right">
+                {String(bloodLabSummary.with_blood_results ?? "—")}
+              </span>
+              <span>Without blood results</span>
+              <span className="tabular-nums text-right">
+                {String(bloodLabSummary.without_blood_results ?? "—")}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {isBloodAndLabIntelligenceBts && bloodLabGroups && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Blood test breakdown by profile
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {Object.entries(bloodLabGroups).map(([groupKey, groupData]) => {
+                const groupName =
+                  typeof groupData.group_name === "string"
+                    ? groupData.group_name
+                    : groupKey.replace(/_/g, " ");
+                const parameters =
+                  groupData.parameters && typeof groupData.parameters === "object"
+                    ? (groupData.parameters as Record<string, Record<string, unknown>>)
+                    : {};
+                const openGroup = openBloodLabGroups[groupKey] ?? false;
+
+                return (
+                  <div key={groupKey}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenBloodLabGroups((prev) => ({
+                          ...prev,
+                          [groupKey]: !openGroup,
+                        }))
+                      }
+                    >
+                      {openGroup ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">{groupName}</span>
+                      <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                        {Object.keys(parameters).length} tests
+                      </span>
+                    </button>
+                    {openGroup && (
+                      <div className="px-3 pb-3 border-t border-zinc-100 space-y-2 pt-2">
+                        {Object.entries(parameters).map(([paramKey, paramData]) => {
+                          const testName =
+                            typeof paramData.test_name === "string"
+                              ? paramData.test_name
+                              : paramKey;
+                          const isCombined = paramData.is_combined === true;
+                          const percentMath =
+                            paramData.percent_math && typeof paramData.percent_math === "object"
+                              ? (paramData.percent_math as Record<string, unknown>)
+                              : null;
+                          const steps = Array.isArray(percentMath?.steps)
+                            ? percentMath.steps.filter((s): s is string => typeof s === "string")
+                            : [];
+                          const people =
+                            paramData.people && typeof paramData.people === "object"
+                              ? (paramData.people as Record<string, unknown[]>)
+                              : {};
+                          const paramAccordionKey = `${groupKey}:${paramKey}`;
+                          const openParam = openBloodLabParameters[paramAccordionKey] ?? false;
+
+                          return (
+                            <div
+                              key={paramAccordionKey}
+                              className="rounded border border-zinc-200 bg-white overflow-hidden"
+                            >
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-50"
+                                onClick={() =>
+                                  setOpenBloodLabParameters((prev) => ({
+                                    ...prev,
+                                    [paramAccordionKey]: !openParam,
+                                  }))
+                                }
+                              >
+                                {openParam ? (
+                                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                )}
+                                <span className="text-[11px] font-medium text-zinc-800">
+                                  {testName}
+                                </span>
+                                {isCombined && (
+                                  <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                                    All tests must be healthy
+                                  </span>
+                                )}
+                                <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                                  {paramData.in_range_percent == null
+                                    ? "—"
+                                    : `${String(paramData.in_range_percent)}%`}
+                                </span>
+                              </button>
+                              {openParam && (
+                                <div className="px-3 pb-2 border-t border-zinc-100 space-y-2 pt-2">
+                                  {steps.length > 0 && (
+                                    <ol className="space-y-1 list-none">
+                                      {steps.map((step) => (
+                                        <li
+                                          key={step}
+                                          className="text-[10px] text-zinc-700 leading-relaxed"
+                                        >
+                                          {step}
+                                        </li>
+                                      ))}
+                                    </ol>
+                                  )}
+                                  {(
+                                    [
+                                      { key: "in_range", title: "In healthy range" },
+                                      { key: "out_of_range", title: "Out of range" },
+                                      { key: "not_counted", title: "Not counted" },
+                                    ] as const
+                                  ).map(({ key, title }) => {
+                                    const bucket = Array.isArray(people[key])
+                                      ? (people[key] as Record<string, unknown>[])
+                                      : [];
+                                    if (bucket.length === 0) return null;
+                                    const peopleKey = `${paramAccordionKey}:${key}`;
+                                    const openPeople = openBloodLabPeople[peopleKey] ?? false;
+                                    return (
+                                      <div
+                                        key={peopleKey}
+                                        className="rounded border border-zinc-200 bg-zinc-50/50 overflow-hidden"
+                                      >
+                                        <button
+                                          type="button"
+                                          className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-zinc-50"
+                                          onClick={() =>
+                                            setOpenBloodLabPeople((prev) => ({
+                                              ...prev,
+                                              [peopleKey]: !openPeople,
+                                            }))
+                                          }
+                                        >
+                                          {openPeople ? (
+                                            <ChevronDown className="w-3 h-3 text-zinc-400" />
+                                          ) : (
+                                            <ChevronRight className="w-3 h-3 text-zinc-400" />
+                                          )}
+                                          <span className="text-[10px] font-medium text-zinc-800">
+                                            {title}
+                                          </span>
+                                          <span className="text-[10px] text-zinc-500 ml-auto tabular-nums">
+                                            {bucket.length}
+                                          </span>
+                                        </button>
+                                        {openPeople && (
+                                          <div className="px-2 pb-2 overflow-x-auto">
+                                            <table className="w-full text-[10px] text-left">
+                                              <thead>
+                                                <tr className="text-zinc-500 border-b border-zinc-100">
+                                                  <th className="py-1 pr-2 font-medium">Name</th>
+                                                  {!isCombined && (
+                                                    <>
+                                                      <th className="py-1 pr-2 font-medium">
+                                                        Result
+                                                      </th>
+                                                      <th className="py-1 pr-2 font-medium">
+                                                        Healthy range
+                                                      </th>
+                                                    </>
+                                                  )}
+                                                  <th className="py-1 font-medium">Notes</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-zinc-50">
+                                                {bucket.map((person, idx) => (
+                                                  <tr key={`${peopleKey}-${idx}`}>
+                                                    <td className="py-1 pr-2 text-zinc-800">
+                                                      {person.name == null
+                                                        ? "—"
+                                                        : String(person.name)}
+                                                    </td>
+                                                    {!isCombined && (
+                                                      <>
+                                                        <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                                          {formatBloodValue(person.value)}
+                                                        </td>
+                                                        <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                                          {formatBloodRange(
+                                                            person.lower,
+                                                            person.higher
+                                                          )}
+                                                        </td>
+                                                      </>
+                                                    )}
+                                                    <td className="py-1 text-zinc-600">
+                                                      {person.reason == null
+                                                        ? "—"
+                                                        : String(person.reason)}
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isBloodAndLabIntelligenceBts && bloodLabExcludedNoBlood.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenBloodLabExcluded((prev) => !prev)}
+            >
+              {openBloodLabExcluded ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">Excluded people</span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {bloodLabExcludedNoBlood.length}
+              </span>
+            </button>
+            {openBloodLabExcluded && (
+              <div className="px-3 pb-3 border-t border-zinc-100 pt-2 overflow-x-auto">
+                <table className="w-full text-[11px] text-left">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-100">
+                      <th className="py-1.5 pr-3 font-medium">Name</th>
+                      <th className="py-1.5 pr-3 font-medium">User ID</th>
+                      <th className="py-1.5 font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {bloodLabExcludedNoBlood.map((person, idx) => (
+                      <tr key={`no-blood-${String(person.user_id)}-${idx}`}>
+                        <td className="py-1.5 pr-3 text-zinc-800">
+                          {person.name == null ? "—" : String(person.name)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                          {person.user_id == null ? "—" : String(person.user_id)}
+                        </td>
+                        <td className="py-1.5 text-zinc-600">
+                          {person.reason == null ? "—" : String(person.reason)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isBloodAndLabIntelligenceBts && bloodLabNotes.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-zinc-800">Notes</p>
+            {bloodLabNotes.map((note) => (
               <p key={note} className="text-[12px] text-zinc-600 leading-relaxed">
                 {note}
               </p>
