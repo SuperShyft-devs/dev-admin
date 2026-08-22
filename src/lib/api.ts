@@ -427,7 +427,7 @@ export interface UserDetail {
 }
 
 export interface UserCreate {
-  age: number;
+  age?: number | null;
   first_name?: string | null;
   last_name?: string | null;
   phone: string;

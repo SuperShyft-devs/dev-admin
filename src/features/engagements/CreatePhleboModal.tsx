@@ -45,7 +45,7 @@ export function CreatePhleboModal({
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
     if (!trimmedName || !trimmedPhone) {
-      setError("Name and phone are required.");
+      setError("First name and phone are required.");
       return;
     }
 
@@ -150,7 +150,7 @@ export function CreatePhleboModal({
           >
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1" htmlFor="phlebo-name">
-                Name *
+                First Name *
               </label>
               <input
                 id="phlebo-name"
@@ -158,7 +158,7 @@ export function CreatePhleboModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
-                placeholder="Full name"
+                placeholder="First name"
                 required
               />
             </div>

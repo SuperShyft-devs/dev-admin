@@ -328,21 +328,28 @@ export function Users() {
   };
 
   const handleSubmit = async () => {
+    if (!formData.first_name?.trim()) {
+      setError("First name is required");
+      return;
+    }
     if (!formData.phone.trim()) {
       setError("Phone number is required");
       return;
     }
-    if (!Number.isFinite(formData.age) || formData.age < 1 || formData.age > 120) {
+    if (
+      formData.age != null &&
+      formData.age > 0 &&
+      (!Number.isFinite(formData.age) || formData.age < 1 || formData.age > 120)
+    ) {
       setError("Age must be between 1 and 120");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      const payload = {
+      const payload: UserCreate = {
         ...formData,
-        age: Math.trunc(formData.age),
-        first_name: formData.first_name || null,
+        first_name: formData.first_name?.trim() || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
         profile_photo: formData.profile_photo || null,
@@ -355,6 +362,9 @@ export function Users() {
         country: formData.country || null,
         referred_by: formData.referred_by || null,
       };
+      if (formData.age != null && formData.age > 0) {
+        payload.age = Math.trunc(formData.age);
+      }
       if (modalMode === "add") {
         await usersApi.create(payload);
       } else if (selected) {
@@ -1016,13 +1026,14 @@ export function Users() {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">First Name</label>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">First Name *</label>
                   <input
                     type="text"
                     value={formData.first_name ?? ""}
                     onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                     placeholder="First name"
+                    required
                   />
                 </div>
                 <div>
@@ -1036,12 +1047,12 @@ export function Users() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Age *</label>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Age</label>
                   <input
                     type="number"
                     min={1}
                     max={120}
-                    value={formData.age > 0 ? formData.age : ""}
+                    value={formData.age != null && formData.age > 0 ? formData.age : ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
@@ -1050,7 +1061,6 @@ export function Users() {
                     }
                     className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                     placeholder="18"
-                    required
                   />
                 </div>
                 <div>
