@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import {
   type AssessmentPackage,
@@ -25,6 +25,8 @@ import { NotificationEventServicesInput, normalizeNotificationServiceConfigs, va
 import { AddressAutocomplete } from "./AddressAutocomplete";
 import { EngagementScheduleStep } from "./EngagementScheduleStep";
 import {
+  canConfigureBloodSchedule,
+  canConfigureConsultSchedule,
   datesAfterPrune,
   getScheduleStepLabel,
   getTypeConfig,
@@ -32,6 +34,9 @@ import {
   hasOfferingsFields,
   needsScheduleStep,
   pruneSlotDetailForType,
+  scheduleIntentFromSlotDetail,
+  summarizeSlotDetail,
+  type ScheduleIntent,
 } from "./engagementTypeConfig";
 import {
   collectDates,
@@ -65,14 +70,15 @@ function toNumberOrNull(value: string): number | null {
 function buildSteps(
   kind: EngagementKind | null,
   bloodMode: string | null | undefined,
-  consultationMode: string | null | undefined
+  consultationMode: string | null | undefined,
+  scheduleIntent: ScheduleIntent
 ): { key: StepKey; label: string }[] {
   const steps: { key: StepKey; label: string }[] = [
     { key: "basics", label: "Type & basics" },
     { key: "location", label: "Location" },
     { key: "offerings", label: "Offerings" },
   ];
-  if (needsScheduleStep(kind, bloodMode, consultationMode)) {
+  if (needsScheduleStep(kind, bloodMode, consultationMode, scheduleIntent)) {
     steps.push({
       key: "schedule",
       label: getScheduleStepLabel(kind, bloodMode, consultationMode),
@@ -117,6 +123,9 @@ export function EngagementFormModal({
   const [collectionDates, setCollectionDates] = useState<string[]>(() =>
     collectDates(normalizeSlotDetail(initialData.slot_detail))
   );
+  const [scheduleIntent, setScheduleIntent] = useState<ScheduleIntent>(() =>
+    scheduleIntentFromSlotDetail(initialData.slot_detail)
+  );
   const [stepError, setStepError] = useState<string | null>(null);
   const [expertTypes, setExpertTypes] = useState<ExpertTypeItem[]>([]);
 
@@ -136,6 +145,7 @@ export function EngagementFormModal({
     const normalized = normalizeSlotDetail(initialData.slot_detail);
     setSlotDetail(normalized);
     setCollectionDates(collectDates(normalized));
+    setScheduleIntent(scheduleIntentFromSlotDetail(normalized));
     setStepIndex(0);
     setStepError(null);
     setZoneMessage(null);
@@ -295,8 +305,14 @@ export function EngagementFormModal({
   );
 
   const steps = useMemo(
-    () => buildSteps(selectedTypeCode, formData.blood_collection_type, formData.consultation_mode),
-    [selectedTypeCode, formData.blood_collection_type, formData.consultation_mode]
+    () =>
+      buildSteps(
+        selectedTypeCode,
+        formData.blood_collection_type,
+        formData.consultation_mode,
+        scheduleIntent
+      ),
+    [selectedTypeCode, formData.blood_collection_type, formData.consultation_mode, scheduleIntent]
   );
 
   useEffect(() => {
@@ -323,6 +339,83 @@ export function EngagementFormModal({
     },
     []
   );
+
+  const sectionHasCabins = useCallback(
+    (section: "blood_collection" | "consultation") => {
+      const data = slotDetail[section];
+      if (!data) return false;
+      return Object.values(data).some((cabins) => cabins.length > 0);
+    },
+    [slotDetail]
+  );
+
+  const confirmDiscardSection = useCallback(
+    (sectionLabel: string) => {
+      return window.confirm(
+        `Changing this setting will remove existing ${sectionLabel} schedule data. Continue?`
+      );
+    },
+    []
+  );
+
+  const showBloodScheduleOption = canConfigureBloodSchedule(
+    selectedTypeCode,
+    formData.blood_collection_type
+  );
+  const showConsultScheduleOption = canConfigureConsultSchedule(
+    selectedTypeCode,
+    formData.consultation_mode
+  );
+  const showHomeCollectionInfo =
+    typeConfig.needsBloodCollection && formData.blood_collection_type === "home_collection";
+  const showOnlineConsultInfo =
+    typeConfig.needsConsultation && formData.consultation_mode === "online";
+
+  const slotSummary = useMemo(() => summarizeSlotDetail(slotDetail), [slotDetail]);
+
+  const pruneScheduleSection = useCallback((section: "blood_collection" | "consultation") => {
+    setSlotDetail((prev) => {
+      const next = { ...prev };
+      delete next[section];
+      setCollectionDates(datesAfterPrune(next));
+      return next;
+    });
+  }, []);
+
+  const handleScheduleIntentChange = useCallback(
+    (key: keyof ScheduleIntent, next: boolean) => {
+      const section = key === "configureBlood" ? "blood_collection" : "consultation";
+      const sectionLabel = key === "configureBlood" ? "blood test" : "consultation";
+      if (!next && sectionHasCabins(section)) {
+        if (!confirmDiscardSection(sectionLabel)) return;
+        pruneScheduleSection(section);
+      }
+      setScheduleIntent((prev) => ({ ...prev, [key]: next }));
+    },
+    [confirmDiscardSection, pruneScheduleSection, sectionHasCabins]
+  );
+
+  useEffect(() => {
+    if (currentStepKey !== "schedule") return;
+    if (!needsScheduleStep(
+      selectedTypeCode,
+      formData.blood_collection_type,
+      formData.consultation_mode,
+      scheduleIntent
+    )) {
+      const notificationsIndex = steps.findIndex((s) => s.key === "notifications");
+      if (notificationsIndex >= 0) {
+        setStepIndex(notificationsIndex);
+      }
+    }
+  }, [
+    currentStepKey,
+    formData.blood_collection_type,
+    formData.consultation_mode,
+    scheduleIntent,
+    selectedTypeCode,
+    steps,
+  ]);
 
   const handleTypeChange = (typeId: number) => {
     const match = engagementTypes.find((t) => t.id === typeId);
@@ -354,22 +447,49 @@ export function EngagementFormModal({
     }));
 
     applySlotDetailPrune(newCode, formData.blood_collection_type, formData.consultation_mode);
+    const newConfig = getTypeConfig(newCode);
+    setScheduleIntent((prev) => ({
+      configureBlood:
+        prev.configureBlood &&
+        newConfig.needsBloodCabins &&
+        formData.blood_collection_type === "camp_collection",
+      configureConsult:
+        prev.configureConsult &&
+        newConfig.needsConsultationCabins &&
+        (formData.consultation_mode ?? "offline") === "offline",
+    }));
   };
 
   const handleBloodModeChange = (next: string | undefined) => {
+    const leavingCamp =
+      formData.blood_collection_type === "camp_collection" && next !== "camp_collection";
+    if (leavingCamp && sectionHasCabins("blood_collection")) {
+      if (!confirmDiscardSection("blood test")) return;
+    }
     setFormData((prev) => ({
       ...prev,
       blood_collection_type: next,
       external_camp_id: next === "camp_collection" ? prev.external_camp_id : undefined,
     }));
+    if (next !== "camp_collection") {
+      setScheduleIntent((prev) => ({ ...prev, configureBlood: false }));
+    }
     applySlotDetailPrune(selectedTypeCode, next ?? null, formData.consultation_mode);
   };
 
   const handleConsultationModeChange = (next: string | undefined) => {
+    const leavingOffline =
+      formData.consultation_mode === "offline" && next !== "offline";
+    if (leavingOffline && sectionHasCabins("consultation")) {
+      if (!confirmDiscardSection("consultation")) return;
+    }
     setFormData((prev) => ({
       ...prev,
       consultation_mode: next,
     }));
+    if (next !== "offline") {
+      setScheduleIntent((prev) => ({ ...prev, configureConsult: false }));
+    }
     applySlotDetailPrune(selectedTypeCode, formData.blood_collection_type, next ?? null);
   };
 
@@ -637,6 +757,14 @@ export function EngagementFormModal({
   }, [slotDetail]);
 
   const nextButtonLabel = (() => {
+    if (currentStepKey === "offerings" && needsScheduleStep(
+      selectedTypeCode,
+      formData.blood_collection_type,
+      formData.consultation_mode,
+      scheduleIntent
+    )) {
+      return "Next: Set up schedule";
+    }
     if (currentStepKey === "schedule" && !scheduleHasData && collectionDates.length === 0) {
       return "Skip";
     }
@@ -883,7 +1011,8 @@ export function EngagementFormModal({
                 {!needsScheduleStep(
                   selectedTypeCode,
                   formData.blood_collection_type,
-                  formData.consultation_mode
+                  formData.consultation_mode,
+                  scheduleIntent
                 ) && (
                   <span> On-site scheduling is not used — continue to notifications.</span>
                 )}
@@ -1162,6 +1291,96 @@ export function EngagementFormModal({
                 </div>
               </div>
             )}
+
+            {(showBloodScheduleOption ||
+              showConsultScheduleOption ||
+              showHomeCollectionInfo ||
+              showOnlineConsultInfo) && (
+              <div className="md:col-span-2 space-y-3 pt-2 border-t border-zinc-200">
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-900">On-site scheduling</h4>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Choose whether to set up dates, cabins, and slots now. You can always add or
+                    copy a schedule later when editing this engagement.
+                  </p>
+                </div>
+
+                {mode === "edit" && (slotSummary.bloodCabins > 0 || slotSummary.consultCabins > 0) && (
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                    This engagement has{" "}
+                    {[
+                      slotSummary.bloodCabins > 0
+                        ? `${slotSummary.bloodDates} blood date${slotSummary.bloodDates === 1 ? "" : "s"}, ${slotSummary.bloodCabins} cabin${slotSummary.bloodCabins === 1 ? "" : "s"}`
+                        : null,
+                      slotSummary.consultCabins > 0
+                        ? `${slotSummary.consultDates} consultation date${slotSummary.consultDates === 1 ? "" : "s"}, ${slotSummary.consultCabins} cabin${slotSummary.consultCabins === 1 ? "" : "s"}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    {" "}configured.
+                  </div>
+                )}
+
+                {showHomeCollectionInfo && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 flex gap-2">
+                    <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                      Blood collection uses Healthians per participant — no on-site blood test
+                      cabins are needed.
+                    </p>
+                  </div>
+                )}
+
+                {showOnlineConsultInfo && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 flex gap-2">
+                    <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                      Online consultations use each expert&apos;s calendar — no on-site consultation
+                      cabins are needed.
+                    </p>
+                  </div>
+                )}
+
+                {showBloodScheduleOption && (
+                  <label className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 cursor-pointer hover:bg-zinc-50">
+                    <input
+                      type="checkbox"
+                      checked={scheduleIntent.configureBlood}
+                      onChange={(e) =>
+                        handleScheduleIntentChange("configureBlood", e.target.checked)
+                      }
+                      className="w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900">Blood test schedule</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Configure camp dates, blood-test cabins, and time slots.
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                {showConsultScheduleOption && (
+                  <label className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 cursor-pointer hover:bg-zinc-50">
+                    <input
+                      type="checkbox"
+                      checked={scheduleIntent.configureConsult}
+                      onChange={(e) =>
+                        handleScheduleIntentChange("configureConsult", e.target.checked)
+                      }
+                      className="w-4 h-4 mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-zinc-900">Consultation schedule</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Configure on-site consultation dates, cabins, and time slots.
+                      </p>
+                    </div>
+                  </label>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1170,6 +1389,7 @@ export function EngagementFormModal({
             kind={selectedTypeCode}
             bloodCollectionType={formData.blood_collection_type}
             consultationMode={formData.consultation_mode}
+            scheduleIntent={scheduleIntent}
             startDate={formData.start_date}
             endDate={formData.end_date}
             organizationId={formData.organization_id}

@@ -114,15 +114,54 @@ export function showConsultationCabinsInSchedule(
   return getTypeConfig(kind).needsConsultationCabins && consultationMode === "offline";
 }
 
+export type ScheduleIntent = {
+  configureBlood: boolean;
+  configureConsult: boolean;
+};
+
+export const EMPTY_SCHEDULE_INTENT: ScheduleIntent = {
+  configureBlood: false,
+  configureConsult: false,
+};
+
+export function scheduleIntentFromSlotDetail(
+  slotDetail: SlotDetail | null | undefined
+): ScheduleIntent {
+  const summary = summarizeSlotDetail(slotDetail);
+  return {
+    configureBlood: summary.bloodCabins > 0,
+    configureConsult: summary.consultCabins > 0,
+  };
+}
+
+export function canConfigureBloodSchedule(
+  kind: EngagementKind | string | null,
+  bloodMode: BloodCollectionType | string | null | undefined
+): boolean {
+  return showBloodCabinsInSchedule(kind, bloodMode);
+}
+
+export function canConfigureConsultSchedule(
+  kind: EngagementKind | string | null,
+  consultationMode: ConsultationMode | string | null | undefined
+): boolean {
+  return showConsultationCabinsInSchedule(kind, consultationMode);
+}
+
 export function needsScheduleStep(
   kind: EngagementKind | string | null,
-  _bloodMode?: BloodCollectionType | string | null,
-  consultationMode?: ConsultationMode | string | null
+  bloodMode?: BloodCollectionType | string | null,
+  consultationMode?: ConsultationMode | string | null,
+  scheduleIntent?: ScheduleIntent
 ): boolean {
-  const c = getTypeConfig(kind);
+  const showBlood = showBloodCabinsInSchedule(kind, bloodMode);
+  const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
+  if (!scheduleIntent) {
+    return showBlood || showConsult;
+  }
   return (
-    c.needsBloodCabins ||
-    showConsultationCabinsInSchedule(kind, consultationMode ?? "offline")
+    (showBlood && scheduleIntent.configureBlood) ||
+    (showConsult && scheduleIntent.configureConsult)
   );
 }
 

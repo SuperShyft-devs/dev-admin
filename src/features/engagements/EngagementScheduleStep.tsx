@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Home, Info, Plus, X, Download } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Copy, Plus, X } from "lucide-react";
 import type {
   BloodCollectionType,
   CabinBreak,
@@ -23,10 +23,8 @@ import type {
 import { Modal } from "../../shared/ui/Modal";
 import {
   getScheduleTitle,
-  showBloodCabinsInSchedule,
-  showBloodModeUnsetPanel,
-  showConsultationCabinsInSchedule,
-  showHomeCollectionPanel,
+  summarizeSlotDetail,
+  type ScheduleIntent,
 } from "./engagementTypeConfig";
 import {
   type CabinSectionKey,
@@ -37,13 +35,14 @@ import {
   normalizeCabinKeyInput,
   normalizeCabinTimes,
   removeCabin,
-  removeDate,
+  removeDateFromSection,
+  mergeSectionDates,
   uniqueCabinKey,
   upsertCabin,
   validateBreak,
   validateCabin,
 } from "./slotDetailUtils";
-import { ImportSlotDetailModal } from "./ImportSlotDetailModal";
+import { ImportSlotDetailModal, type ImportCopyResult } from "./ImportSlotDetailModal";
 
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900";
@@ -54,6 +53,7 @@ type Props = {
   kind: EngagementKind | null;
   bloodCollectionType: BloodCollectionType | string | null | undefined;
   consultationMode?: ConsultationMode | string | null | undefined;
+  scheduleIntent: ScheduleIntent;
   startDate: string;
   endDate: string;
   organizationId?: number | null;
@@ -78,6 +78,8 @@ type EditingBreak = {
   breakIndex: number | null;
   breakValue: CabinBreak;
 };
+
+type ActiveTab = CabinSectionKey;
 
 function toIsoDate(d: Date): string {
   const y = d.getFullYear();
@@ -104,22 +106,24 @@ function formatMonthYear(month: Date): string {
   return month.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-function cabinCountForDate(slotDetail: SlotDetail, date: string): { blood: number; consult: number } {
-  return {
-    blood: getCabinsForDate(slotDetail, "blood_collection", date).length,
-    consult: getCabinsForDate(slotDetail, "consultation", date).length,
-  };
-}
-
 function expertTypeLabel(typeKey: string | undefined, expertTypes: ExpertTypeItem[]): string {
   if (!typeKey) return "";
   return expertTypes.find((et) => et.type_key === typeKey)?.type ?? typeKey;
+}
+
+function sectionTitle(section: CabinSectionKey): string {
+  return section === "blood_collection" ? "Blood Test" : "Consultation";
+}
+
+function cabinPreview(cabin: CabinSlotConfig): string {
+  return `${cabin.start_time}–${cabin.end_time} · ${cabin.slot_duration} min slots · capacity ${cabin.capacity_per_slot}`;
 }
 
 export function EngagementScheduleStep({
   kind,
   bloodCollectionType,
   consultationMode,
+  scheduleIntent,
   startDate,
   endDate,
   organizationId,
@@ -130,35 +134,79 @@ export function EngagementScheduleStep({
   onSlotDetailChange,
   expertTypes = [],
 }: Props) {
-  const showBlood = showBloodCabinsInSchedule(kind, bloodCollectionType);
-  const showConsult = showConsultationCabinsInSchedule(kind, consultationMode);
-  const showHomePanel = showHomeCollectionPanel(kind, bloodCollectionType);
-  const showUnsetPanel = showBloodModeUnsetPanel(kind, bloodCollectionType);
+  const showBlood = scheduleIntent.configureBlood;
+  const showConsult = scheduleIntent.configureConsult;
   const title = getScheduleTitle(kind, bloodCollectionType, consultationMode);
 
+  const [activeTab, setActiveTab] = useState<ActiveTab>(
+    showBlood ? "blood_collection" : "consultation"
+  );
+  const [bloodDates, setBloodDates] = useState<string[]>([]);
+  const [consultDates, setConsultDates] = useState<string[]>([]);
+  const [selectedBloodDate, setSelectedBloodDate] = useState<string | null>(null);
+  const [selectedConsultDate, setSelectedConsultDate] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     if (startDate) return parseIsoDate(startDate.slice(0, 10));
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [editingCabin, setEditingCabin] = useState<EditingCabin | null>(null);
   const [editingBreak, setEditingBreak] = useState<EditingBreak | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [cabinError, setCabinError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const addBtnRef = useRef<HTMLButtonElement>(null);
 
-  const sortedDates = useMemo(() => [...dates].sort(), [dates]);
   const minDate = startDate?.slice(0, 10) || null;
   const maxDate = endDate?.slice(0, 10) || null;
+  const summary = useMemo(() => summarizeSlotDetail(slotDetail), [slotDetail]);
+
+  const activeSections = useMemo((): CabinSectionKey[] => {
+    const sections: CabinSectionKey[] = [];
+    if (showBlood) sections.push("blood_collection");
+    if (showConsult) sections.push("consultation");
+    return sections;
+  }, [showBlood, showConsult]);
 
   useEffect(() => {
-    if (selectedDate && dates.includes(selectedDate)) return;
-    setSelectedDate(sortedDates[0] ?? null);
-  }, [dates, selectedDate, sortedDates]);
+    if (showBlood && !showConsult) setActiveTab("blood_collection");
+    else if (!showBlood && showConsult) setActiveTab("consultation");
+    else if (!activeSections.includes(activeTab) && activeSections.length > 0) {
+      setActiveTab(activeSections[0]);
+    }
+  }, [showBlood, showConsult, activeTab, activeSections]);
+
+  useEffect(() => {
+    setBloodDates((prev) => mergeSectionDates(slotDetail, "blood_collection", prev));
+    setConsultDates((prev) => mergeSectionDates(slotDetail, "consultation", prev));
+  }, [slotDetail]);
+
+  const sortedBloodDates = useMemo(
+    () => mergeSectionDates(slotDetail, "blood_collection", bloodDates),
+    [slotDetail, bloodDates]
+  );
+  const sortedConsultDates = useMemo(
+    () => mergeSectionDates(slotDetail, "consultation", consultDates),
+    [slotDetail, consultDates]
+  );
+
+  useEffect(() => {
+    const merged = [...new Set([...sortedBloodDates, ...sortedConsultDates])].sort();
+    onDatesChange(merged);
+  }, [sortedBloodDates, sortedConsultDates, onDatesChange]);
+
+  useEffect(() => {
+    if (selectedBloodDate && bloodDates.includes(selectedBloodDate)) return;
+    setSelectedBloodDate(sortedBloodDates[0] ?? null);
+  }, [bloodDates, selectedBloodDate, sortedBloodDates]);
+
+  useEffect(() => {
+    if (selectedConsultDate && consultDates.includes(selectedConsultDate)) return;
+    setSelectedConsultDate(sortedConsultDates[0] ?? null);
+  }, [consultDates, selectedConsultDate, sortedConsultDates]);
 
   useEffect(() => {
     if (!calendarOpen) return;
@@ -171,28 +219,44 @@ export function EngagementScheduleStep({
     return () => document.removeEventListener("mousedown", onDown);
   }, [calendarOpen]);
 
-  const addDateFromCalendar = (iso: string) => {
-    if (dates.includes(iso)) {
+  const addDateForSection = (section: CabinSectionKey, iso: string) => {
+    const sectionDates =
+      section === "blood_collection" ? sortedBloodDates : sortedConsultDates;
+    if (sectionDates.includes(iso)) {
       setDateError("Date already added");
-      setSelectedDate(iso);
+      if (section === "blood_collection") setSelectedBloodDate(iso);
+      else setSelectedConsultDate(iso);
       setCalendarOpen(false);
       return;
     }
     setDateError(null);
-    onDatesChange([...dates, iso].sort());
-    setSelectedDate(iso);
+    if (section === "blood_collection") {
+      setBloodDates((prev) => [...prev, iso].sort());
+      setSelectedBloodDate(iso);
+    } else {
+      setConsultDates((prev) => [...prev, iso].sort());
+      setSelectedConsultDate(iso);
+    }
     setCalendarOpen(false);
   };
 
-  const handleRemoveDate = (date: string) => {
-    const remaining = dates.filter((d) => d !== date);
-    onDatesChange(remaining);
-    onSlotDetailChange(removeDate(slotDetail, date));
+  const handleRemoveDate = (section: CabinSectionKey, date: string) => {
+    onSlotDetailChange(removeDateFromSection(slotDetail, section, date));
+    if (section === "blood_collection") {
+      setBloodDates((prev) => prev.filter((d) => d !== date));
+      if (selectedBloodDate === date) {
+        const remaining = sortedBloodDates.filter((d) => d !== date);
+        setSelectedBloodDate(remaining[0] ?? null);
+      }
+    } else {
+      setConsultDates((prev) => prev.filter((d) => d !== date));
+      if (selectedConsultDate === date) {
+        const remaining = sortedConsultDates.filter((d) => d !== date);
+        setSelectedConsultDate(remaining[0] ?? null);
+      }
+    }
     setEditingCabin((prev) => (prev?.date === date ? null : prev));
     setEditingBreak(null);
-    if (selectedDate === date) {
-      setSelectedDate([...remaining].sort()[0] ?? null);
-    }
   };
 
   const startNewCabin = (section: CabinSectionKey, date: string) => {
@@ -224,7 +288,9 @@ export function EngagementScheduleStep({
   const openImportedCabinEditor = (section: CabinSectionKey, date: string, cabinKey: string) => {
     const cabin = getCabinsForDate(slotDetail, section, date).find((c) => c.cabin_key === cabinKey);
     if (!cabin) return;
-    setSelectedDate(date);
+    setActiveTab(section);
+    if (section === "blood_collection") setSelectedBloodDate(date);
+    else setSelectedConsultDate(date);
     startEditCabin(section, date, cabin);
   };
 
@@ -347,139 +413,109 @@ export function EngagementScheduleStep({
     setEditingBreak(null);
   };
 
-  const selectedDateCounts =
-    selectedDate != null ? cabinCountForDate(slotDetail, selectedDate) : null;
-  const selectedDateHasNoCabins =
-    selectedDateCounts != null &&
-    selectedDateCounts.blood + selectedDateCounts.consult === 0;
-
-  if (showHomePanel) {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 flex gap-3">
-          <Home className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-blue-900">Home collection selected</p>
-            <p className="text-sm text-blue-800">
-              Blood collection slots are chosen per participant via Healthians when they enroll.
-              No on-site cabins are needed for this engagement.
-            </p>
-          </div>
-        </div>
-        {showConsult && (
-          <ConsultationScheduleSection
-            title={title}
-            showBlood={false}
-            showConsult={showConsult}
-            sortedDates={sortedDates}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            slotDetail={slotDetail}
-            dateError={dateError}
-            calendarOpen={calendarOpen}
-            setCalendarOpen={setCalendarOpen}
-            calendarMonth={calendarMonth}
-            setCalendarMonth={setCalendarMonth}
-            calendarRef={calendarRef}
-            addBtnRef={addBtnRef}
-            minDate={minDate}
-            maxDate={maxDate}
-            onDatesChange={onDatesChange}
-            onRemoveDate={handleRemoveDate}
-            onAddDate={addDateFromCalendar}
-            onStartNewCabin={startNewCabin}
-            onEditCabin={startEditCabin}
-            onDeleteCabin={deleteCabin}
-            selectedDateHasNoCabins={selectedDateHasNoCabins}
-            expertTypes={expertTypes}
-            onOpenImport={() => setImportOpen(true)}
-          />
-        )}
-        <ImportSlotDetailModal
-          open={importOpen}
-          onClose={() => setImportOpen(false)}
-          startDate={startDate}
-          endDate={endDate}
-          organizationId={organizationId}
-          currentEngagementId={currentEngagementId}
-          slotDetail={slotDetail}
-          dates={dates}
-          onDatesChange={onDatesChange}
-          onSlotDetailChange={onSlotDetailChange}
-          onEditImportedCabin={openImportedCabinEditor}
-        />
-        <Modal
-          open={editingCabin != null}
-          onClose={closeCabinModal}
-          title={
-            editingCabin?.isNew
-              ? editingCabin.section === "blood_collection"
-                ? "Add Blood-Test Cabin"
-                : "Add Consultation Cabin"
-              : "Edit cabin"
-          }
-          maxWidthClassName="max-w-lg"
-          zIndexClassName="z-[60]"
-        >
-          {editingCabin && (
-            <CabinEditor
-              editing={editingCabin}
-              error={cabinError}
-              expertTypes={expertTypes}
-              onChange={updateEditingCabin}
-              onNameChange={updateCabinName}
-              onKeyChange={updateCabinKey}
-              onSave={saveCabin}
-              onCancel={closeCabinModal}
-              onAddBreak={startAddBreak}
-              onEditBreak={startEditBreak}
-              onRemoveBreak={removeBreakAt}
-              editingBreak={editingBreak}
-              onBreakChange={(breakValue) =>
-                setEditingBreak((prev) => (prev ? { ...prev, breakValue } : prev))
-              }
-              onSaveBreak={saveBreak}
-              onCancelBreak={() => setEditingBreak(null)}
-            />
-          )}
-        </Modal>
-      </div>
-    );
-  }
-
-  if (showUnsetPanel && !showConsult) {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex gap-3">
-          <Info className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-amber-900">Blood collection mode not set</p>
-            <p className="text-sm text-amber-800">
-              Choose <strong>Camp Collection</strong> in Offerings to configure on-site blood test
-              dates and cabins, or <strong>Home Collection</strong> for Healthians home visits.
-              You can also skip and configure later when editing.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleImportComplete = (result: ImportCopyResult) => {
+    if (result.addedCount > 0) {
+      onSlotDetailChange(result.nextSlotDetail);
+      if (result.datesToAdd.length > 0) {
+        const merged = [...new Set([...dates, ...result.datesToAdd])].sort();
+        onDatesChange(merged);
+      }
+    }
+    setImportBanner(result.message);
+    setImportOpen(false);
+  };
 
   if (!showBlood && !showConsult) {
     return null;
   }
 
+  const showTabs = showBlood && showConsult;
+  const currentSection = activeTab;
+  const currentDates = currentSection === "blood_collection" ? sortedBloodDates : sortedConsultDates;
+  const currentSelectedDate =
+    currentSection === "blood_collection" ? selectedBloodDate : selectedConsultDate;
+  const setCurrentSelectedDate =
+    currentSection === "blood_collection" ? setSelectedBloodDate : setSelectedConsultDate;
+  const currentCabins =
+    currentSelectedDate != null
+      ? getCabinsForDate(slotDetail, currentSection, currentSelectedDate)
+      : [];
+  const selectedDateHasNoCabins = currentSelectedDate != null && currentCabins.length === 0;
+
   return (
     <div className="space-y-4">
-      <ConsultationScheduleSection
-        title={title}
-        showBlood={showBlood}
-        showConsult={showConsult}
-        sortedDates={sortedDates}
-        selectedDate={selectedDate}
-        setSelectedDate={setSelectedDate}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+          <p className="text-sm text-zinc-500 mt-1">
+            Add dates and cabins for each section, copy from a past engagement, or skip to
+            configure later.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+        >
+          <Copy className="w-4 h-4" />
+          Copy from past engagement
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+        {showBlood && (
+          <span>
+            Blood: {summary.bloodDates} date{summary.bloodDates === 1 ? "" : "s"},{" "}
+            {summary.bloodCabins} cabin{summary.bloodCabins === 1 ? "" : "s"}
+          </span>
+        )}
+        {showBlood && showConsult && <span className="mx-2">·</span>}
+        {showConsult && (
+          <span>
+            Consultation: {summary.consultDates} date{summary.consultDates === 1 ? "" : "s"},{" "}
+            {summary.consultCabins} cabin{summary.consultCabins === 1 ? "" : "s"}
+          </span>
+        )}
+        {summary.bloodCabins === 0 && summary.consultCabins === 0 && (
+          <span>Not configured yet</span>
+        )}
+      </div>
+
+      {importBanner && (
+        <p className="text-sm text-emerald-700 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2" role="status">
+          {importBanner}
+        </p>
+      )}
+
+      <p className="text-xs text-zinc-500">
+        Skipping saves the engagement without on-site slots. Participants may not be able to book
+        camp or consultation slots until you edit and add them.
+      </p>
+
+      {showTabs && (
+        <div className="flex gap-1 border-b border-zinc-200">
+          {(["blood_collection", "consultation"] as const).map((section) => (
+            <button
+              key={section}
+              type="button"
+              onClick={() => setActiveTab(section)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === section
+                  ? "border-zinc-900 text-zinc-900"
+                  : "border-transparent text-zinc-500 hover:text-zinc-700"
+              }`}
+            >
+              {sectionTitle(section)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <SectionSchedulePanel
+        section={currentSection}
+        sortedDates={currentDates}
+        selectedDate={currentSelectedDate}
+        setSelectedDate={setCurrentSelectedDate}
         slotDetail={slotDetail}
         dateError={dateError}
         calendarOpen={calendarOpen}
@@ -490,16 +526,13 @@ export function EngagementScheduleStep({
         addBtnRef={addBtnRef}
         minDate={minDate}
         maxDate={maxDate}
-        onDatesChange={onDatesChange}
-        onRemoveDate={handleRemoveDate}
-        onAddDate={addDateFromCalendar}
+        onRemoveDate={(date) => handleRemoveDate(currentSection, date)}
+        onAddDate={(iso) => addDateForSection(currentSection, iso)}
         onStartNewCabin={startNewCabin}
         onEditCabin={startEditCabin}
         onDeleteCabin={deleteCabin}
         selectedDateHasNoCabins={selectedDateHasNoCabins}
-        unsetBloodPanel={showUnsetPanel}
         expertTypes={expertTypes}
-        onOpenImport={() => setImportOpen(true)}
       />
 
       <ImportSlotDetailModal
@@ -510,9 +543,8 @@ export function EngagementScheduleStep({
         organizationId={organizationId}
         currentEngagementId={currentEngagementId}
         slotDetail={slotDetail}
-        dates={dates}
-        onDatesChange={onDatesChange}
-        onSlotDetailChange={onSlotDetailChange}
+        sections={activeSections}
+        onImportComplete={handleImportComplete}
         onEditImportedCabin={openImportedCabinEditor}
       />
 
@@ -555,10 +587,8 @@ export function EngagementScheduleStep({
   );
 }
 
-function ConsultationScheduleSection({
-  title,
-  showBlood,
-  showConsult,
+function SectionSchedulePanel({
+  section,
   sortedDates,
   selectedDate,
   setSelectedDate,
@@ -578,13 +608,9 @@ function ConsultationScheduleSection({
   onEditCabin,
   onDeleteCabin,
   selectedDateHasNoCabins,
-  unsetBloodPanel,
   expertTypes = [],
-  onOpenImport,
 }: {
-  title: string;
-  showBlood: boolean;
-  showConsult: boolean;
+  section: CabinSectionKey;
   sortedDates: string[];
   selectedDate: string | null;
   setSelectedDate: (d: string) => void;
@@ -598,53 +624,23 @@ function ConsultationScheduleSection({
   addBtnRef: RefObject<HTMLButtonElement | null>;
   minDate: string | null;
   maxDate: string | null;
-  onDatesChange: (dates: string[]) => void;
   onRemoveDate: (date: string) => void;
   onAddDate: (iso: string) => void;
   onStartNewCabin: (section: CabinSectionKey, date: string) => void;
   onEditCabin: (section: CabinSectionKey, date: string, cabin: CabinSlotConfig) => void;
   onDeleteCabin: (section: CabinSectionKey, date: string, cabinKey: string) => void;
   selectedDateHasNoCabins: boolean;
-  unsetBloodPanel?: boolean;
   expertTypes?: ExpertTypeItem[];
-  onOpenImport?: () => void;
 }) {
+  const addCabinLabel =
+    section === "blood_collection" ? "Add Blood-Test Cabin" : "Add Consultation Cabin";
+
   return (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-          <p className="text-sm text-zinc-500 mt-1">
-            Add dates and cabins now, or skip and configure later when editing.
-          </p>
-        </div>
-        {onOpenImport && (
-          <button
-            type="button"
-            onClick={onOpenImport}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
-          >
-            <Download className="w-4 h-4" />
-            Import from engagement
-          </button>
-        )}
-      </div>
-
-      {unsetBloodPanel && showConsult && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex gap-2">
-          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-800">
-            Set blood collection to Camp Collection in Offerings to add blood test cabins. Consultation
-            cabins can still be configured below.
-          </p>
-        </div>
-      )}
-
+    <div className="space-y-3">
       <div className="flex flex-wrap items-stretch gap-2">
         {sortedDates.map((date) => {
           const selected = date === selectedDate;
-          const counts = cabinCountForDate(slotDetail, date);
-          const totalCabins = counts.blood + counts.consult;
+          const cabinCount = getCabinsForDate(slotDetail, section, date).length;
           return (
             <div
               key={date}
@@ -660,7 +656,7 @@ function ConsultationScheduleSection({
               className={`relative min-w-[9.5rem] rounded-lg border px-3 py-2 pr-8 cursor-pointer ${
                 selected
                   ? "border-zinc-900 bg-zinc-900 text-white"
-                  : totalCabins === 0
+                  : cabinCount === 0
                     ? "border-amber-300 bg-amber-50 text-zinc-900 hover:border-amber-400"
                     : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400"
               }`}
@@ -668,17 +664,12 @@ function ConsultationScheduleSection({
               <p className="text-sm font-medium">{formatDateLabel(date)}</p>
               <p
                 className={`text-xs mt-0.5 ${
-                  selected ? "text-white/70" : totalCabins === 0 ? "text-amber-700" : "text-zinc-500"
+                  selected ? "text-white/70" : cabinCount === 0 ? "text-amber-700" : "text-zinc-500"
                 }`}
               >
-                {totalCabins === 0
+                {cabinCount === 0
                   ? "No cabins"
-                  : [
-                      counts.blood > 0 ? `${counts.blood} blood` : null,
-                      counts.consult > 0 ? `${counts.consult} consult` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                  : `${cabinCount} cabin${cabinCount === 1 ? "" : "s"}`}
               </p>
               <button
                 type="button"
@@ -726,7 +717,21 @@ function ConsultationScheduleSection({
       {dateError && <p className="text-sm text-red-600">{dateError}</p>}
 
       {sortedDates.length === 0 && (
-        <p className="text-sm text-zinc-400">No dates yet. Add a date to configure cabins.</p>
+        <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center">
+          <Calendar className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
+          <p className="text-sm font-medium text-zinc-700">No dates yet</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            Add your first {sectionTitle(section).toLowerCase()} date to configure cabins.
+          </p>
+          <button
+            type="button"
+            onClick={() => setCalendarOpen(true)}
+            className="mt-3 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 inline-flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            Add Date
+          </button>
+        </div>
       )}
 
       {selectedDate && (
@@ -740,48 +745,25 @@ function ConsultationScheduleSection({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {showBlood && (
-              <button
-                type="button"
-                onClick={() => onStartNewCabin("blood_collection", selectedDate)}
-                className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-              >
-                Add Blood-Test Cabin
-              </button>
-            )}
-            {showConsult && (
-              <button
-                type="button"
-                onClick={() => onStartNewCabin("consultation", selectedDate)}
-                className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-              >
-                Add Consultation Cabin
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => onStartNewCabin(section, selectedDate)}
+            className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+          >
+            {addCabinLabel}
+          </button>
 
-          {showBlood && (
-            <CabinList
-              title="Blood Test Cabins"
-              cabins={getCabinsForDate(slotDetail, "blood_collection", selectedDate)}
-              onEdit={(cabin) => onEditCabin("blood_collection", selectedDate, cabin)}
-              onDelete={(key) => onDeleteCabin("blood_collection", selectedDate, key)}
-            />
-          )}
-
-          {showConsult && (
-            <CabinList
-              title="Consultation Cabins"
-              cabins={getCabinsForDate(slotDetail, "consultation", selectedDate)}
-              expertTypes={expertTypes}
-              onEdit={(cabin) => onEditCabin("consultation", selectedDate, cabin)}
-              onDelete={(key) => onDeleteCabin("consultation", selectedDate, key)}
-            />
-          )}
+          <CabinList
+            title={`${sectionTitle(section)} Cabins`}
+            cabins={getCabinsForDate(slotDetail, section, selectedDate)}
+            expertTypes={expertTypes}
+            showExpertType={section === "consultation"}
+            onEdit={(cabin) => onEditCabin(section, selectedDate, cabin)}
+            onDelete={(key) => onDeleteCabin(section, selectedDate, key)}
+          />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -949,12 +931,14 @@ function CabinList({
   onEdit,
   onDelete,
   expertTypes = [],
+  showExpertType = false,
 }: {
   title: string;
   cabins: CabinSlotConfig[];
   onEdit: (cabin: CabinSlotConfig) => void;
   onDelete: (cabinKey: string) => void;
   expertTypes?: ExpertTypeItem[];
+  showExpertType?: boolean;
 }) {
   if (cabins.length === 0) return null;
   return (
@@ -964,41 +948,47 @@ function CabinList({
         {cabins.map((cabin) => {
           const typeLabel = expertTypeLabel(cabin.expert_type, expertTypes);
           return (
-          <div
-            key={cabin.cabin_key}
-            className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 hover:border-zinc-400"
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div
-                className="min-w-0 flex-1 cursor-pointer"
-                onDoubleClick={() => onEdit(cabin)}
-                title="Double-click to edit"
-              >
-                <p className="text-sm font-medium text-zinc-900">{cabin.cabin_name}</p>
-                <p className="text-xs text-zinc-500">
-                  {cabin.cabin_key} · {cabin.start_time}–{cabin.end_time}
-                  {typeLabel ? ` · ${typeLabel}` : ""}
-                  {!cabin.is_active ? " · inactive" : ""}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                <button
-                  type="button"
-                  className="text-xs text-zinc-700 hover:underline"
-                  onClick={() => onEdit(cabin)}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="text-xs text-red-600 hover:underline"
-                  onClick={() => onDelete(cabin.cabin_key)}
-                >
-                  Remove
-                </button>
+            <div
+              key={cabin.cabin_key}
+              role="button"
+              tabIndex={0}
+              onClick={() => onEdit(cabin)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEdit(cabin);
+                }
+              }}
+              className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 hover:border-zinc-400 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-zinc-900">{cabin.cabin_name}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{cabinPreview(cabin)}</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {cabin.cabin_key}
+                    {showExpertType && typeLabel ? ` · ${typeLabel}` : ""}
+                    {!cabin.is_active ? " · inactive" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="text-xs text-zinc-700 hover:underline"
+                    onClick={() => onEdit(cabin)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs text-red-600 hover:underline"
+                    onClick={() => onDelete(cabin.cabin_key)}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           );
         })}
       </div>

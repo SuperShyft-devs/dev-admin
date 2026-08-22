@@ -11,14 +11,18 @@ import {
   type CabinSectionKey,
   type ImportableCabin,
   cabinAlreadyImported,
-  cloneCabinForImport,
-  getCabinsForDate,
-  importAllCabinsIntoSlotDetail,
+  importableCabinKey,
   importableCabinsFromSlotDetail,
+  importSelectedCabinsIntoSlotDetail,
   isDateWithinRange,
   normalizeSlotDetail,
-  upsertCabin,
+  type ImportAllCabinsResult,
 } from "./slotDetailUtils";
+
+export type ImportCopyResult = ImportAllCabinsResult & {
+  message: string;
+  sourceEngagementName?: string;
+};
 
 type Props = {
   open: boolean;
@@ -28,11 +32,12 @@ type Props = {
   organizationId?: number | null;
   currentEngagementId?: number | null;
   slotDetail: SlotDetail;
-  dates: string[];
-  onDatesChange: (dates: string[]) => void;
-  onSlotDetailChange: (next: SlotDetail) => void;
+  sections: CabinSectionKey[];
+  onImportComplete: (result: ImportCopyResult) => void;
   onEditImportedCabin: (section: CabinSectionKey, date: string, cabinKey: string) => void;
 };
+
+type RowStatus = "will_copy" | "out_of_range" | "already_added" | "not_applicable";
 
 function sectionLabel(section: CabinSectionKey): string {
   return section === "blood_collection" ? "Blood test" : "Consultation";
@@ -48,16 +53,18 @@ function formatDateLabel(iso: string): string {
   });
 }
 
-function buildImportStatusMessage(result: {
-  addedCount: number;
-  skippedOutOfRange: number;
-  skippedAlreadyAdded: number;
-}): string {
+function buildImportMessage(
+  result: ImportAllCabinsResult,
+  sourceName?: string
+): string {
+  const source = sourceName ? ` from ${sourceName}` : "";
   const parts: string[] = [];
   if (result.addedCount > 0) {
-    parts.push(`Added ${result.addedCount} cabin${result.addedCount === 1 ? "" : "s"}`);
+    parts.push(
+      `Copied ${result.addedCount} cabin${result.addedCount === 1 ? "" : "s"}${source}`
+    );
   } else {
-    parts.push("No new cabins added");
+    parts.push(`No new cabins copied${source}`);
   }
   if (result.skippedAlreadyAdded > 0) {
     parts.push(`${result.skippedAlreadyAdded} already added`);
@@ -65,7 +72,35 @@ function buildImportStatusMessage(result: {
   if (result.skippedOutOfRange > 0) {
     parts.push(`${result.skippedOutOfRange} outside date range`);
   }
-  return parts.join(" · ");
+  return parts.join(". ") + ".";
+}
+
+function rowStatus(
+  item: ImportableCabin,
+  slotDetail: SlotDetail,
+  startDate: string,
+  endDate: string,
+  allowedSections: Set<CabinSectionKey>
+): RowStatus {
+  if (!allowedSections.has(item.section)) return "not_applicable";
+  if (!isDateWithinRange(item.date, startDate, endDate)) return "out_of_range";
+  if (cabinAlreadyImported(slotDetail, item.section, item.date, item.cabin.cabin_key)) {
+    return "already_added";
+  }
+  return "will_copy";
+}
+
+function statusLabel(status: RowStatus): string {
+  switch (status) {
+    case "will_copy":
+      return "Will copy";
+    case "out_of_range":
+      return "Outside date range";
+    case "already_added":
+      return "Already added";
+    case "not_applicable":
+      return "Not applicable";
+  }
 }
 
 export function ImportSlotDetailModal({
@@ -76,24 +111,26 @@ export function ImportSlotDetailModal({
   organizationId,
   currentEngagementId,
   slotDetail,
-  dates,
-  onDatesChange,
-  onSlotDetailChange,
-  onEditImportedCabin,
+  sections,
+  onImportComplete,
 }: Props) {
   const [sourceEngagementId, setSourceEngagementId] = useState(0);
+  const [sourceEngagementName, setSourceEngagementName] = useState<string | undefined>();
   const [sourceSlotDetail, setSourceSlotDetail] = useState<SlotDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
+  const allowedSections = useMemo(() => new Set(sections), [sections]);
 
   useEffect(() => {
     if (!open) {
       setSourceEngagementId(0);
+      setSourceEngagementName(undefined);
       setSourceSlotDetail(null);
       setFetchError(null);
-      setActionMessage(null);
       setLoading(false);
+      setSelectedKeys(new Set());
     }
   }, [open]);
 
@@ -101,17 +138,17 @@ export function ImportSlotDetailModal({
     async (engagementId: number) => {
       if (!engagementId) {
         setSourceSlotDetail(null);
+        setSourceEngagementName(undefined);
         setFetchError(null);
         return;
       }
       if (currentEngagementId && engagementId === currentEngagementId) {
         setSourceSlotDetail(null);
-        setFetchError("Choose a different engagement to import from.");
+        setFetchError("Choose a different engagement to copy from.");
         return;
       }
       setLoading(true);
       setFetchError(null);
-      setActionMessage(null);
       try {
         const res = await engagementsApi.get(engagementId);
         const engagement = res.data.data;
@@ -126,6 +163,9 @@ export function ImportSlotDetailModal({
           setFetchError("Selected engagement has no cabin schedule.");
           return;
         }
+        setSourceEngagementName(
+          engagement.engagement_name ?? engagement.engagement_code ?? `Engagement #${engagementId}`
+        );
         setSourceSlotDetail(normalized);
       } catch (err) {
         setSourceSlotDetail(null);
@@ -144,80 +184,70 @@ export function ImportSlotDetailModal({
 
   const importableCabins = useMemo(() => {
     if (!sourceSlotDetail) return [] as ImportableCabin[];
-    return importableCabinsFromSlotDetail(sourceSlotDetail);
-  }, [sourceSlotDetail]);
+    return importableCabinsFromSlotDetail(sourceSlotDetail, sections);
+  }, [sourceSlotDetail, sections]);
 
-  const groupedCabins = useMemo(() => {
-    const groups = new Map<string, ImportableCabin[]>();
-    for (const item of importableCabins) {
-      const key = `${item.date}|${item.section}`;
-      const list = groups.get(key) ?? [];
-      list.push(item);
-      groups.set(key, list);
+  const rows = useMemo(() => {
+    return importableCabins.map((item) => ({
+      item,
+      key: importableCabinKey(item),
+      status: rowStatus(item, slotDetail, startDate, endDate, allowedSections),
+    }));
+  }, [allowedSections, endDate, importableCabins, slotDetail, startDate]);
+
+  useEffect(() => {
+    if (!sourceSlotDetail) return;
+    const defaultSelected = new Set(
+      rows.filter((r) => r.status === "will_copy").map((r) => r.key)
+    );
+    setSelectedKeys(defaultSelected);
+  }, [rows, sourceSlotDetail]);
+
+  const eligibleSelectedCount = useMemo(() => {
+    return rows.filter((r) => r.status === "will_copy" && selectedKeys.has(r.key)).length;
+  }, [rows, selectedKeys]);
+
+  const toggleRow = (key: string, status: RowStatus) => {
+    if (status !== "will_copy") return;
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllEligible = () => {
+    const eligible = rows.filter((r) => r.status === "will_copy").map((r) => r.key);
+    const allSelected = eligible.every((k) => selectedKeys.has(k));
+    if (allSelected) {
+      setSelectedKeys(new Set());
+    } else {
+      setSelectedKeys(new Set(eligible));
     }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [importableCabins]);
+  };
 
-  const pendingAddCount = useMemo(() => {
-    return importableCabins.filter(
-      (item) =>
-        isDateWithinRange(item.date, startDate, endDate) &&
-        !cabinAlreadyImported(slotDetail, item.section, item.date, item.cabin.cabin_key)
-    ).length;
-  }, [endDate, importableCabins, slotDetail, startDate]);
-
-  const handleAddAllCabins = () => {
-    const result = importAllCabinsIntoSlotDetail(
+  const handleCopySelected = () => {
+    const result = importSelectedCabinsIntoSlotDetail(
       slotDetail,
       importableCabins,
+      selectedKeys,
       startDate,
       endDate
     );
-    if (result.addedCount > 0) {
-      onSlotDetailChange(result.nextSlotDetail);
-      const mergedDates = new Set(dates);
-      for (const date of result.datesToAdd) {
-        mergedDates.add(date);
-      }
-      if (result.datesToAdd.length > 0) {
-        onDatesChange(Array.from(mergedDates).sort());
-      }
-    }
-    setActionMessage(buildImportStatusMessage(result));
-  };
-
-  const handleEditCabin = (item: ImportableCabin) => {
-    if (!isDateWithinRange(item.date, startDate, endDate)) {
-      setActionMessage("This date is outside the current engagement start/end range.");
-      return;
-    }
-
-    let cabinKey = item.cabin.cabin_key;
-    if (!cabinAlreadyImported(slotDetail, item.section, item.date, item.cabin.cabin_key)) {
-      const cloned = cloneCabinForImport(item.cabin, slotDetail, item.section);
-      cabinKey = cloned.cabin_key;
-      const nextSlotDetail = upsertCabin(slotDetail, item.section, item.date, cloned);
-      onSlotDetailChange(nextSlotDetail);
-      if (!dates.includes(item.date)) {
-        onDatesChange([...dates, item.date].sort());
-      }
-    } else {
-      const existing = getCabinsForDate(slotDetail, item.section, item.date).find(
-        (c) => c.cabin_key === item.cabin.cabin_key
-      );
-      if (existing) cabinKey = existing.cabin_key;
-    }
-
-    onEditImportedCabin(item.section, item.date, cabinKey);
-    onClose();
+    onImportComplete({
+      ...result,
+      message: buildImportMessage(result, sourceEngagementName),
+      sourceEngagementName,
+    });
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Import cabin schedule" maxWidthClassName="max-w-2xl">
+    <Modal open={open} onClose={onClose} title="Copy from past engagement" maxWidthClassName="max-w-3xl">
       <div className="space-y-4">
         <p className="text-sm text-zinc-600">
-          Pick another engagement to import all of its blood-test and consultation cabins into this
-          engagement. One Add imports every cabin; edit them afterward if needed.
+          Reuse cabin schedules from a previous engagement with the same organization. Select the
+          cabins you want to copy — useful when running repeat camps with the same layout.
         </p>
 
         <EngagementSearchPicker
@@ -239,87 +269,112 @@ export function ImportSlotDetailModal({
           </p>
         )}
 
-        {actionMessage && !fetchError && (
-          <p className="text-sm text-emerald-700" role="status">
-            {actionMessage}
+        {!loading && sourceSlotDetail && rows.length === 0 && !fetchError && (
+          <p className="text-sm text-zinc-500">
+            Selected engagement has no cabins matching your current schedule sections.
           </p>
         )}
 
-        {!loading && sourceSlotDetail && groupedCabins.length === 0 && !fetchError && (
-          <p className="text-sm text-zinc-500">Selected engagement has no cabins to import.</p>
-        )}
-
-        {!loading && groupedCabins.length > 0 && (
+        {!loading && rows.length > 0 && (
           <>
-            <div className="max-h-[24rem] overflow-y-auto space-y-4 border border-zinc-200 rounded-lg p-3">
-              {groupedCabins.map(([groupKey, cabins]) => {
-                const [date, section] = groupKey.split("|") as [string, CabinSectionKey];
-                const inRange = isDateWithinRange(date, startDate, endDate);
-                return (
-                  <div key={groupKey}>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                      {formatDateLabel(date)} · {sectionLabel(section)}
-                    </p>
-                    <ul className="mt-2 space-y-2">
-                      {cabins.map((item) => {
-                        const added = cabinAlreadyImported(
-                          slotDetail,
-                          item.section,
-                          item.date,
-                          item.cabin.cabin_key
-                        );
-                        return (
-                          <li
-                            key={`${item.section}-${item.date}-${item.cabin.cabin_key}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-zinc-900">{item.cabin.cabin_name}</p>
-                              <p className="text-xs text-zinc-500">
-                                {item.cabin.cabin_key} · {item.cabin.start_time}–{item.cabin.end_time}
-                                {item.section === "consultation" && item.cabin.expert_type
-                                  ? ` · ${item.cabin.expert_type}`
-                                  : ""}
-                              </p>
-                              {!inRange && (
-                                <p className="text-xs text-amber-700 mt-0.5">
-                                  Outside current engagement date range
-                                </p>
-                              )}
-                              {added && (
-                                <p className="text-xs text-emerald-700 mt-0.5">Added</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {added && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditCabin(item)}
-                                  className="px-3 py-1.5 rounded-md border border-zinc-300 text-zinc-700 text-xs font-medium hover:bg-zinc-50"
-                                >
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
-                disabled={pendingAddCount === 0}
-                onClick={handleAddAllCabins}
+                onClick={toggleAllEligible}
+                className="text-xs font-medium text-zinc-700 hover:underline"
+              >
+                {rows.filter((r) => r.status === "will_copy").every((r) => selectedKeys.has(r.key))
+                  ? "Deselect all"
+                  : "Select all eligible"}
+              </button>
+              <p className="text-xs text-zinc-500">
+                {eligibleSelectedCount} cabin{eligibleSelectedCount === 1 ? "" : "s"} selected
+              </p>
+            </div>
+
+            <div className="max-h-[24rem] overflow-y-auto border border-zinc-200 rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 sticky top-0">
+                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <th className="px-3 py-2 w-10" />
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Section</th>
+                    <th className="px-3 py-2">Cabin</th>
+                    <th className="px-3 py-2">Hours</th>
+                    <th className="px-3 py-2">Expert</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {rows.map(({ item, key, status }) => {
+                    const canSelect = status === "will_copy";
+                    return (
+                      <tr
+                        key={key}
+                        className={canSelect ? "hover:bg-zinc-50 cursor-pointer" : "text-zinc-400"}
+                        onClick={() => toggleRow(key, status)}
+                      >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys.has(key)}
+                            disabled={!canSelect}
+                            onChange={() => toggleRow(key, status)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4"
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatDateLabel(item.date)}</td>
+                        <td className="px-3 py-2">{sectionLabel(item.section)}</td>
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-zinc-900">{item.cabin.cabin_name}</p>
+                          <p className="text-xs text-zinc-500">{item.cabin.cabin_key}</p>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs">
+                          {item.cabin.start_time}–{item.cabin.end_time}
+                        </td>
+                        <td className="px-3 py-2 text-xs">
+                          {item.section === "consultation" ? item.cabin.expert_type ?? "—" : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`text-xs ${
+                              status === "will_copy"
+                                ? "text-zinc-700"
+                                : status === "already_added"
+                                  ? "text-emerald-700"
+                                  : status === "out_of_range"
+                                    ? "text-amber-700"
+                                    : "text-zinc-400"
+                            }`}
+                          >
+                            {statusLabel(status)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-md border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={eligibleSelectedCount === 0}
+                onClick={handleCopySelected}
                 className="px-4 py-2 rounded-md bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40"
               >
-                {pendingAddCount > 0
-                  ? `Add all cabins (${pendingAddCount})`
-                  : "All cabins added"}
+                {eligibleSelectedCount > 0
+                  ? `Copy selected (${eligibleSelectedCount})`
+                  : "Copy selected"}
               </button>
             </div>
           </>

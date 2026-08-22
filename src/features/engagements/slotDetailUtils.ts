@@ -28,6 +28,15 @@ export function collectDates(slotDetail: SlotDetail): string[] {
   return Array.from(dates).sort();
 }
 
+export function collectDatesForSection(
+  slotDetail: SlotDetail,
+  section: CabinSectionKey
+): string[] {
+  const sectionData = slotDetail[section];
+  if (!sectionData) return [];
+  return Object.keys(sectionData).sort();
+}
+
 function allCabinKeys(slotDetail: SlotDetail): Set<string> {
   const keys = new Set<string>();
   for (const section of [slotDetail.blood_collection, slotDetail.consultation]) {
@@ -170,6 +179,33 @@ export function removeDate(slotDetail: SlotDetail, date: string): SlotDetail {
   return next;
 }
 
+export function removeDateFromSection(
+  slotDetail: SlotDetail,
+  section: CabinSectionKey,
+  date: string
+): SlotDetail {
+  const sectionData = slotDetail[section];
+  if (!sectionData || !sectionData[date]) return slotDetail;
+  const nextSection = { ...sectionData };
+  delete nextSection[date];
+  const next: SlotDetail = { ...slotDetail };
+  if (Object.keys(nextSection).length === 0) {
+    delete next[section];
+  } else {
+    next[section] = nextSection;
+  }
+  return next;
+}
+
+export function mergeSectionDates(
+  slotDetail: SlotDetail,
+  section: CabinSectionKey,
+  extraDates: string[]
+): string[] {
+  const fromSlots = collectDatesForSection(slotDetail, section);
+  return [...new Set([...fromSlots, ...extraDates])].sort();
+}
+
 function pruneEmptyDates(slotDetail: SlotDetail): SlotDetail {
   const next: SlotDetail = { ...slotDetail };
   for (const key of ["blood_collection", "consultation"] as const) {
@@ -255,9 +291,14 @@ export type ImportableCabin = {
   cabin: CabinSlotConfig;
 };
 
-export function importableCabinsFromSlotDetail(slotDetail: SlotDetail): ImportableCabin[] {
+export function importableCabinsFromSlotDetail(
+  slotDetail: SlotDetail,
+  sections?: CabinSectionKey[]
+): ImportableCabin[] {
+  const allowed =
+    sections ?? (["blood_collection", "consultation"] as const);
   const items: ImportableCabin[] = [];
-  for (const section of ["blood_collection", "consultation"] as const) {
+  for (const section of allowed) {
     const sectionData = slotDetail[section];
     if (!sectionData) continue;
     for (const [date, cabins] of Object.entries(sectionData)) {
@@ -301,7 +342,7 @@ export type ImportAllCabinsResult = {
   datesToAdd: string[];
 };
 
-export function importAllCabinsIntoSlotDetail(
+function importCabinsIntoSlotDetail(
   slotDetail: SlotDetail,
   cabins: ImportableCabin[],
   startDate: string,
@@ -341,6 +382,32 @@ export function importAllCabinsIntoSlotDetail(
     skippedAlreadyAdded,
     datesToAdd,
   };
+}
+
+export function importAllCabinsIntoSlotDetail(
+  slotDetail: SlotDetail,
+  cabins: ImportableCabin[],
+  startDate: string,
+  endDate: string
+): ImportAllCabinsResult {
+  return importCabinsIntoSlotDetail(slotDetail, cabins, startDate, endDate);
+}
+
+export function importSelectedCabinsIntoSlotDetail(
+  slotDetail: SlotDetail,
+  cabins: ImportableCabin[],
+  selectedKeys: Set<string>,
+  startDate: string,
+  endDate: string
+): ImportAllCabinsResult {
+  const filtered = cabins.filter(
+    (item) => selectedKeys.has(`${item.section}|${item.date}|${item.cabin.cabin_key}`)
+  );
+  return importCabinsIntoSlotDetail(slotDetail, filtered, startDate, endDate);
+}
+
+export function importableCabinKey(item: ImportableCabin): string {
+  return `${item.section}|${item.date}|${item.cabin.cabin_key}`;
 }
 
 export function cabinAlreadyImported(
