@@ -290,6 +290,9 @@ function BtsModalBody({
   const [openBioAiMismatch, setOpenBioAiMismatch] = useState(false);
   const [openQgdGroups, setOpenQgdGroups] = useState<Record<string, boolean>>({});
   const [openQgdExceptions, setOpenQgdExceptions] = useState<Record<string, boolean>>({});
+  const [openDiseasePanels, setOpenDiseasePanels] = useState<Record<string, boolean>>({});
+  const [openDiseaseGroups, setOpenDiseaseGroups] = useState<Record<string, boolean>>({});
+  const [openDiseasePercentMath, setOpenDiseasePercentMath] = useState<Record<string, boolean>>({});
 
   if (data == null) {
     return (
@@ -381,10 +384,14 @@ function BtsModalBody({
     method?.with_oxidative_stress_score != null;
   const scoreBandLabel = isOxidativeStressBts
     ? "oxidative stress score"
-    : "metabolic score";
+    : isDiseaseRiskBts
+      ? "risk score"
+      : "metabolic score";
   const elevatedMathTitle = isOxidativeStressBts
     ? "Elevated oxidative stress — step by step"
-    : "Elevated metabolic score — step by step";
+    : isDiseaseRiskBts
+      ? "Elevated risk — step by step"
+      : "Elevated metabolic score — step by step";
   const bandsSectionTitle = isOxidativeStressBts
     ? "Who is in each group"
     : "Who is in each risk group";
@@ -400,6 +407,18 @@ function BtsModalBody({
     details?.comparison && typeof details.comparison === "object"
       ? (details.comparison as Record<string, unknown>)
       : null;
+  const diseaseBtsDetails =
+    details?.diseases && typeof details.diseases === "object"
+      ? (details.diseases as Record<string, Record<string, unknown>>)
+      : null;
+  const unknownGender =
+    details?.unknown_gender && typeof details.unknown_gender === "object"
+      ? (details.unknown_gender as Record<string, unknown>)
+      : null;
+  const unknownGenderPeople = Array.isArray(unknownGender?.people)
+    ? (unknownGender.people as Record<string, unknown>[])
+    : [];
+  const isDiseaseRiskBts = diseaseBtsDetails != null && Object.keys(diseaseBtsDetails).length > 0;
 
   const qgdExceptionSections: {
     key: string;
@@ -547,6 +566,9 @@ function BtsModalBody({
                   { key: "missing_metabolic_score", label: "Missing metabolic score" },
                   { key: "with_oxidative_stress_score", label: "With oxidative stress score" },
                   { key: "missing_oxidative_stress_score", label: "Missing oxidative stress score" },
+                  { key: "with_bio_ai_report", label: "With Bio AI report" },
+                  { key: "unknown_gender_count", label: "Unknown gender" },
+                  { key: "global_excluded_count", label: "Not in this chart" },
                   { key: "excluded_people_count", label: "Not in this chart" },
                   { key: "enrolled", label: "People enrolled" },
                   { key: "questionnaire_completed", label: "Questionnaire completed" },
@@ -580,7 +602,7 @@ function BtsModalBody({
           </div>
         )}
 
-        {elevatedMathSteps.length > 0 && (
+        {elevatedMathSteps.length > 0 && !isDiseaseRiskBts && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-2">
             <p className="text-xs font-medium text-zinc-800">
               {elevatedMathTitle}
@@ -955,6 +977,385 @@ function BtsModalBody({
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {diseaseBtsDetails && Object.keys(diseaseBtsDetails).length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Disease risk by gender
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {Object.entries(diseaseBtsDetails).map(([code, raw]) => {
+                const diseaseData =
+                  raw && typeof raw === "object"
+                    ? (raw as Record<string, unknown>)
+                    : null;
+                if (!diseaseData) return null;
+                const label =
+                  typeof diseaseData.label === "string"
+                    ? diseaseData.label
+                    : code.replace(/_/g, " ");
+                const maleData =
+                  diseaseData.male && typeof diseaseData.male === "object"
+                    ? (diseaseData.male as Record<string, unknown>)
+                    : null;
+                const femaleData =
+                  diseaseData.female && typeof diseaseData.female === "object"
+                    ? (diseaseData.female as Record<string, unknown>)
+                    : null;
+                const maleTotal =
+                  maleData && typeof maleData.total_responded === "number"
+                    ? maleData.total_responded
+                    : 0;
+                const femaleTotal =
+                  femaleData && typeof femaleData.total_responded === "number"
+                    ? femaleData.total_responded
+                    : 0;
+                const diseaseNotes = Array.isArray(diseaseData.notes)
+                  ? diseaseData.notes.filter((n): n is string => typeof n === "string")
+                  : [];
+                const notCounted = Array.isArray(diseaseData.not_counted)
+                  ? (diseaseData.not_counted as Record<string, unknown>[])
+                  : [];
+                const openDisease = openDiseasePanels[code] ?? false;
+
+                return (
+                  <div key={code}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenDiseasePanels((prev) => ({
+                          ...prev,
+                          [code]: !openDisease,
+                        }))
+                      }
+                    >
+                      {openDisease ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">{label}</span>
+                      <span className="text-[11px] text-zinc-500 ml-auto tabular-nums">
+                        {maleTotal} men · {femaleTotal} women
+                      </span>
+                    </button>
+                    {openDisease && (
+                      <div className="px-3 pb-3 space-y-3 border-t border-zinc-100">
+                        {diseaseNotes.length > 0 && (
+                          <ul className="space-y-1 pt-2">
+                            {diseaseNotes.map((note) => (
+                              <li
+                                key={note}
+                                className="text-[11px] text-zinc-600 leading-relaxed"
+                              >
+                                {note}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {(["male", "female"] as const).map((gender) => {
+                          const genderData =
+                            gender === "male" ? maleData : femaleData;
+                          if (!genderData) return null;
+                          const genderLabel = gender === "male" ? "Men" : "Women";
+                          const groups =
+                            genderData.groups && typeof genderData.groups === "object"
+                              ? (genderData.groups as Record<string, Record<string, unknown>>)
+                              : null;
+                          const percentMath =
+                            genderData.percent_math &&
+                            typeof genderData.percent_math === "object"
+                              ? (genderData.percent_math as Record<string, unknown>)
+                              : null;
+                          const elevatedMathGender =
+                            genderData.elevated_math &&
+                            typeof genderData.elevated_math === "object"
+                              ? (genderData.elevated_math as Record<string, unknown>)
+                              : null;
+                          const elevatedSteps = Array.isArray(elevatedMathGender?.steps)
+                            ? elevatedMathGender.steps.filter(
+                                (s): s is string => typeof s === "string"
+                              )
+                            : [];
+                          const percentMathKey = `${code}:${gender}:percent`;
+                          const openPercent = openDiseasePercentMath[percentMathKey] ?? false;
+
+                          return (
+                            <div
+                              key={`${code}-${gender}`}
+                              className="rounded-lg border border-zinc-200 bg-zinc-50/50"
+                            >
+                              <div className="px-3 py-2 text-xs font-medium text-zinc-800">
+                                {genderLabel}
+                              </div>
+                              {elevatedSteps.length > 0 && (
+                                <div className="px-3 pb-2 space-y-1">
+                                  <p className="text-[11px] font-medium text-zinc-700">
+                                    {elevatedMathTitle}
+                                  </p>
+                                  {typeof elevatedMathGender?.result_percent === "number" && (
+                                    <p className="text-[11px] text-zinc-600">
+                                      Result:{" "}
+                                      <span className="font-medium tabular-nums">
+                                        {elevatedMathGender.result_percent}%
+                                      </span>
+                                    </p>
+                                  )}
+                                  <ol className="space-y-1 list-none">
+                                    {elevatedSteps.map((step) => (
+                                      <li
+                                        key={step}
+                                        className="text-[11px] text-zinc-700 leading-relaxed"
+                                      >
+                                        {step}
+                                      </li>
+                                    ))}
+                                  </ol>
+                                </div>
+                              )}
+                              {percentMath && Object.keys(percentMath).length > 0 && (
+                                <div className="px-3 pb-2">
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-700 hover:text-zinc-900"
+                                    onClick={() =>
+                                      setOpenDiseasePercentMath((prev) => ({
+                                        ...prev,
+                                        [percentMathKey]: !openPercent,
+                                      }))
+                                    }
+                                  >
+                                    {openPercent ? (
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                    )}
+                                    Band shares — step by step
+                                  </button>
+                                  {openPercent && (
+                                    <div className="mt-2 space-y-2">
+                                      {Object.entries(percentMath).map(([band, mathRaw]) => {
+                                        const math =
+                                          mathRaw && typeof mathRaw === "object"
+                                            ? (mathRaw as Record<string, unknown>)
+                                            : null;
+                                        const steps = Array.isArray(math?.steps)
+                                          ? math.steps.filter(
+                                              (s): s is string => typeof s === "string"
+                                            )
+                                          : [];
+                                        if (steps.length === 0) return null;
+                                        return (
+                                          <div
+                                            key={band}
+                                            className="rounded border border-zinc-200 bg-white px-2 py-1.5"
+                                          >
+                                            <p className="text-[11px] font-medium text-zinc-800">
+                                              {formatOrsBandLabel(band)}
+                                            </p>
+                                            <ol className="mt-1 space-y-0.5 list-none">
+                                              {steps.map((step) => (
+                                                <li
+                                                  key={step}
+                                                  className="text-[10px] text-zinc-600 leading-relaxed"
+                                                >
+                                                  {step}
+                                                </li>
+                                              ))}
+                                            </ol>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {groups && (
+                                <div className="divide-y divide-zinc-100 border-t border-zinc-200">
+                                  {Object.entries(groups).map(([band, groupRaw]) => {
+                                    const groupData =
+                                      groupRaw && typeof groupRaw === "object"
+                                        ? (groupRaw as Record<string, unknown>)
+                                        : null;
+                                    const count =
+                                      groupData && typeof groupData.count === "number"
+                                        ? groupData.count
+                                        : null;
+                                    const rangeLabel =
+                                      groupData &&
+                                      typeof groupData.score_range_label === "string"
+                                        ? groupData.score_range_label
+                                        : null;
+                                    const people = Array.isArray(groupData?.people)
+                                      ? (groupData.people as Record<string, unknown>[])
+                                      : [];
+                                    const accordionKey = `${code}:${gender}:${band}`;
+                                    const openGroup = openDiseaseGroups[accordionKey] ?? false;
+                                    return (
+                                      <div key={accordionKey}>
+                                        <button
+                                          type="button"
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-50"
+                                          onClick={() =>
+                                            setOpenDiseaseGroups((prev) => ({
+                                              ...prev,
+                                              [accordionKey]: !openGroup,
+                                            }))
+                                          }
+                                        >
+                                          {openGroup ? (
+                                            <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                          ) : (
+                                            <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                          )}
+                                          <span className="text-[11px] font-medium text-zinc-800">
+                                            {formatOrsBandLabel(band)}
+                                          </span>
+                                          {rangeLabel && (
+                                            <span className="text-[10px] text-zinc-500">
+                                              {scoreBandLabel} {rangeLabel}
+                                            </span>
+                                          )}
+                                          <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                                            {count == null ? "—" : `${count} people`}
+                                          </span>
+                                        </button>
+                                        {openGroup && (
+                                          <div className="px-3 pb-2 overflow-x-auto">
+                                            {people.length === 0 ? (
+                                              <p className="text-[10px] text-zinc-500 px-1">
+                                                No one in this group.
+                                              </p>
+                                            ) : (
+                                              <table className="w-full text-[10px] text-left">
+                                                <thead>
+                                                  <tr className="text-zinc-500 border-b border-zinc-100">
+                                                    <th className="py-1 pr-2 font-medium">Name</th>
+                                                    <th className="py-1 pr-2 font-medium">User ID</th>
+                                                    <th className="py-1 pr-2 font-medium">
+                                                      Risk score
+                                                    </th>
+                                                    <th className="py-1 font-medium">
+                                                      Report code
+                                                    </th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-zinc-50">
+                                                  {people.map((person, idx) => (
+                                                    <tr key={`${String(person.user_id)}-${idx}`}>
+                                                      <td className="py-1 pr-2 text-zinc-800">
+                                                        {person.name == null
+                                                          ? "—"
+                                                          : String(person.name)}
+                                                      </td>
+                                                      <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                                        {person.user_id == null
+                                                          ? "—"
+                                                          : String(person.user_id)}
+                                                      </td>
+                                                      <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                                        {person.risk_score == null
+                                                          ? "—"
+                                                          : String(person.risk_score)}
+                                                      </td>
+                                                      <td className="py-1 text-zinc-700">
+                                                        {person.report_code == null
+                                                          ? code
+                                                          : String(person.report_code)}
+                                                      </td>
+                                                    </tr>
+                                                  ))}
+                                                </tbody>
+                                              </table>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {notCounted.length > 0 && (
+                          <div className="rounded border border-zinc-200 bg-white overflow-hidden">
+                            <div className="px-3 py-2 bg-zinc-50 text-[11px] font-medium text-zinc-800">
+                              Not counted for this disease ({notCounted.length})
+                            </div>
+                            <div className="px-3 pb-2 overflow-x-auto">
+                              <table className="w-full text-[10px] text-left">
+                                <thead>
+                                  <tr className="text-zinc-500 border-b border-zinc-100">
+                                    <th className="py-1 pr-2 font-medium">Name</th>
+                                    <th className="py-1 pr-2 font-medium">User ID</th>
+                                    <th className="py-1 font-medium">Reason</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-50">
+                                  {notCounted.map((person, idx) => (
+                                    <tr key={`${String(person.user_id)}-${idx}`}>
+                                      <td className="py-1 pr-2 text-zinc-800">
+                                        {person.name == null ? "—" : String(person.name)}
+                                      </td>
+                                      <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                        {person.user_id == null
+                                          ? "—"
+                                          : String(person.user_id)}
+                                      </td>
+                                      <td className="py-1 text-zinc-700">
+                                        {person.reason == null ? "—" : String(person.reason)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {unknownGenderPeople.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Unknown gender ({unknownGenderPeople.length})
+            </div>
+            <div className="px-3 pb-3 overflow-x-auto">
+              <table className="w-full text-[11px] text-left">
+                <thead>
+                  <tr className="text-zinc-500 border-b border-zinc-100">
+                    <th className="py-1.5 pr-3 font-medium">Name</th>
+                    <th className="py-1.5 pr-3 font-medium">User ID</th>
+                    <th className="py-1.5 font-medium">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {unknownGenderPeople.map((person, idx) => (
+                    <tr key={`${String(person.user_id)}-${idx}`}>
+                      <td className="py-1.5 pr-3 text-zinc-800">
+                        {person.name == null ? "—" : String(person.name)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                        {person.user_id == null ? "—" : String(person.user_id)}
+                      </td>
+                      <td className="py-1.5 text-zinc-700">
+                        {person.reason == null ? "—" : String(person.reason)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
