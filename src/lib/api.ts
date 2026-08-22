@@ -1596,7 +1596,12 @@ export interface CabinSlotConfig {
   is_active: boolean;
 }
 
-export type SlotDetailSection = Record<string, CabinSlotConfig[]>;
+export interface DateSlotConfig {
+  is_enable: boolean;
+  cabins: CabinSlotConfig[];
+}
+
+export type SlotDetailSection = Record<string, DateSlotConfig>;
 
 export interface SlotDetail {
   blood_collection?: SlotDetailSection | null;

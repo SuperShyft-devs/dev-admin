@@ -32,11 +32,13 @@ import {
   cabinKeyFromName,
   createEmptyCabin,
   getCabinsForDate,
+  isSectionDateEnabled,
   normalizeCabinKeyInput,
   normalizeCabinTimes,
   removeCabin,
   removeDateFromSection,
   mergeSectionDates,
+  setDateEnabled,
   uniqueCabinKey,
   upsertCabin,
   validateBreak,
@@ -257,6 +259,11 @@ export function EngagementScheduleStep({
     }
     setEditingCabin((prev) => (prev?.date === date ? null : prev));
     setEditingBreak(null);
+  };
+
+  const handleToggleDateEnabled = (section: CabinSectionKey, date: string) => {
+    const enabled = isSectionDateEnabled(slotDetail, section, date);
+    onSlotDetailChange(setDateEnabled(slotDetail, date, !enabled, [section]));
   };
 
   const startNewCabin = (section: CabinSectionKey, date: string) => {
@@ -531,6 +538,7 @@ export function EngagementScheduleStep({
         onStartNewCabin={startNewCabin}
         onEditCabin={startEditCabin}
         onDeleteCabin={deleteCabin}
+        onToggleDateEnabled={(date) => handleToggleDateEnabled(currentSection, date)}
         selectedDateHasNoCabins={selectedDateHasNoCabins}
         expertTypes={expertTypes}
       />
@@ -607,6 +615,7 @@ function SectionSchedulePanel({
   onStartNewCabin,
   onEditCabin,
   onDeleteCabin,
+  onToggleDateEnabled,
   selectedDateHasNoCabins,
   expertTypes = [],
 }: {
@@ -629,11 +638,14 @@ function SectionSchedulePanel({
   onStartNewCabin: (section: CabinSectionKey, date: string) => void;
   onEditCabin: (section: CabinSectionKey, date: string, cabin: CabinSlotConfig) => void;
   onDeleteCabin: (section: CabinSectionKey, date: string, cabinKey: string) => void;
+  onToggleDateEnabled: (date: string) => void;
   selectedDateHasNoCabins: boolean;
   expertTypes?: ExpertTypeItem[];
 }) {
   const addCabinLabel =
     section === "blood_collection" ? "Add Blood-Test Cabin" : "Add Consultation Cabin";
+  const selectedDateEnabled =
+    selectedDate != null ? isSectionDateEnabled(slotDetail, section, selectedDate) : true;
 
   return (
     <div className="space-y-3">
@@ -641,6 +653,7 @@ function SectionSchedulePanel({
         {sortedDates.map((date) => {
           const selected = date === selectedDate;
           const cabinCount = getCabinsForDate(slotDetail, section, date).length;
+          const dateEnabled = isSectionDateEnabled(slotDetail, section, date);
           return (
             <div
               key={date}
@@ -656,20 +669,30 @@ function SectionSchedulePanel({
               className={`relative min-w-[9.5rem] rounded-lg border px-3 py-2 pr-8 cursor-pointer ${
                 selected
                   ? "border-zinc-900 bg-zinc-900 text-white"
-                  : cabinCount === 0
-                    ? "border-amber-300 bg-amber-50 text-zinc-900 hover:border-amber-400"
-                    : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400"
+                  : !dateEnabled
+                    ? "border-zinc-300 bg-zinc-100 text-zinc-600 hover:border-zinc-400"
+                    : cabinCount === 0
+                      ? "border-amber-300 bg-amber-50 text-zinc-900 hover:border-amber-400"
+                      : "border-zinc-200 bg-white text-zinc-900 hover:border-zinc-400"
               }`}
             >
               <p className="text-sm font-medium">{formatDateLabel(date)}</p>
               <p
                 className={`text-xs mt-0.5 ${
-                  selected ? "text-white/70" : cabinCount === 0 ? "text-amber-700" : "text-zinc-500"
+                  selected
+                    ? "text-white/70"
+                    : !dateEnabled
+                      ? "text-zinc-500"
+                      : cabinCount === 0
+                        ? "text-amber-700"
+                        : "text-zinc-500"
                 }`}
               >
-                {cabinCount === 0
-                  ? "No cabins"
-                  : `${cabinCount} cabin${cabinCount === 1 ? "" : "s"}`}
+                {!dateEnabled
+                  ? "Disabled"
+                  : cabinCount === 0
+                    ? "No cabins"
+                    : `${cabinCount} cabin${cabinCount === 1 ? "" : "s"}`}
               </p>
               <button
                 type="button"
@@ -736,31 +759,54 @@ function SectionSchedulePanel({
 
       {selectedDate && (
         <div className="rounded-lg border border-zinc-200 p-4 space-y-3">
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-900">{formatDateLabel(selectedDate)}</h4>
-            {selectedDateHasNoCabins && (
-              <p className="text-xs text-amber-700 mt-1">
-                This date won&apos;t be saved until you add at least one cabin.
-              </p>
-            )}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-zinc-900">{formatDateLabel(selectedDate)}</h4>
+              {selectedDateEnabled && selectedDateHasNoCabins && (
+                <p className="text-xs text-amber-700 mt-1">
+                  This date won&apos;t be saved until you add at least one cabin.
+                </p>
+              )}
+              {!selectedDateEnabled && (
+                <p className="text-xs text-zinc-500 mt-1">
+                  Date disabled — cabin details are hidden and will not appear in the public
+                  schedule.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onToggleDateEnabled(selectedDate)}
+              className={`px-3 py-1.5 rounded-lg border text-sm font-medium ${
+                selectedDateEnabled
+                  ? "border-zinc-300 text-zinc-800 hover:bg-zinc-50"
+                  : "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              {selectedDateEnabled ? "Disable" : "Enable"}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onStartNewCabin(section, selectedDate)}
-            className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-          >
-            {addCabinLabel}
-          </button>
+          {selectedDateEnabled && (
+            <>
+              <button
+                type="button"
+                onClick={() => onStartNewCabin(section, selectedDate)}
+                className="px-3 py-1.5 rounded-lg border border-zinc-300 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+              >
+                {addCabinLabel}
+              </button>
 
-          <CabinList
-            title={`${sectionTitle(section)} Cabins`}
-            cabins={getCabinsForDate(slotDetail, section, selectedDate)}
-            expertTypes={expertTypes}
-            showExpertType={section === "consultation"}
-            onEdit={(cabin) => onEditCabin(section, selectedDate, cabin)}
-            onDelete={(key) => onDeleteCabin(section, selectedDate, key)}
-          />
+              <CabinList
+                title={`${sectionTitle(section)} Cabins`}
+                cabins={getCabinsForDate(slotDetail, section, selectedDate)}
+                expertTypes={expertTypes}
+                showExpertType={section === "consultation"}
+                onEdit={(cabin) => onEditCabin(section, selectedDate, cabin)}
+                onDelete={(key) => onDeleteCabin(section, selectedDate, key)}
+              />
+            </>
+          )}
         </div>
       )}
     </div>

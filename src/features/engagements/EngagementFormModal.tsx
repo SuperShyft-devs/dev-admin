@@ -344,7 +344,9 @@ export function EngagementFormModal({
     (section: "blood_collection" | "consultation") => {
       const data = slotDetail[section];
       if (!data) return false;
-      return Object.values(data).some((cabins) => cabins.length > 0);
+      return Object.values(data).some(
+        (entry) => entry.cabins.length > 0 || entry.is_enable === false
+      );
     },
     [slotDetail]
   );
