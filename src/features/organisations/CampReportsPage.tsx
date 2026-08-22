@@ -235,6 +235,9 @@ function formatFieldLabel(key: string): string {
     answered_vs_questionnaire_completed: "Answered vs questionnaire completed",
     unknown_answers: "Unrecognized answers",
     unknown_gender: "Gender not male or female",
+    "nutrition.score": "Nutrition score",
+    "fitness.score": "Fitness score",
+    "lifestyle.score": "Lifestyle score",
   };
   if (labels[key]) return labels[key];
   return key.replace(/\./g, " · ").replace(/_/g, " ");
@@ -296,6 +299,14 @@ function BtsModalBody({
   const [openPositiveWinsSections, setOpenPositiveWinsSections] = useState<Record<string, boolean>>({});
   const [openPositiveWinsPeople, setOpenPositiveWinsPeople] = useState<Record<string, boolean>>({});
   const [openPositiveWinsParticipants, setOpenPositiveWinsParticipants] = useState(false);
+  const [openCompanyAverageScoreSections, setOpenCompanyAverageScoreSections] = useState<
+    Record<string, boolean>
+  >({});
+  const [openCompanyAverageParticipants, setOpenCompanyAverageParticipants] = useState(false);
+  const [openCompanyAverageExcluded, setOpenCompanyAverageExcluded] = useState(false);
+  const [openCompanyAveragePersonScores, setOpenCompanyAveragePersonScores] = useState<
+    Record<string, boolean>
+  >({});
 
   if (data == null) {
     return (
@@ -441,6 +452,37 @@ function BtsModalBody({
   const positiveWinsParticipants = Array.isArray(details?.participants)
     ? (details.participants as Record<string, unknown>[])
     : [];
+  const isCompanyAverageScoresBts =
+    method?.section_kind === "company_average_scores" ||
+    (details?.aggregation != null && details?.summary != null);
+  const companyAverageSummary =
+    details?.summary && typeof details.summary === "object"
+      ? (details.summary as Record<string, unknown>)
+      : null;
+  const companyAverageAggregation =
+    details?.aggregation && typeof details.aggregation === "object"
+      ? (details.aggregation as Record<string, Record<string, unknown>>)
+      : null;
+  const companyAverageParticipants = Array.isArray(details?.participants)
+    ? (details.participants as Record<string, unknown>[])
+    : [];
+  const companyAverageExcluded =
+    details?.excluded && typeof details.excluded === "object"
+      ? (details.excluded as Record<string, unknown[]>)
+      : null;
+  const companyAverageNotes = Array.isArray(details?.notes)
+    ? details.notes.filter((n): n is string => typeof n === "string")
+    : [];
+  const companyAverageExcludedNoFitprint = Array.isArray(companyAverageExcluded?.no_fitprint)
+    ? (companyAverageExcluded.no_fitprint as Record<string, unknown>[])
+    : [];
+  const companyAverageExcludedReportFailed = Array.isArray(
+    companyAverageExcluded?.report_load_failed
+  )
+    ? (companyAverageExcluded.report_load_failed as Record<string, unknown>[])
+    : [];
+  const companyAverageExcludedTotal =
+    companyAverageExcludedNoFitprint.length + companyAverageExcludedReportFailed.length;
 
   const qgdExceptionSections: {
     key: string;
@@ -490,6 +532,23 @@ function BtsModalBody({
 
   function formatQgdGroupLabel(bucket: string): string {
     return bucket.replace(/_/g, " ");
+  }
+
+  function formatCompanyAverageScoreCell(category: unknown): string {
+    if (!category || typeof category !== "object") return "—";
+    const score = (category as Record<string, unknown>).score;
+    const status = (category as Record<string, unknown>).status;
+    if (score == null) {
+      return status === "missing" ? "Missing" : "—";
+    }
+    return String(score);
+  }
+
+  function companyAverageScoreStatusClass(category: unknown): string {
+    if (!category || typeof category !== "object") return "text-zinc-500";
+    const status = (category as Record<string, unknown>).status;
+    if (status === "missing") return "text-amber-700";
+    return "text-zinc-800";
   }
 
   if (fields || status === "ok" || status === "mismatch") {
@@ -1741,6 +1800,308 @@ function BtsModalBody({
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {isCompanyAverageScoresBts && companyAverageSummary && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-zinc-800">Summary</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-zinc-600">
+              <span>Total enrolled in scope</span>
+              <span className="tabular-nums text-right">
+                {String(companyAverageSummary.total_enrolled ?? "—")}
+              </span>
+              <span>With FitPrint (used in averages)</span>
+              <span className="tabular-nums text-right">
+                {String(companyAverageSummary.with_fitprint ?? "—")}
+              </span>
+              <span>Without FitPrint</span>
+              <span className="tabular-nums text-right">
+                {String(companyAverageSummary.without_fitprint ?? "—")}
+              </span>
+              <span>Skipped due to report error</span>
+              <span className="tabular-nums text-right">
+                {String(companyAverageSummary.skipped_report_errors ?? "—")}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {isCompanyAverageScoresBts && companyAverageAggregation && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              How each average was calculated
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {(["nutrition", "fitness", "lifestyle"] as const).map((categoryKey) => {
+                const categoryData = companyAverageAggregation[categoryKey];
+                if (!categoryData) return null;
+                const label =
+                  typeof categoryData.label === "string"
+                    ? categoryData.label
+                    : categoryKey.charAt(0).toUpperCase() + categoryKey.slice(1);
+                const steps = Array.isArray(categoryData.steps)
+                  ? categoryData.steps.filter((s): s is string => typeof s === "string")
+                  : [];
+                const roundedScore = categoryData.rounded_score;
+                const openSection = openCompanyAverageScoreSections[categoryKey] ?? false;
+
+                return (
+                  <div key={categoryKey}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenCompanyAverageScoreSections((prev) => ({
+                          ...prev,
+                          [categoryKey]: !openSection,
+                        }))
+                      }
+                    >
+                      {openSection ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">{label}</span>
+                      <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                        Chart score: {roundedScore == null ? "—" : String(roundedScore)}
+                      </span>
+                    </button>
+                    {openSection && steps.length > 0 && (
+                      <div className="px-3 pb-3 border-t border-zinc-100">
+                        <ol className="mt-2 space-y-1 list-none">
+                          {steps.map((step) => (
+                            <li
+                              key={step}
+                              className="text-[11px] text-zinc-700 leading-relaxed"
+                            >
+                              {step}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isCompanyAverageScoresBts && companyAverageParticipants.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenCompanyAverageParticipants((prev) => !prev)}
+            >
+              {openCompanyAverageParticipants ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                Each person&apos;s scores
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {companyAverageParticipants.length} people
+              </span>
+            </button>
+            {openCompanyAverageParticipants && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100 space-y-2 pt-2">
+                {companyAverageParticipants.map((person, idx) => {
+                  const personKey = `${String(person.user_id ?? idx)}-${idx}`;
+                  const openPerson = openCompanyAveragePersonScores[personKey] ?? false;
+                  const nutrition = person.nutrition;
+                  const fitness = person.fitness;
+                  const lifestyle = person.lifestyle;
+
+                  return (
+                    <div
+                      key={personKey}
+                      className="rounded border border-zinc-200 bg-white overflow-hidden"
+                    >
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-50"
+                        onClick={() =>
+                          setOpenCompanyAveragePersonScores((prev) => ({
+                            ...prev,
+                            [personKey]: !openPerson,
+                          }))
+                        }
+                      >
+                        {openPerson ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        )}
+                        <span className="text-[11px] font-medium text-zinc-800">
+                          {person.name == null ? "—" : String(person.name)}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 tabular-nums ml-auto">
+                          N {formatCompanyAverageScoreCell(nutrition)} · F{" "}
+                          {formatCompanyAverageScoreCell(fitness)} · L{" "}
+                          {formatCompanyAverageScoreCell(lifestyle)}
+                        </span>
+                      </button>
+                      {openPerson && (
+                        <div className="px-3 pb-2 border-t border-zinc-100 space-y-2 pt-2">
+                          <p className="text-[10px] text-zinc-500 tabular-nums">
+                            User ID {person.user_id == null ? "—" : String(person.user_id)}
+                            {person.assessment_instance_id != null && (
+                              <>
+                                {" "}
+                                · FitPrint assessment{" "}
+                                {String(person.assessment_instance_id)}
+                              </>
+                            )}
+                          </p>
+                          {(["nutrition", "fitness", "lifestyle"] as const).map((categoryKey) => {
+                            const category = person[categoryKey];
+                            if (!category || typeof category !== "object") return null;
+                            const categoryRecord = category as Record<string, unknown>;
+                            const steps = Array.isArray(categoryRecord.steps)
+                              ? categoryRecord.steps.filter(
+                                  (s): s is string => typeof s === "string"
+                                )
+                              : [];
+                            const categoryLabel =
+                              categoryKey === "nutrition"
+                                ? "Nutrition"
+                                : categoryKey === "fitness"
+                                  ? "Fitness"
+                                  : "Lifestyle";
+                            return (
+                              <div
+                                key={`${personKey}-${categoryKey}`}
+                                className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1.5"
+                              >
+                                <p
+                                  className={`text-[10px] font-medium ${companyAverageScoreStatusClass(category)}`}
+                                >
+                                  {categoryLabel}: {formatCompanyAverageScoreCell(category)}
+                                </p>
+                                {steps.length > 0 && (
+                                  <ul className="mt-1 space-y-0.5">
+                                    {steps.map((step) => (
+                                      <li
+                                        key={step}
+                                        className="text-[10px] text-zinc-600 leading-relaxed"
+                                      >
+                                        {step}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isCompanyAverageScoresBts && companyAverageExcludedTotal > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenCompanyAverageExcluded((prev) => !prev)}
+            >
+              {openCompanyAverageExcluded ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">Excluded people</span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {companyAverageExcludedTotal}
+              </span>
+            </button>
+            {openCompanyAverageExcluded && (
+              <div className="px-3 pb-3 border-t border-zinc-100 space-y-3 pt-2">
+                {companyAverageExcludedNoFitprint.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-zinc-800 mb-1">
+                      No FitPrint assessment
+                    </p>
+                    <table className="w-full text-[11px] text-left">
+                      <thead>
+                        <tr className="text-zinc-500 border-b border-zinc-100">
+                          <th className="py-1.5 pr-3 font-medium">Name</th>
+                          <th className="py-1.5 pr-3 font-medium">User ID</th>
+                          <th className="py-1.5 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-50">
+                        {companyAverageExcludedNoFitprint.map((person, idx) => (
+                          <tr key={`no-fp-${String(person.user_id)}-${idx}`}>
+                            <td className="py-1.5 pr-3 text-zinc-800">
+                              {person.name == null ? "—" : String(person.name)}
+                            </td>
+                            <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                              {person.user_id == null ? "—" : String(person.user_id)}
+                            </td>
+                            <td className="py-1.5 text-zinc-600">
+                              {person.reason == null ? "—" : String(person.reason)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {companyAverageExcludedReportFailed.length > 0 && (
+                  <div>
+                    <p className="text-[11px] font-medium text-zinc-800 mb-1">
+                      Report could not load
+                    </p>
+                    <table className="w-full text-[11px] text-left">
+                      <thead>
+                        <tr className="text-zinc-500 border-b border-zinc-100">
+                          <th className="py-1.5 pr-3 font-medium">Name</th>
+                          <th className="py-1.5 pr-3 font-medium">User ID</th>
+                          <th className="py-1.5 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-50">
+                        {companyAverageExcludedReportFailed.map((person, idx) => (
+                          <tr key={`load-fail-${String(person.user_id)}-${idx}`}>
+                            <td className="py-1.5 pr-3 text-zinc-800">
+                              {person.name == null ? "—" : String(person.name)}
+                            </td>
+                            <td className="py-1.5 pr-3 text-zinc-700 tabular-nums">
+                              {person.user_id == null ? "—" : String(person.user_id)}
+                            </td>
+                            <td className="py-1.5 text-zinc-600">
+                              {person.reason == null ? "—" : String(person.reason)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isCompanyAverageScoresBts && companyAverageNotes.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-medium text-zinc-800">Notes</p>
+            {companyAverageNotes.map((note) => (
+              <p key={note} className="text-[12px] text-zinc-600 leading-relaxed">
+                {note}
+              </p>
+            ))}
           </div>
         )}
 
