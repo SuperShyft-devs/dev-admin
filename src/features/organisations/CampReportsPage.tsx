@@ -293,6 +293,9 @@ function BtsModalBody({
   const [openDiseasePanels, setOpenDiseasePanels] = useState<Record<string, boolean>>({});
   const [openDiseaseGroups, setOpenDiseaseGroups] = useState<Record<string, boolean>>({});
   const [openDiseasePercentMath, setOpenDiseasePercentMath] = useState<Record<string, boolean>>({});
+  const [openPositiveWinsSections, setOpenPositiveWinsSections] = useState<Record<string, boolean>>({});
+  const [openPositiveWinsPeople, setOpenPositiveWinsPeople] = useState<Record<string, boolean>>({});
+  const [openPositiveWinsParticipants, setOpenPositiveWinsParticipants] = useState(false);
 
   if (data == null) {
     return (
@@ -379,6 +382,12 @@ function BtsModalBody({
   const orsBandRules = Array.isArray(method?.band_rules)
     ? (method.band_rules as Record<string, unknown>[])
     : [];
+  const diseaseBtsDetails =
+    details?.diseases && typeof details.diseases === "object"
+      ? (details.diseases as Record<string, Record<string, unknown>>)
+      : null;
+  const isDiseaseRiskBts =
+    diseaseBtsDetails != null && Object.keys(diseaseBtsDetails).length > 0;
   const isOxidativeStressBts =
     elevatedMath?.kind === "oxidative_stress" ||
     method?.with_oxidative_stress_score != null;
@@ -407,10 +416,6 @@ function BtsModalBody({
     details?.comparison && typeof details.comparison === "object"
       ? (details.comparison as Record<string, unknown>)
       : null;
-  const diseaseBtsDetails =
-    details?.diseases && typeof details.diseases === "object"
-      ? (details.diseases as Record<string, Record<string, unknown>>)
-      : null;
   const unknownGender =
     details?.unknown_gender && typeof details.unknown_gender === "object"
       ? (details.unknown_gender as Record<string, unknown>)
@@ -418,7 +423,24 @@ function BtsModalBody({
   const unknownGenderPeople = Array.isArray(unknownGender?.people)
     ? (unknownGender.people as Record<string, unknown>[])
     : [];
-  const isDiseaseRiskBts = diseaseBtsDetails != null && Object.keys(diseaseBtsDetails).length > 0;
+  const isPositiveWinsBts =
+    method?.section_kind === "positive_wins" ||
+    (details?.low_risk != null && details?.healthy_habits != null);
+  const positiveWinsLowRisk =
+    details?.low_risk && typeof details.low_risk === "object"
+      ? (details.low_risk as Record<string, unknown>)
+      : null;
+  const positiveWinsHabits =
+    details?.healthy_habits && typeof details.healthy_habits === "object"
+      ? (details.healthy_habits as Record<string, unknown>)
+      : null;
+  const positiveWinsProfiles =
+    details?.healthy_profiles && typeof details.healthy_profiles === "object"
+      ? (details.healthy_profiles as Record<string, unknown>)
+      : null;
+  const positiveWinsParticipants = Array.isArray(details?.participants)
+    ? (details.participants as Record<string, unknown>[])
+    : [];
 
   const qgdExceptionSections: {
     key: string;
@@ -698,7 +720,12 @@ function BtsModalBody({
               <span aria-hidden className="w-6" />
             </div>
             <div className="divide-y divide-zinc-100">
-              {Object.entries(fields).map(([key, raw]) => {
+              {Object.entries(fields)
+                .filter(
+                  ([key]) =>
+                    !isPositiveWinsBts || !/^low_risk\.\d+\.name$/.test(key)
+                )
+                .map(([key, raw]) => {
                 if (!isBtsFieldEntry(raw)) {
                   return (
                     <div key={key} className="px-3 py-2 text-xs text-zinc-600">
@@ -1322,6 +1349,398 @@ function BtsModalBody({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {isPositiveWinsBts && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <div className="px-3 py-2 bg-zinc-50 text-xs font-medium text-zinc-800">
+              Positive Wins breakdown
+            </div>
+            <div className="divide-y divide-zinc-100">
+              {(
+                [
+                  {
+                    key: "low_risk",
+                    title: "Top healthy diseases",
+                    data: positiveWinsLowRisk,
+                    peopleKeyPrefix: "low_risk",
+                  },
+                  {
+                    key: "healthy_habits",
+                    title: "Top healthy habits",
+                    data: positiveWinsHabits,
+                    peopleKeyPrefix: "habits",
+                  },
+                  {
+                    key: "healthy_profiles",
+                    title: "Top healthy blood profiles",
+                    data: positiveWinsProfiles,
+                    peopleKeyPrefix: "profiles",
+                  },
+                ] as const
+              ).map(({ key, title, data, peopleKeyPrefix }) => {
+                if (!data) return null;
+                const selectionMath =
+                  data.selection_math && typeof data.selection_math === "object"
+                    ? (data.selection_math as Record<string, unknown>)
+                    : null;
+                const selectionSteps = Array.isArray(selectionMath?.steps)
+                  ? selectionMath.steps.filter((s): s is string => typeof s === "string")
+                  : [];
+                const selected = Array.isArray(data.selected)
+                  ? (data.selected as Record<string, unknown>[])
+                  : [];
+                const ranking = Array.isArray(data.ranking)
+                  ? (data.ranking as Record<string, unknown>[])
+                  : [];
+                const perPersonRule =
+                  typeof data.per_person_rule === "string" ? data.per_person_rule : null;
+                const openSection = openPositiveWinsSections[key] ?? false;
+
+                return (
+                  <div key={key}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50"
+                      onClick={() =>
+                        setOpenPositiveWinsSections((prev) => ({
+                          ...prev,
+                          [key]: !openSection,
+                        }))
+                      }
+                    >
+                      {openSection ? (
+                        <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+                      )}
+                      <span className="text-xs font-medium text-zinc-800">{title}</span>
+                      <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                        {selected.length} on chart
+                      </span>
+                    </button>
+                    {openSection && (
+                      <div className="px-3 pb-3 space-y-3 border-t border-zinc-100">
+                        {perPersonRule && (
+                          <p className="text-[11px] text-zinc-600 leading-relaxed pt-2">
+                            Per person: {perPersonRule}
+                          </p>
+                        )}
+                        {selectionSteps.length > 0 && (
+                          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 space-y-1">
+                            <p className="text-[11px] font-medium text-zinc-800">
+                              How we picked the camp top 3
+                            </p>
+                            <ol className="space-y-1 list-none">
+                              {selectionSteps.map((step) => (
+                                <li
+                                  key={step}
+                                  className="text-[11px] text-zinc-700 leading-relaxed"
+                                >
+                                  {step}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        {selected.length > 0 && (
+                          <div className="space-y-2">
+                            {selected.map((item, idx) => {
+                              const people = Array.isArray(item.people)
+                                ? (item.people as Record<string, unknown>[])
+                                : [];
+                              const itemKey =
+                                key === "low_risk"
+                                  ? String(item.code ?? idx)
+                                  : key === "healthy_habits"
+                                    ? String(item.habit_label ?? idx)
+                                    : String(item.profile_name ?? idx);
+                              const accordionKey = `${peopleKeyPrefix}:${itemKey}`;
+                              const openPeople = openPositiveWinsPeople[accordionKey] ?? false;
+                              const label =
+                                key === "low_risk"
+                                  ? String(item.name ?? item.code ?? "—")
+                                  : key === "healthy_habits"
+                                    ? String(item.habit_label ?? "—")
+                                    : String(item.profile_name ?? "—");
+                              const count =
+                                typeof item.count === "number" ? item.count : people.length;
+                              const riskScoreMath =
+                                key === "low_risk" &&
+                                item.risk_score_scaled_math &&
+                                typeof item.risk_score_scaled_math === "object"
+                                  ? (item.risk_score_scaled_math as Record<string, unknown>)
+                                  : null;
+                              const riskScoreMathSteps = Array.isArray(riskScoreMath?.steps)
+                                ? riskScoreMath.steps.filter(
+                                    (s): s is string => typeof s === "string"
+                                  )
+                                : [];
+                              const riskScoreMathKey = `${accordionKey}:score-math`;
+                              const openRiskScoreMath =
+                                openPositiveWinsPeople[riskScoreMathKey] ?? false;
+
+                              return (
+                                <div
+                                  key={accordionKey}
+                                  className="rounded border border-zinc-200 bg-white overflow-hidden"
+                                >
+                                  <button
+                                    type="button"
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-50"
+                                    onClick={() =>
+                                      setOpenPositiveWinsPeople((prev) => ({
+                                        ...prev,
+                                        [accordionKey]: !openPeople,
+                                      }))
+                                    }
+                                  >
+                                    {openPeople ? (
+                                      <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                                    )}
+                                    <span className="text-[11px] font-medium text-zinc-800">
+                                      {label}
+                                    </span>
+                                    <span className="text-[11px] text-zinc-500 tabular-nums ml-auto">
+                                      {count} people
+                                    </span>
+                                  </button>
+                                  {openPeople && (
+                                    <div className="px-3 pb-2 overflow-x-auto border-t border-zinc-100 space-y-2 pt-2">
+                                      {riskScoreMathSteps.length > 0 && (
+                                        <div className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1.5">
+                                          <button
+                                            type="button"
+                                            className="flex items-center gap-1.5 text-[10px] font-medium text-zinc-700 hover:text-zinc-900"
+                                            onClick={() =>
+                                              setOpenPositiveWinsPeople((prev) => ({
+                                                ...prev,
+                                                [riskScoreMathKey]: !openRiskScoreMath,
+                                              }))
+                                            }
+                                          >
+                                            {openRiskScoreMath ? (
+                                              <ChevronDown className="w-3 h-3" />
+                                            ) : (
+                                              <ChevronRight className="w-3 h-3" />
+                                            )}
+                                            Risk score on chart — step by step
+                                            {riskScoreMath?.result != null && (
+                                              <span className="text-zinc-500 font-normal tabular-nums ml-1">
+                                                ({String(riskScoreMath.result)})
+                                              </span>
+                                            )}
+                                          </button>
+                                          {openRiskScoreMath && (
+                                            <ol className="mt-1.5 space-y-0.5 list-none">
+                                              {riskScoreMathSteps.map((step) => (
+                                                <li
+                                                  key={step}
+                                                  className="text-[10px] text-zinc-600 leading-relaxed"
+                                                >
+                                                  {step}
+                                                </li>
+                                              ))}
+                                            </ol>
+                                          )}
+                                        </div>
+                                      )}
+                                      {people.length === 0 ? (
+                                        <p className="text-[10px] text-zinc-500 py-1">
+                                          No contributors listed.
+                                        </p>
+                                      ) : (
+                                        <table className="w-full text-[10px] text-left">
+                                          <thead>
+                                            <tr className="text-zinc-500 border-b border-zinc-100">
+                                              <th className="py-1 pr-2 font-medium">Name</th>
+                                              <th className="py-1 pr-2 font-medium">User ID</th>
+                                              {key === "low_risk" && (
+                                                <th className="py-1 font-medium">Risk score</th>
+                                              )}
+                                              {key === "healthy_habits" && (
+                                                <th className="py-1 font-medium">Habit key</th>
+                                              )}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-zinc-50">
+                                            {people.map((person, pIdx) => (
+                                              <tr key={`${String(person.user_id)}-${pIdx}`}>
+                                                <td className="py-1 pr-2 text-zinc-800">
+                                                  {person.name == null
+                                                    ? "—"
+                                                    : String(person.name)}
+                                                </td>
+                                                <td className="py-1 pr-2 text-zinc-700 tabular-nums">
+                                                  {person.user_id == null
+                                                    ? "—"
+                                                    : String(person.user_id)}
+                                                </td>
+                                                {key === "low_risk" && (
+                                                  <td className="py-1 text-zinc-700 tabular-nums">
+                                                    {person.risk_score_scaled == null
+                                                      ? "—"
+                                                      : String(person.risk_score_scaled)}
+                                                  </td>
+                                                )}
+                                                {key === "healthy_habits" && (
+                                                  <td className="py-1 text-zinc-700">
+                                                    {item.habit_key == null
+                                                      ? "—"
+                                                      : String(item.habit_key)}
+                                                  </td>
+                                                )}
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {ranking.length > selected.length && (
+                          <p className="text-[10px] text-zinc-500">
+                            {ranking.length - selected.length} more item(s) were counted but
+                            not shown because we only keep the top 3 on the chart.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {isPositiveWinsBts && positiveWinsParticipants.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-50 bg-zinc-50"
+              onClick={() => setOpenPositiveWinsParticipants((prev) => !prev)}
+            >
+              {openPositiveWinsParticipants ? (
+                <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-zinc-800">
+                Each person&apos;s lists
+              </span>
+              <span className="text-xs text-zinc-500 tabular-nums ml-auto">
+                {positiveWinsParticipants.length} people
+              </span>
+            </button>
+            {openPositiveWinsParticipants && (
+              <div className="px-3 pb-3 overflow-x-auto border-t border-zinc-100 space-y-3 pt-2">
+                {positiveWinsParticipants.map((person, idx) => {
+                  const personNotes =
+                    person.notes && typeof person.notes === "object"
+                      ? (person.notes as Record<string, unknown>)
+                      : null;
+                  const lowRiskMath =
+                    person.low_risk_math && typeof person.low_risk_math === "object"
+                      ? (person.low_risk_math as Record<string, unknown>)
+                      : null;
+                  const lowRiskMathSteps = Array.isArray(lowRiskMath?.steps)
+                    ? lowRiskMath.steps.filter((s): s is string => typeof s === "string")
+                    : [];
+                  const lowRiskByDisease =
+                    lowRiskMath?.by_disease && typeof lowRiskMath.by_disease === "object"
+                      ? (lowRiskMath.by_disease as Record<string, Record<string, unknown>>)
+                      : null;
+                  return (
+                    <div
+                      key={`${String(person.user_id)}-${idx}`}
+                      className="rounded border border-zinc-200 bg-zinc-50/50 px-3 py-2"
+                    >
+                      <p className="text-[11px] font-medium text-zinc-800">
+                        {person.name == null ? "—" : String(person.name)}
+                        <span className="text-zinc-500 font-normal ml-2 tabular-nums">
+                          ID {person.user_id == null ? "—" : String(person.user_id)}
+                        </span>
+                      </p>
+                      {lowRiskMathSteps.length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {lowRiskMathSteps.map((step) => (
+                            <li
+                              key={step}
+                              className="text-[10px] text-zinc-600 leading-relaxed"
+                            >
+                              {step}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {lowRiskByDisease &&
+                        Object.entries(lowRiskByDisease).map(([code, diseaseMath]) => {
+                          const diseaseSteps = Array.isArray(diseaseMath.steps)
+                            ? diseaseMath.steps.filter(
+                                (s): s is string => typeof s === "string"
+                              )
+                            : [];
+                          if (diseaseSteps.length === 0) return null;
+                          const diseaseName =
+                            typeof diseaseMath.name === "string"
+                              ? diseaseMath.name
+                              : code;
+                          return (
+                            <div
+                              key={`${String(person.user_id)}-${code}`}
+                              className="mt-2 rounded border border-zinc-200 bg-white px-2 py-1.5"
+                            >
+                              <p className="text-[10px] font-medium text-zinc-800">
+                                {diseaseName} ({code}) — risk_score_scaled step by step
+                                {diseaseMath.result != null && (
+                                  <span className="text-zinc-500 font-normal tabular-nums ml-1">
+                                    ({String(diseaseMath.result)})
+                                  </span>
+                                )}
+                              </p>
+                              <ol className="mt-1 space-y-0.5 list-none">
+                                {diseaseSteps.map((step) => (
+                                  <li
+                                    key={step}
+                                    className="text-[10px] text-zinc-600 leading-relaxed"
+                                  >
+                                    {step}
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          );
+                        })}
+                      {personNotes && (
+                        <ul className="mt-1 space-y-0.5">
+                          {(["low_risk", "healthy_habits", "healthy_profiles"] as const).map(
+                            (bucket) => {
+                              const note = personNotes[bucket];
+                              if (typeof note !== "string" || !note) return null;
+                              return (
+                                <li
+                                  key={bucket}
+                                  className="text-[10px] text-amber-800 leading-relaxed"
+                                >
+                                  {note}
+                                </li>
+                              );
+                            }
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
