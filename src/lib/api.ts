@@ -2165,6 +2165,7 @@ export interface Participant {
   status?: string | null;
   slot_start_time?: string | null;
   engagement_date?: string | null;
+  blood_collection_cabin?: string | null;
   participants_employee_id?: string | null;
   participant_department?: string | null;
   participant_blood_group?: string | null;

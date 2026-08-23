@@ -265,6 +265,7 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
     "engagement_type",
     "engagement_date",
     "slot_start_time",
+    "blood_collection_cabin",
     "user_id",
     "first_name",
     "last_name",
@@ -1067,6 +1068,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       Slot Start Time
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
+                      Blood Collection Cabin
+                    </th>
+                    <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
                         Department
                         {canEditDepartment && (
@@ -1188,6 +1192,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         </td>
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.slot_start_time || "—"}
+                        </td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
+                          {p.blood_collection_cabin || "—"}
                         </td>
                         <td
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
