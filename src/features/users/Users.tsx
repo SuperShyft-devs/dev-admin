@@ -136,7 +136,7 @@ function formatPrepareDetailsSummary(details: PrepareReportDetail[]): string | n
 type ModalMode = "view" | "add" | "edit";
 
 const EMPTY_FORM: UserCreate = {
-  age: 0,
+  age: null,
   first_name: "",
   last_name: "",
   phone: "",
@@ -304,7 +304,7 @@ export function Users() {
         const u = res.data.data;
         setSelected(u);
         setFormData({
-          age: u.age ?? 0,
+          age: u.age ?? null,
           first_name: u.first_name ?? "",
           last_name: u.last_name ?? "",
           phone: u.phone ?? "",
@@ -348,9 +348,9 @@ export function Users() {
     setError(null);
     try {
       const payload: UserCreate = {
-        ...formData,
         first_name: formData.first_name?.trim() || null,
         last_name: formData.last_name || null,
+        phone: formData.phone.trim(),
         email: formData.email || null,
         profile_photo: formData.profile_photo || null,
         date_of_birth: formData.date_of_birth || null,
@@ -361,6 +361,8 @@ export function Users() {
         state: formData.state || null,
         country: formData.country || null,
         referred_by: formData.referred_by || null,
+        is_participant: formData.is_participant,
+        status: formData.status,
       };
       if (formData.age != null && formData.age > 0) {
         payload.age = Math.trunc(formData.age);
@@ -1056,7 +1058,7 @@ export function Users() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        age: e.target.value === "" ? 0 : Number(e.target.value),
+                        age: e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
                     className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
