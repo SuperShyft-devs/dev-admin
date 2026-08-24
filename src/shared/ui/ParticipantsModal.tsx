@@ -189,6 +189,16 @@ function participantConsultationsRecord(
   return consultations;
 }
 
+function enabledConsultationKeys(
+  consultations: Record<string, boolean> | null | undefined
+): Set<string> {
+  return new Set(
+    Object.entries(consultations ?? {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([key]) => key)
+  );
+}
+
 function formatConsultationCell(value: ConsultationPreference | boolean | null | undefined): string {
   const pref = normalizeConsultationPref(value);
   if (!pref.want) return "No";
@@ -362,6 +372,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [bookingIdEditMode, setBookingIdEditMode] = useState(false);
   const [bookingIdUpdateLoading, setBookingIdUpdateLoading] = useState<number | null>(null);
   const [bookingIdUpdateError, setBookingIdUpdateError] = useState<string | null>(null);
+  const [engagementConsultations, setEngagementConsultations] = useState<Record<string, boolean> | null>(
+    null
+  );
+  const [consultationConfigLoaded, setConsultationConfigLoaded] = useState(false);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -431,11 +445,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     if (source.kind !== "engagement-id") {
       setOrgDepartments([]);
       setOrganizationId(null);
+      setEngagementConsultations(null);
+      setConsultationConfigLoaded(true);
       return;
     }
     try {
       const engagementRes = await engagementsApi.get(source.engagementId);
       const orgId = engagementRes.data.data.organization_id ?? null;
+      setEngagementConsultations(engagementRes.data.data.consultations ?? null);
+      setConsultationConfigLoaded(true);
       setOrganizationId(orgId);
       if (orgId) {
         const orgRes = await organizationsApi.get(orgId);
@@ -446,6 +464,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     } catch {
       setOrgDepartments([]);
       setOrganizationId(null);
+      setEngagementConsultations(null);
+      setConsultationConfigLoaded(true);
     }
   }, [source]);
 
@@ -470,6 +490,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setBookingIdEditMode(false);
       setBookingIdUpdateLoading(null);
       setBookingIdUpdateError(null);
+      setEngagementConsultations(null);
+      setConsultationConfigLoaded(source.kind !== "engagement-id");
       fetchParticipants();
       void fetchOrganizationDepartments();
     }
@@ -516,6 +538,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const canEditConsultation = source.kind === "engagement-id";
   const canEditBookingId = source.kind === "engagement-id";
+  const visibleExpertTypes = useMemo(() => {
+    if (source.kind !== "engagement-id" || !consultationConfigLoaded) return expertTypes;
+    const enabledKeys = enabledConsultationKeys(engagementConsultations);
+    return expertTypes.filter((et) => enabledKeys.has(et.type_key));
+  }, [consultationConfigLoaded, engagementConsultations, expertTypes, source.kind]);
 
   const afterColumnFilters = useMemo(
     () => applyColumnFilters(participants, columnFilters),
@@ -922,7 +949,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 ))}
               </select>
             </div>
-            {expertTypes.map((et) => (
+            {visibleExpertTypes.map((et) => (
               <div key={et.type_key} className="flex flex-col gap-0.5 min-w-[120px]">
                 <label className="text-xs font-medium text-zinc-500">
                   {et.type} consultation
@@ -1094,7 +1121,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Blood Group
                     </th>
-                    {expertTypes.map((et) => (
+                    {visibleExpertTypes.map((et) => (
                     <th key={et.type_key} className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       <EditableColumnHeader
                         label={`${et.type} Consultation`}
@@ -1239,7 +1266,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
                           {p.participant_blood_group || "—"}
                         </td>
-                        {expertTypes.map((et) => (
+                        {visibleExpertTypes.map((et) => (
                         <td
                           key={et.type_key}
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
