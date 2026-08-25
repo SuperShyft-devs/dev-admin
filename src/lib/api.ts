@@ -118,6 +118,7 @@ api.interceptors.response.use(
 export interface ApiError {
   error_code?: string;
   message?: string;
+  question_id?: number;
 }
 
 // Users
@@ -155,7 +156,7 @@ export function getApiError(err: unknown, context?: "auth" | "import"): string {
 export function getApiErrorDetails(
   err: unknown,
   context?: "auth" | "import"
-): { code?: string; message: string; status?: number } {
+): { code?: string; message: string; status?: number; question_id?: number } {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
     if (err.code === "ECONNABORTED") {
@@ -176,8 +177,20 @@ export function getApiErrorDetails(
       return { status, message: "Too many requests — wait a minute, then retry." };
     }
     if (err.response?.data) {
-      const d = err.response.data as { message?: string; error_code?: string };
-      return { status, code: d.error_code, message: d.message || "Request failed" };
+      const d = err.response.data as {
+        message?: string;
+        error_code?: string;
+        question_id?: number;
+      };
+      const questionId =
+        typeof d.question_id === "number" && Number.isFinite(d.question_id)
+          ? d.question_id
+          : undefined;
+      let message = d.message || "Request failed";
+      if (questionId != null) {
+        message = `${message} (question_id=${questionId})`;
+      }
+      return { status, code: d.error_code, message, question_id: questionId };
     }
     if (err.message === "Network Error" || err.code === "ERR_NETWORK") {
       if (context === "auth") {
