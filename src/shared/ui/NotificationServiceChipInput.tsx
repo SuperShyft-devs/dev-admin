@@ -19,7 +19,6 @@ export interface NotificationServiceChipInputProps {
   value: string | null;
   onChange: (value: string | null) => void;
   services: NotificationServiceItem[];
-  excludeKeys?: string[];
   placeholder?: string;
 }
 
@@ -28,7 +27,6 @@ export function NotificationServiceChipInput({
   value,
   onChange,
   services,
-  excludeKeys = [],
   placeholder = "Type to search notification services…",
 }: NotificationServiceChipInputProps) {
   const [input, setInput] = useState("");
@@ -37,7 +35,6 @@ export function NotificationServiceChipInput({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedKeys = useMemo(() => parseKeys(value), [value]);
-  const excludeSet = useMemo(() => new Set(excludeKeys), [excludeKeys]);
 
   const activeServices = useMemo(
     () => services.filter((s) => s.is_active !== false),
@@ -57,14 +54,13 @@ export function NotificationServiceChipInput({
     if (!q) return [];
     return activeServices
       .filter((s) => !selectedKeys.includes(s.service_key))
-      .filter((s) => !excludeSet.has(s.service_key))
       .filter(
         (s) =>
           s.service_key.toLowerCase().includes(q) ||
           (s.display_name ?? "").toLowerCase().includes(q)
       )
       .slice(0, 8);
-  }, [activeServices, excludeSet, input, selectedKeys]);
+  }, [activeServices, input, selectedKeys]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -79,11 +75,6 @@ export function NotificationServiceChipInput({
   const addKey = (raw: string) => {
     const key = raw.trim();
     if (!key) return;
-
-    if (excludeSet.has(key)) {
-      setError(`"${key}" is already used in the other questionnaire reminder`);
-      return;
-    }
 
     const svc = serviceByKey.get(key);
     if (!svc) {
