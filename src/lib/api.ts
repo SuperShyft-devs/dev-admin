@@ -1654,6 +1654,7 @@ export interface Engagement {
   consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
+  load_prev_assessment_questionnaires?: boolean | null;
   /** @deprecated Use notifications array instead */
   onboarding_notification?: string | null;
   /** @deprecated Use notifications array instead */
@@ -1708,6 +1709,7 @@ export interface EngagementListItem {
   consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean | null;
   enroll_for_fitprint_full?: boolean | null;
+  load_prev_assessment_questionnaires?: boolean | null;
   onboarding_notification?: string | null;
   pretest_guidelines_notification?: string | null;
   questionnaire_reminder_1?: string | null;
@@ -1747,6 +1749,7 @@ export interface EngagementCreate {
   consultation_mode?: ConsultationMode | string | null;
   create_profile_on_metsights?: boolean;
   enroll_for_fitprint_full?: boolean;
+  load_prev_assessment_questionnaires?: boolean;
   /** @deprecated Use notifications array instead */
   onboarding_notification?: string | null;
   /** @deprecated Use notifications array instead */

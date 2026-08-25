@@ -371,6 +371,9 @@ export function EngagementDetailsTab({
           <Field label="Enroll for FitPrint Full">
             {engagement.enroll_for_fitprint_full ? "Yes" : "No"}
           </Field>
+          <Field label="Load previous assessment questionnaires">
+            {engagement.load_prev_assessment_questionnaires ? "Yes" : "No"}
+          </Field>
         </div>
       </div>
 

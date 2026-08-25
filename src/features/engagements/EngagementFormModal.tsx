@@ -446,6 +446,9 @@ export function EngagementFormModal({
       enroll_for_fitprint_full: config.needsFitPrint
         ? Boolean(prev.enroll_for_fitprint_full)
         : false,
+      load_prev_assessment_questionnaires: config.needsAssessment
+        ? Boolean(prev.load_prev_assessment_questionnaires)
+        : false,
     }));
 
     applySlotDetailPrune(newCode, formData.blood_collection_type, formData.consultation_mode);
@@ -738,6 +741,9 @@ export function EngagementFormModal({
         : false,
       enroll_for_fitprint_full: typeConfig.needsFitPrint
         ? Boolean(formData.enroll_for_fitprint_full)
+        : false,
+      load_prev_assessment_questionnaires: typeConfig.needsAssessment
+        ? Boolean(formData.load_prev_assessment_questionnaires)
         : false,
     });
   };
@@ -1040,6 +1046,42 @@ export function EngagementFormModal({
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {typeConfig.needsAssessment && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">
+                  Load previous assessment questionnaires
+                </label>
+                <div className="flex gap-5 py-2">
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="load_prev_assessment_questionnaires"
+                      checked={Boolean(formData.load_prev_assessment_questionnaires)}
+                      onChange={() =>
+                        setFormData({ ...formData, load_prev_assessment_questionnaires: true })
+                      }
+                    />
+                    Yes
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="load_prev_assessment_questionnaires"
+                      checked={!formData.load_prev_assessment_questionnaires}
+                      onChange={() =>
+                        setFormData({ ...formData, load_prev_assessment_questionnaires: false })
+                      }
+                    />
+                    No
+                  </label>
+                </div>
+                <p className="text-xs text-zinc-500 mt-1">
+                  On onboard, copy questionnaire answers from the user&apos;s latest prior Metsights
+                  Basic or Pro assessment into the new assessment instance.
+                </p>
               </div>
             )}
 
