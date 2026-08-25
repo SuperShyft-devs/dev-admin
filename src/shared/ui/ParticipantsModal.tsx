@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
   participantsApi,
@@ -246,10 +247,15 @@ function applySearch(rows: Participant[], search: string): Participant[] {
   );
 }
 
-function toCsvCell(value: unknown): string {
+type ExportFormat = "csv" | "excel";
+
+function cellToText(value: unknown): string {
   if (value == null) return "";
-  const text =
-    typeof value === "object" ? JSON.stringify(value) : String(value);
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+function toCsvCell(value: unknown): string {
+  const text = cellToText(value);
   const needsQuotes =
     text.includes(",") ||
     text.includes('"') ||
@@ -260,78 +266,92 @@ function toCsvCell(value: unknown): string {
   return `"${escaped}"`;
 }
 
-function participantToRecord(participant: Participant): Record<string, unknown> {
-  return participant as unknown as Record<string, unknown>;
+function consultationWantToYesNo(
+  participant: Participant,
+  field: ConsultationField
+): string {
+  return consultationWant(consultationFieldValue(participant, field)) === true ? "Yes" : "No";
+}
+
+const EXPORT_COLUMNS: Array<{
+  header: string;
+  value: (participant: Participant) => unknown;
+}> = [
+  { header: "blood_test_date", value: (p) => p.engagement_date },
+  { header: "slot_start_time", value: (p) => p.slot_start_time },
+  { header: "blood_collection_cabin", value: (p) => p.blood_collection_cabin },
+  { header: "first_name", value: (p) => p.first_name },
+  { header: "last_name", value: (p) => p.last_name },
+  { header: "phone", value: (p) => p.phone },
+  { header: "email", value: (p) => p.email },
+  { header: "address", value: (p) => p.address },
+  { header: "pin_code", value: (p) => p.pin_code },
+  { header: "city", value: (p) => p.city },
+  { header: "state", value: (p) => p.state },
+  { header: "country", value: (p) => p.country },
+  { header: "participant_department", value: (p) => p.participant_department },
+  { header: "participant_blood_group", value: (p) => p.participant_blood_group },
+  { header: "Doctor Consultation", value: (p) => consultationWantToYesNo(p, "doctor") },
+  {
+    header: "Nutritionist Consultation",
+    value: (p) => consultationWantToYesNo(p, "nutritionist"),
+  },
+  { header: "Eye Consultation", value: (p) => consultationWantToYesNo(p, "eye") },
+  { header: "age", value: (p) => p.age },
+];
+
+function buildExportTable(rows: Participant[]): { columns: string[]; matrix: string[][] } {
+  const columns = EXPORT_COLUMNS.map((column) => column.header);
+  const matrix = rows.map((participant) =>
+    EXPORT_COLUMNS.map((column) => cellToText(column.value(participant)))
+  );
+  return { columns, matrix };
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function exportFilename(filenamePrefix: string, extension: "csv" | "xlsx"): string {
+  const datePart = new Date().toISOString().slice(0, 10);
+  return `${filenamePrefix}-${datePart}.${extension}`;
 }
 
 function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
   if (rows.length === 0) return;
 
-  const preferredColumns = [
-    "engagement_participant_id",
-    "engagement_id",
-    "engagement_name",
-    "engagement_code",
-    "engagement_type",
-    "engagement_date",
-    "slot_start_time",
-    "blood_collection_cabin",
-    "user_id",
-    "first_name",
-    "last_name",
-    "phone",
-    "gender",
-    "email",
-    "address",
-    "pin_code",
-    "city",
-    "state",
-    "country",
-    "status",
-    "participants_employee_id",
-    "participant_department",
-    "participant_blood_group",
-    "consultations",
-    "is_profile_created_on_metsights",
-    "is_primary_record_id_synced",
-    "is_fitprint_record_id_synced",
-    "booked_by_user_id",
-    "booking_id",
-    "barcode",
-  ];
-
-  const discoveredColumns = new Set<string>();
-  rows.forEach((participant) => {
-    const row = participantToRecord(participant);
-    Object.keys(row).forEach((key) => {
-      discoveredColumns.add(key);
-    });
-  });
-
-  const columns = [
-    ...preferredColumns.filter((key) => discoveredColumns.has(key)),
-    ...Array.from(discoveredColumns).filter((key) => !preferredColumns.includes(key)).sort(),
-  ];
-
+  const { columns, matrix } = buildExportTable(rows);
   const lines = [
     columns.map((key) => toCsvCell(key)).join(","),
-    ...rows.map((participant) => {
-      const row = participantToRecord(participant);
-      return columns.map((key) => toCsvCell(row[key])).join(",");
-    }),
+    ...matrix.map((cells) => cells.map((cell) => toCsvCell(cell)).join(",")),
   ];
 
   const csv = lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const datePart = new Date().toISOString().slice(0, 10);
-  link.href = url;
-  link.setAttribute("download", `${filenamePrefix}-${datePart}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  triggerBlobDownload(blob, exportFilename(filenamePrefix, "csv"));
+}
+
+function exportParticipantsToExcel(rows: Participant[], filenamePrefix: string) {
+  if (rows.length === 0) return;
+
+  const { columns, matrix } = buildExportTable(rows);
+  const sheetData = [columns, ...matrix];
+  const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Participants");
+
+  const arrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([arrayBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  triggerBlobDownload(blob, exportFilename(filenamePrefix, "xlsx"));
 }
 
 const filterSelectClass =
@@ -346,6 +366,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>(DEFAULT_COLUMN_FILTERS);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
+  const [exportFormatOpen, setExportFormatOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [deleteTarget, setDeleteTarget] = useState<Participant | null>(null);
   const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -766,6 +788,12 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const handleExportSelected = () => {
     if (selectedParticipants.length === 0) return;
+    setExportFormat("csv");
+    setExportFormatOpen(true);
+  };
+
+  const handleConfirmExport = () => {
+    if (selectedParticipants.length === 0) return;
     const codePart =
       source.kind === "engagement-id"
         ? `engagement-${source.engagementId}-selected`
@@ -774,7 +802,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         : source.kind === "camp"
         ? `camp-${source.campNo}-selected`
         : `${source.kind}-selected`;
-    exportParticipantsToCsv(selectedParticipants, `participants-${codePart}`);
+    const filenamePrefix = `participants-${codePart}`;
+    if (exportFormat === "excel") {
+      exportParticipantsToExcel(selectedParticipants, filenamePrefix);
+    } else {
+      exportParticipantsToCsv(selectedParticipants, filenamePrefix);
+    }
+    setExportFormatOpen(false);
   };
 
   const handleConfirmDelete = async () => {
@@ -1466,6 +1500,54 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               >
                 {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 Yes, Delete Selected
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {exportFormatOpen && (
+        <Modal
+          open={exportFormatOpen}
+          onClose={() => setExportFormatOpen(false)}
+          title="Export selected participants"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-700">
+              Export{" "}
+              <span className="font-semibold">{selectedCount}</span> selected participant
+              {selectedCount !== 1 ? "s" : ""} in the format below.
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="export-format" className="text-xs font-medium text-zinc-500">
+                Format
+              </label>
+              <select
+                id="export-format"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+                className={filterSelectClass}
+              >
+                <option value="csv">CSV</option>
+                <option value="excel">Excel</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setExportFormatOpen(false)}
+                className="px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExport}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+              >
+                <Download className="w-4 h-4" />
+                Export
               </button>
             </div>
           </div>
