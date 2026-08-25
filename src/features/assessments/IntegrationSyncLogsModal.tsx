@@ -5,7 +5,7 @@ import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "..
 
 type TimePreset = "" | "1h" | "24h" | "7d" | "30d";
 type PayloadTab = "request" | "response" | "error";
-type SyncLogsVariant = "all" | "metsights" | "n8n" | "nutrition_api" | "healthians" | "aurae";
+type SyncLogsVariant = "all" | "metsights" | "n8n" | "nutrition_api" | "healthians" | "aurae" | "bio_ai_reports";
 
 const STATUS_OPTIONS = ["pending", "success", "failed", "skipped"] as const;
 const PROVIDER_OPTIONS = [
@@ -15,6 +15,7 @@ const PROVIDER_OPTIONS = [
   { value: "n8n", label: "n8n" },
   { value: "nutrition_api", label: "Nutrition API" },
   { value: "aurae", label: "Aurae" },
+  { value: "bio_ai_reports", label: "Bio AI Reports" },
 ] as const;
 
 const TIME_PRESETS: { key: TimePreset; label: string }[] = [
@@ -50,6 +51,7 @@ function ProviderBadge({ provider }: { provider: string }) {
   if (provider === "n8n") return <span className={`${base} bg-violet-50 text-violet-700 border-violet-200`}>n8n</span>;
   if (provider === "nutrition_api") return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>nutrition_api</span>;
   if (provider === "aurae") return <span className={`${base} bg-cyan-50 text-cyan-700 border-cyan-200`}>aurae</span>;
+  if (provider === "bio_ai_reports") return <span className={`${base} bg-teal-50 text-teal-700 border-teal-200`}>bio_ai_reports</span>;
   return <span className={`${base} bg-zinc-50 text-zinc-600 border-zinc-200`}>{provider}</span>;
 }
 
@@ -115,6 +117,11 @@ function summarizeEndpoint(log: IntegrationSyncLog): string {
     } catch {
       return parseWebhookFromUrl(url);
     }
+  }
+  if (log.provider === "bio_ai_reports") {
+    if (url.includes("internal://bioai-report/")) return "generate BioReport";
+    if (url.includes("/api/reports")) return "register PDF";
+    return "bio-ai-reports";
   }
   const category = parseCategoryFromUrl(url);
   if (category !== "—") return category;
