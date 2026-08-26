@@ -76,7 +76,6 @@ const ROUTE_ORDER = [
 
 /** Categories shown in the engagement console questionnaire modal. */
 const CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS = [
-  "physical-measurement",
   "vitals",
 ] as const;
 
