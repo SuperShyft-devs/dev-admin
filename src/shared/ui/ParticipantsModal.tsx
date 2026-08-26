@@ -273,37 +273,74 @@ function consultationWantToYesNo(
   return consultationWant(consultationFieldValue(participant, field)) === true ? "Yes" : "No";
 }
 
-const EXPORT_COLUMNS: Array<{
+type ExportColumn = {
   header: string;
   value: (participant: Participant) => unknown;
+};
+
+const EXPORT_CONSULTATION_COLUMNS: Array<{
+  key: ConsultationField;
+  header: string;
 }> = [
-  { header: "blood_test_date", value: (p) => p.engagement_date },
-  { header: "slot_start_time", value: (p) => p.slot_start_time },
-  { header: "blood_collection_cabin", value: (p) => p.blood_collection_cabin },
-  { header: "first_name", value: (p) => p.first_name },
-  { header: "last_name", value: (p) => p.last_name },
-  { header: "phone", value: (p) => p.phone },
-  { header: "email", value: (p) => p.email },
-  { header: "address", value: (p) => p.address },
-  { header: "pin_code", value: (p) => p.pin_code },
-  { header: "city", value: (p) => p.city },
-  { header: "state", value: (p) => p.state },
-  { header: "country", value: (p) => p.country },
-  { header: "participant_department", value: (p) => p.participant_department },
-  { header: "participant_blood_group", value: (p) => p.participant_blood_group },
-  { header: "Doctor Consultation", value: (p) => consultationWantToYesNo(p, "doctor") },
-  {
-    header: "Nutritionist Consultation",
-    value: (p) => consultationWantToYesNo(p, "nutritionist"),
-  },
-  { header: "Eye Consultation", value: (p) => consultationWantToYesNo(p, "eye") },
-  { header: "age", value: (p) => p.age },
+  { key: "doctor", header: "Doctor Consultation" },
+  { key: "nutritionist", header: "Nutritionist Consultation" },
+  { key: "eye", header: "Eye Consultation" },
 ];
 
-function buildExportTable(rows: Participant[]): { columns: string[]; matrix: string[][] } {
-  const columns = EXPORT_COLUMNS.map((column) => column.header);
+const ALL_EXPORT_CONSULTATION_KEYS = new Set(
+  EXPORT_CONSULTATION_COLUMNS.map((column) => column.key)
+);
+
+function buildExportColumns(options: {
+  offeredKeys: Set<string> | null;
+  withAddress: boolean;
+}): ExportColumn[] {
+  const columns: ExportColumn[] = [
+    { header: "blood_test_date", value: (p) => p.engagement_date },
+    { header: "slot_start_time", value: (p) => p.slot_start_time },
+    { header: "blood_collection_cabin", value: (p) => p.blood_collection_cabin },
+    { header: "first_name", value: (p) => p.first_name },
+    { header: "last_name", value: (p) => p.last_name },
+    { header: "phone", value: (p) => p.phone },
+    { header: "email", value: (p) => p.email },
+  ];
+
+  if (options.withAddress) {
+    columns.push(
+      { header: "address", value: (p) => p.address },
+      { header: "pin_code", value: (p) => p.pin_code },
+      { header: "city", value: (p) => p.city },
+      { header: "state", value: (p) => p.state },
+      { header: "country", value: (p) => p.country }
+    );
+  }
+
+  columns.push(
+    { header: "participant_department", value: (p) => p.participant_department },
+    { header: "participant_blood_group", value: (p) => p.participant_blood_group }
+  );
+
+  const consultationKeys = options.offeredKeys ?? ALL_EXPORT_CONSULTATION_KEYS;
+  for (const column of EXPORT_CONSULTATION_COLUMNS) {
+    if (consultationKeys.has(column.key)) {
+      columns.push({
+        header: column.header,
+        value: (p) => consultationWantToYesNo(p, column.key),
+      });
+    }
+  }
+
+  columns.push({ header: "age", value: (p) => p.age });
+  return columns;
+}
+
+function buildExportTable(
+  rows: Participant[],
+  exportColumns: ExportColumn[]
+): { columns: string[]; matrix: string[][] } {
+  const columns = exportColumns.map((column) => column.header);
   const matrix = rows.map((participant) =>
-    EXPORT_COLUMNS.map((column) => cellToText(column.value(participant)))
+    exportColumns.map((column) => cellToText(column.value(participant)))
   );
   return { columns, matrix };
 }
@@ -324,10 +361,14 @@ function exportFilename(filenamePrefix: string, extension: "csv" | "xlsx"): stri
   return `${filenamePrefix}-${datePart}.${extension}`;
 }
 
-function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
+function exportParticipantsToCsv(
+  rows: Participant[],
+  filenamePrefix: string,
+  exportColumns: ExportColumn[]
+) {
   if (rows.length === 0) return;
 
-  const { columns, matrix } = buildExportTable(rows);
+  const { columns, matrix } = buildExportTable(rows, exportColumns);
   const lines = [
     columns.map((key) => toCsvCell(key)).join(","),
     ...matrix.map((cells) => cells.map((cell) => toCsvCell(cell)).join(",")),
@@ -338,10 +379,14 @@ function exportParticipantsToCsv(rows: Participant[], filenamePrefix: string) {
   triggerBlobDownload(blob, exportFilename(filenamePrefix, "csv"));
 }
 
-function exportParticipantsToExcel(rows: Participant[], filenamePrefix: string) {
+function exportParticipantsToExcel(
+  rows: Participant[],
+  filenamePrefix: string,
+  exportColumns: ExportColumn[]
+) {
   if (rows.length === 0) return;
 
-  const { columns, matrix } = buildExportTable(rows);
+  const { columns, matrix } = buildExportTable(rows, exportColumns);
   const sheetData = [columns, ...matrix];
   const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
   const workbook = XLSX.utils.book_new();
@@ -368,6 +413,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
   const [exportFormatOpen, setExportFormatOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [exportWithAddress, setExportWithAddress] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Participant | null>(null);
   const [deleteSelectedOpen, setDeleteSelectedOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -789,6 +835,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const handleExportSelected = () => {
     if (selectedParticipants.length === 0) return;
     setExportFormat("csv");
+    setExportWithAddress(false);
     setExportFormatOpen(true);
   };
 
@@ -803,10 +850,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         ? `camp-${source.campNo}-selected`
         : `${source.kind}-selected`;
     const filenamePrefix = `participants-${codePart}`;
+    const offeredKeys =
+      source.kind === "engagement-id"
+        ? enabledConsultationKeys(engagementConsultations)
+        : null;
+    const exportColumns = buildExportColumns({
+      offeredKeys,
+      withAddress: exportWithAddress,
+    });
     if (exportFormat === "excel") {
-      exportParticipantsToExcel(selectedParticipants, filenamePrefix);
+      exportParticipantsToExcel(selectedParticipants, filenamePrefix, exportColumns);
     } else {
-      exportParticipantsToCsv(selectedParticipants, filenamePrefix);
+      exportParticipantsToCsv(selectedParticipants, filenamePrefix, exportColumns);
     }
     setExportFormatOpen(false);
   };
@@ -1533,6 +1588,19 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 <option value="excel">Excel</option>
               </select>
             </div>
+            <label
+              htmlFor="export-with-address"
+              className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer"
+            >
+              <input
+                id="export-with-address"
+                type="checkbox"
+                checked={exportWithAddress}
+                onChange={(e) => setExportWithAddress(e.target.checked)}
+                className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+              />
+              with-address
+            </label>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
