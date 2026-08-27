@@ -1080,7 +1080,8 @@ export function EngagementFormModal({
                 </div>
                 <p className="text-xs text-zinc-500 mt-1">
                   On onboard, copy questionnaire answers from the user&apos;s latest prior Metsights
-                  Basic or Pro assessment into the new assessment instance.
+                  Basic or Pro assessment into the new assessment instance. Vitals and blood-parameter
+                  answers are not copied.
                 </p>
               </div>
             )}
