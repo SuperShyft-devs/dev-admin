@@ -303,6 +303,7 @@ function buildExportColumns(options: {
     { header: "last_name", value: (p) => p.last_name },
     { header: "phone", value: (p) => p.phone },
     { header: "email", value: (p) => p.email },
+    { header: "participants_employee_id", value: (p) => p.participants_employee_id },
   ];
 
   if (options.withAddress) {
