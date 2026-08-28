@@ -202,6 +202,7 @@ export function Users() {
   const [sendMsgSessionDate, setSendMsgSessionDate] = useState("");
   const [sendMsgSessionSlot, setSendMsgSessionSlot] = useState("");
   const [sendMsgSessionExpertType, setSendMsgSessionExpertType] = useState("");
+  const [sendMsgSessionCabin, setSendMsgSessionCabin] = useState("");
   const [sendMsgExternalLink, setSendMsgExternalLink] = useState("");
   const [sendMsgPrepareDetails, setSendMsgPrepareDetails] = useState<PrepareReportDetail[]>([]);
   const [sendMsgError, setSendMsgError] = useState<string | null>(null);
@@ -443,6 +444,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgSessionCabin("");
     setSendMsgExternalLink("");
     setSendMsgPrepareDetails([]);
     setSendMsgDropdownOpen(false);
@@ -465,6 +467,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgSessionCabin("");
     setSendMsgExternalLink("");
     setSendMsgPrepareDetails([]);
     setSendMsgPreparing(false);
@@ -533,6 +536,7 @@ export function Users() {
     setSendMsgSessionDate("");
     setSendMsgSessionSlot("");
     setSendMsgSessionExpertType("");
+    setSendMsgSessionCabin("");
     setSendMsgExternalLink("");
     setSendMsgError(null);
     setSendMsgPrepareDetails([]);
@@ -639,6 +643,9 @@ export function Users() {
               date: sendMsgSessionDate.trim(),
               slot: sendMsgSessionSlot.trim(),
               expert_type: sendMsgSessionExpertType.trim(),
+              ...(sendMsgSessionCabin.trim()
+                ? { cabin: sendMsgSessionCabin.trim() }
+                : {}),
             }
           : undefined,
         external_link: svc.require_external_link ? sendMsgExternalLink.trim() : undefined,
@@ -1490,6 +1497,20 @@ export function Users() {
                     className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                     required
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 mb-1">Cabin</label>
+                  <input
+                    type="text"
+                    value={sendMsgSessionCabin}
+                    onChange={(e) => setSendMsgSessionCabin(e.target.value)}
+                    placeholder="e.g. Consultation Cabin 1"
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Optional. Used in confirmation and reminder emails; auto-filled when sent from
+                    booking or engagement notifications.
+                  </p>
                 </div>
               </div>
             )}
