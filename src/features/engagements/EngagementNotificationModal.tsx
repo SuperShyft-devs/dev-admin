@@ -94,6 +94,7 @@ function sessionDetailsFromParticipantConsultations(
       date,
       slot: booking.slot ?? "",
       expert_type: expertType,
+      cabin: booking.cabin?.trim() || undefined,
     };
 
     if (date === today) {

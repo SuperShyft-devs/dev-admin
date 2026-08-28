@@ -3657,6 +3657,7 @@ export interface SessionDetailsPayload {
   date: string;
   slot: string;
   expert_type: string;
+  cabin?: string | null;
 }
 
 export const notificationsApi = {
