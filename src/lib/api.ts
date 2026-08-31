@@ -2359,6 +2359,7 @@ export interface EngagementDataCompletenessParticipant {
   last_name?: string | null;
   phone?: string | null;
   email?: string | null;
+  has_booking_id: boolean;
   has_blood_report: boolean;
   has_blood_values: boolean;
   has_bio_ai_report: boolean;
@@ -2369,6 +2370,7 @@ export interface EngagementDataCompletenessParticipant {
 export interface EngagementDataCompletenessResponse {
   summary: {
     total_participants: number;
+    with_booking_id: number;
     blood_report: number;
     blood_values: number;
     bio_ai_report: number;
@@ -2383,6 +2385,7 @@ export interface EngagementDataCompletenessResponse {
 export interface EngagementDataCompletenessSummaryRollup {
   engagement_count: number;
   total_participants: number;
+  with_booking_id: number;
   blood_report: number;
   blood_values: number;
   bio_ai_report: number;

@@ -36,12 +36,14 @@ type BoolFilter = "all" | "yes" | "no";
 interface ColumnFilters {
   engagementDate: string;
   department: string;
+  bookingId: BoolFilter;
   consultationFilters: Record<string, BoolFilter>;
 }
 
 const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
   engagementDate: "",
   department: "",
+  bookingId: "all",
   consultationFilters: {},
 };
 
@@ -215,6 +217,10 @@ function formatConsultationCell(value: ConsultationPreference | boolean | null |
   return "Requested";
 }
 
+function isParticipantBooked(p: Participant): boolean {
+  return Boolean(p.booking_id?.trim());
+}
+
 function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Participant[] {
   return rows.filter((p) => {
     if (filters.engagementDate && (p.engagement_date ?? "") !== filters.engagementDate) {
@@ -222,6 +228,10 @@ function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Partic
     }
     if (filters.department && (p.participant_department ?? "") !== filters.department) {
       return false;
+    }
+    if (filters.bookingId !== "all") {
+      const booked = isParticipantBooked(p);
+      if (!matchesBoolFilter(booked, filters.bookingId)) return false;
     }
     for (const [key, filter] of Object.entries(filters.consultationFilters)) {
       if (filter !== "all") {
@@ -243,7 +253,8 @@ function applySearch(rows: Participant[], search: string): Participant[] {
       (p.email ?? "").toLowerCase().includes(q) ||
       (p.engagement_name ?? "").toLowerCase().includes(q) ||
       (p.engagement_code ?? "").toLowerCase().includes(q) ||
-      (p.city ?? "").toLowerCase().includes(q)
+      (p.city ?? "").toLowerCase().includes(q) ||
+      (p.booking_id ?? "").toLowerCase().includes(q)
   );
 }
 
@@ -803,7 +814,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const hasActiveColumnFilters =
     columnFilters.engagementDate !== "" ||
     columnFilters.department !== "" ||
+    columnFilters.bookingId !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
+
+  const bookedCount = useMemo(
+    () => participants.filter(isParticipantBooked).length,
+    [participants]
+  );
 
   const toggleRowSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
@@ -1002,8 +1019,24 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         </div>
 
         {/* Column filters */}
-        {hasEngagementFields && !loading && !error && participants.length > 0 && (
+        {!loading && !error && participants.length > 0 && (
           <div className="mb-4 flex flex-wrap items-end gap-2 sm:gap-3">
+            <div className="flex flex-col gap-0.5 min-w-[140px]">
+              <label className="text-xs font-medium text-zinc-500">Booking ID</label>
+              <select
+                value={columnFilters.bookingId}
+                onChange={(e) =>
+                  setColumnFilters((f) => ({ ...f, bookingId: e.target.value as BoolFilter }))
+                }
+                className={filterSelectClass}
+              >
+                <option value="all">All</option>
+                <option value="yes">With booking ID</option>
+                <option value="no">Without booking ID</option>
+              </select>
+            </div>
+            {hasEngagementFields && (
+              <>
             <div className="flex flex-col gap-0.5 min-w-[140px]">
               <label className="text-xs font-medium text-zinc-500">Engagement date</label>
               <select
@@ -1062,6 +1095,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 </select>
               </div>
             ))}
+              </>
+            )}
             {hasActiveColumnFilters && (
               <button
                 type="button"
@@ -1135,8 +1170,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
-                  ? `${participants.length} participant${participants.length !== 1 ? "s" : ""}`
-                  : `${visibleRows.length} shown · ${participants.length} total`}
+                  ? `${participants.length} participant${participants.length !== 1 ? "s" : ""} · ${bookedCount} with booking ID`
+                  : `${visibleRows.length} shown · ${participants.length} total · ${bookedCount} with booking ID`}
                 <span className="text-zinc-400"> — select rows for bulk actions</span>
               </p>
             )}

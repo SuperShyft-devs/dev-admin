@@ -88,6 +88,7 @@ export function EngagementOverviewTab({
     if (!completeness || completeness.summary.total_participants === 0) return null;
     const s = completeness.summary;
     return [
+      `Bookings ${s.with_booking_id}/${s.total_participants}`,
       `Blood ${s.blood_report}/${s.total_participants}`,
       `Values ${s.blood_values}/${s.total_participants}`,
       `BioAI ${s.bio_ai_report}/${s.total_participants}`,

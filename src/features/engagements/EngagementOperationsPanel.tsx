@@ -576,6 +576,12 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                       <>
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                           <CompletenessSummaryCard
+                            label="Booking ID"
+                            count={completenessData.summary.with_booking_id}
+                            total={completenessData.summary.total_participants}
+                            tone="emerald"
+                          />
+                          <CompletenessSummaryCard
                             label="Blood report"
                             count={completenessData.summary.blood_report}
                             total={completenessData.summary.total_participants}
@@ -621,6 +627,7 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                             <thead>
                               <tr className="border-b border-zinc-200 bg-zinc-50">
                                 <th className="px-3 py-2 text-left font-medium text-zinc-600">Participant</th>
+                                <th className="px-2 py-2 text-center font-medium text-zinc-600">Booking</th>
                                 <th className="px-2 py-2 text-center font-medium text-zinc-600">Blood</th>
                                 <th className="px-2 py-2 text-center font-medium text-zinc-600">Values</th>
                                 <th className="px-2 py-2 text-center font-medium text-zinc-600">BioAI</th>
@@ -639,6 +646,11 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                                     <td className="px-3 py-2">
                                       <div className="font-medium text-zinc-800">{name}</div>
                                       <div className="text-zinc-400">{row.phone || row.email || ""}</div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <div className="flex justify-center">
+                                        <CompletenessFlagIcon present={row.has_booking_id} label="Booking ID" />
+                                      </div>
                                     </td>
                                     <td className="px-2 py-2 text-center">
                                       <div className="flex justify-center">

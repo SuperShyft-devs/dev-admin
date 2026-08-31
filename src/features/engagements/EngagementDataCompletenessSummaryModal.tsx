@@ -129,6 +129,12 @@ export function EngagementDataCompletenessSummaryModal({
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                   <CompletenessSummaryCard
+                    label="Booking ID"
+                    count={rollup.with_booking_id}
+                    total={totalParticipants}
+                    tone="emerald"
+                  />
+                  <CompletenessSummaryCard
                     label="Blood report"
                     count={rollup.blood_report}
                     total={totalParticipants}
@@ -174,6 +180,7 @@ export function EngagementDataCompletenessSummaryModal({
                         <th className="px-2 py-2 text-left font-medium text-zinc-600">City</th>
                         <th className="px-2 py-2 text-left font-medium text-zinc-600">Status</th>
                         <th className="px-2 py-2 text-center font-medium text-zinc-600">P</th>
+                        <th className="px-2 py-2 text-center font-medium text-zinc-600">Book</th>
                         <th className="px-2 py-2 text-center font-medium text-zinc-600">Blood</th>
                         <th className="px-2 py-2 text-center font-medium text-zinc-600">Values</th>
                         <th className="px-2 py-2 text-center font-medium text-zinc-600">BioAI</th>
@@ -204,6 +211,9 @@ export function EngagementDataCompletenessSummaryModal({
                               {formatEngagementStatusLabel(row.status)}
                             </td>
                             <td className="px-2 py-2 text-center tabular-nums text-zinc-700">{total}</td>
+                            <td className="px-2 py-2 text-center tabular-nums text-zinc-700">
+                              {formatCompletenessRatio(row.summary.with_booking_id, total)}
+                            </td>
                             <td className="px-2 py-2 text-center tabular-nums text-zinc-700">
                               {formatCompletenessRatio(row.summary.blood_report, total)}
                             </td>
