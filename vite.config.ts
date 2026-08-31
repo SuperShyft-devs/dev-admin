@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': {
-          target: env.VITE_DEV_PROXY_TARGET || 'http://localhost:8000',
+          // 127.0.0.1 — on Windows localhost often resolves to ::1 where PHP may own :8000
+          target: env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:8000',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ''),
           // Metsights import-page can run 30–90s when profiles need linking (not just skips).
