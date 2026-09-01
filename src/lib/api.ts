@@ -1621,6 +1621,30 @@ export interface SlotDetail {
   consultation?: SlotDetailSection | null;
 }
 
+export interface PublicAvailableSlot {
+  slot: string;
+  spot_left: number;
+}
+
+export interface PublicCabinSlot {
+  cabin_name: string;
+  cabin_key: string;
+  slot_duration: number;
+  available_slots: PublicAvailableSlot[];
+}
+
+export interface PublicDateSlotConfig {
+  is_enable: boolean;
+  cabins: PublicCabinSlot[];
+}
+
+export type PublicSlotDetailSection = Record<string, PublicDateSlotConfig>;
+
+export interface PublicSlotDetail {
+  blood_collection?: PublicSlotDetailSection | null;
+  consultation?: PublicSlotDetailSection | null;
+}
+
 export interface Engagement {
   engagement_id: number;
   engagement_name?: string | null;
@@ -1631,6 +1655,7 @@ export interface Engagement {
   engagement_type?: EngagementKind | string | number | null;
   consultations?: Record<string, boolean> | null;
   slot_detail?: SlotDetail | null;
+  public_slot_detail?: PublicSlotDetail | null;
   assessment_package_id?: number | null;
   diagnostic_package_id?: number | null;
   city?: string | null;
@@ -2213,6 +2238,9 @@ export interface EngagementParticipantUpdatePayload {
   participant_department?: string | null;
   consultations?: Record<string, ConsultationPreference | boolean | null> | null;
   booking_id?: string | null;
+  engagement_date?: string | null;
+  slot_start_time?: string | null;
+  blood_collection_cabin?: string | null;
 }
 
 export interface EngagementParticipantUpdateResponse {
@@ -2221,6 +2249,9 @@ export interface EngagementParticipantUpdateResponse {
   participant_department?: string | null;
   consultations?: Record<string, ConsultationPreference | boolean | null> | null;
   booking_id?: string | null;
+  engagement_date?: string | null;
+  slot_start_time?: string | null;
+  blood_collection_cabin?: string | null;
 }
 
 export const participantsApi = {

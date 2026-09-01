@@ -12,9 +12,17 @@ import {
   type OrganizationDepartment,
   type ExpertTypeItem,
   type ConsultationPreference,
+  type PublicSlotDetail,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
+import {
+  getAvailableCabins,
+  getAvailableDates,
+  getAvailableSlots,
+  hasConfiguredBloodCollectionSchedule,
+  normalizeSlotToHhmm,
+} from "../../features/engagements/bloodCollectionScheduleUtils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -452,6 +460,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [bookingIdEditMode, setBookingIdEditMode] = useState(false);
   const [bookingIdUpdateLoading, setBookingIdUpdateLoading] = useState<number | null>(null);
   const [bookingIdUpdateError, setBookingIdUpdateError] = useState<string | null>(null);
+  const [engagementDateEditMode, setEngagementDateEditMode] = useState(false);
+  const [slotStartTimeEditMode, setSlotStartTimeEditMode] = useState(false);
+  const [bloodCollectionCabinEditMode, setBloodCollectionCabinEditMode] = useState(false);
+  const [scheduleUpdateLoading, setScheduleUpdateLoading] = useState<number | null>(null);
+  const [scheduleUpdateError, setScheduleUpdateError] = useState<string | null>(null);
+  const [engagementPublicSlotDetail, setEngagementPublicSlotDetail] = useState<PublicSlotDetail | null>(
+    null
+  );
+  const [engagementBloodCollectionType, setEngagementBloodCollectionType] = useState<string | null>(null);
   const [engagementConsultations, setEngagementConsultations] = useState<Record<string, boolean> | null>(
     null
   );
@@ -526,6 +543,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setOrgDepartments([]);
       setOrganizationId(null);
       setEngagementConsultations(null);
+      setEngagementPublicSlotDetail(null);
+      setEngagementBloodCollectionType(null);
       setConsultationConfigLoaded(true);
       return;
     }
@@ -533,6 +552,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       const engagementRes = await engagementsApi.get(source.engagementId);
       const orgId = engagementRes.data.data.organization_id ?? null;
       setEngagementConsultations(engagementRes.data.data.consultations ?? null);
+      setEngagementPublicSlotDetail(engagementRes.data.data.public_slot_detail ?? null);
+      setEngagementBloodCollectionType(engagementRes.data.data.blood_collection_type ?? null);
       setConsultationConfigLoaded(true);
       setOrganizationId(orgId);
       if (orgId) {
@@ -545,6 +566,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setOrgDepartments([]);
       setOrganizationId(null);
       setEngagementConsultations(null);
+      setEngagementPublicSlotDetail(null);
+      setEngagementBloodCollectionType(null);
       setConsultationConfigLoaded(true);
     }
   }, [source]);
@@ -570,6 +593,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setBookingIdEditMode(false);
       setBookingIdUpdateLoading(null);
       setBookingIdUpdateError(null);
+      setEngagementDateEditMode(false);
+      setSlotStartTimeEditMode(false);
+      setBloodCollectionCabinEditMode(false);
+      setScheduleUpdateLoading(null);
+      setScheduleUpdateError(null);
+      setEngagementPublicSlotDetail(null);
+      setEngagementBloodCollectionType(null);
       setEngagementConsultations(null);
       setConsultationConfigLoaded(source.kind !== "engagement-id");
       fetchParticipants();
@@ -618,6 +648,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const canEditConsultation = source.kind === "engagement-id";
   const canEditBookingId = source.kind === "engagement-id";
+  const canEditSchedule =
+    source.kind === "engagement-id" &&
+    engagementBloodCollectionType !== "home_collection" &&
+    hasConfiguredBloodCollectionSchedule(engagementPublicSlotDetail);
   const visibleExpertTypes = useMemo(() => {
     if (source.kind !== "engagement-id" || !consultationConfigLoaded) return expertTypes;
     const enabledKeys = enabledConsultationKeys(engagementConsultations);
@@ -758,6 +792,79 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setBookingIdUpdateError(getApiError(err));
     } finally {
       setBookingIdUpdateLoading(null);
+    }
+  };
+
+  const refreshEngagementSlotDetail = useCallback(async () => {
+    if (source.kind !== "engagement-id") return;
+    try {
+      const engagementRes = await engagementsApi.get(source.engagementId);
+      setEngagementPublicSlotDetail(engagementRes.data.data.public_slot_detail ?? null);
+      setEngagementBloodCollectionType(engagementRes.data.data.blood_collection_type ?? null);
+    } catch {
+      // ignore refresh errors
+    }
+  }, [source]);
+
+  const handleScheduleUpdate = async (
+    participant: Participant,
+    updates: Partial<{
+      engagement_date: string;
+      slot_start_time: string;
+      blood_collection_cabin: string;
+    }>
+  ) => {
+    if (!engagementIdForDepartment || !participant.user_id) return;
+
+    const nextDate = updates.engagement_date ?? participant.engagement_date ?? "";
+    const nextSlotRaw = updates.slot_start_time ?? participant.slot_start_time ?? "";
+    const nextCabin = updates.blood_collection_cabin ?? participant.blood_collection_cabin ?? "";
+    const nextSlot = normalizeSlotToHhmm(nextSlotRaw);
+
+    if (!nextDate || !nextSlot) return;
+
+    const currentDate = participant.engagement_date ?? "";
+    const currentSlot = normalizeSlotToHhmm(participant.slot_start_time ?? "");
+    const currentCabin = participant.blood_collection_cabin ?? "";
+
+    if (
+      nextDate === currentDate &&
+      nextSlot === currentSlot &&
+      (nextCabin || null) === (currentCabin || null)
+    ) {
+      return;
+    }
+
+    try {
+      setScheduleUpdateLoading(participant.user_id);
+      setScheduleUpdateError(null);
+      const res = await participantsApi.updateParticipant(
+        engagementIdForDepartment,
+        participant.user_id,
+        {
+          engagement_date: nextDate,
+          slot_start_time: nextSlot,
+          blood_collection_cabin: nextCabin || null,
+        }
+      );
+      const data = res.data.data;
+      setParticipants((prevRows) =>
+        prevRows.map((row) =>
+          row.user_id === participant.user_id
+            ? {
+                ...row,
+                engagement_date: data.engagement_date ?? nextDate,
+                slot_start_time: data.slot_start_time ?? nextSlot,
+                blood_collection_cabin: data.blood_collection_cabin ?? (nextCabin || null),
+              }
+            : row
+        )
+      );
+      await refreshEngagementSlotDetail();
+    } catch (err) {
+      setScheduleUpdateError(getApiError(err));
+    } finally {
+      setScheduleUpdateLoading(null);
     }
   };
 
@@ -1168,6 +1275,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             {bookingIdUpdateError && (
               <p className="text-sm text-red-600 mb-3">{bookingIdUpdateError}</p>
             )}
+            {scheduleUpdateError && (
+              <p className="text-sm text-red-600 mb-3">{scheduleUpdateError}</p>
+            )}
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
@@ -1214,13 +1324,31 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Engagement Date
+                      <EditableColumnHeader
+                        label="Engagement Date"
+                        editable={canEditSchedule}
+                        isEditing={engagementDateEditMode}
+                        onToggleEdit={() => setEngagementDateEditMode((v) => !v)}
+                        editTitle="engagement date"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Slot Start Time
+                      <EditableColumnHeader
+                        label="Slot Start Time"
+                        editable={canEditSchedule}
+                        isEditing={slotStartTimeEditMode}
+                        onToggleEdit={() => setSlotStartTimeEditMode((v) => !v)}
+                        editTitle="slot start time"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
-                      Blood Collection Cabin
+                      <EditableColumnHeader
+                        label="Blood Collection Cabin"
+                        editable={canEditSchedule}
+                        isEditing={bloodCollectionCabinEditMode}
+                        onToggleEdit={() => setBloodCollectionCabinEditMode((v) => !v)}
+                        editTitle="blood collection cabin"
+                      />
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5">
@@ -1339,14 +1467,107 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                             p.booking_id || "—"
                           )}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {p.engagement_date || "—"}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (engagementDateEditMode && canEditSchedule) ev.stopPropagation();
+                          }}
+                        >
+                          {engagementDateEditMode && canEditSchedule ? (
+                            <select
+                              value={p.engagement_date ?? ""}
+                              disabled={scheduleUpdateLoading === p.user_id}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!next || next === (p.engagement_date ?? "")) return;
+                                void handleScheduleUpdate(p, { engagement_date: next });
+                              }}
+                              className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                              aria-label={`Engagement date for ${fullName(p)}`}
+                            >
+                              <option value="">—</option>
+                              {getAvailableDates(engagementPublicSlotDetail, p.engagement_date).map(
+                                (dateOption) => (
+                                  <option key={dateOption} value={dateOption}>
+                                    {dateOption}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          ) : (
+                            p.engagement_date || "—"
+                          )}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {p.slot_start_time || "—"}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (slotStartTimeEditMode && canEditSchedule) ev.stopPropagation();
+                          }}
+                        >
+                          {slotStartTimeEditMode && canEditSchedule ? (
+                            <select
+                              value={normalizeSlotToHhmm(p.slot_start_time)}
+                              disabled={
+                                scheduleUpdateLoading === p.user_id ||
+                                !p.engagement_date ||
+                                !p.blood_collection_cabin
+                              }
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!next || normalizeSlotToHhmm(p.slot_start_time) === next) return;
+                                void handleScheduleUpdate(p, { slot_start_time: next });
+                              }}
+                              className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                              aria-label={`Slot start time for ${fullName(p)}`}
+                            >
+                              <option value="">—</option>
+                              {getAvailableSlots(
+                                engagementPublicSlotDetail,
+                                p.engagement_date ?? "",
+                                p.blood_collection_cabin ?? "",
+                                p.slot_start_time
+                              ).map((slotOption) => (
+                                <option key={slotOption.slot} value={normalizeSlotToHhmm(slotOption.slot)}>
+                                  {slotOption.slot}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            p.slot_start_time || "—"
+                          )}
                         </td>
-                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap">
-                          {p.blood_collection_cabin || "—"}
+                        <td
+                          className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
+                          onClick={(ev) => {
+                            if (bloodCollectionCabinEditMode && canEditSchedule) ev.stopPropagation();
+                          }}
+                        >
+                          {bloodCollectionCabinEditMode && canEditSchedule ? (
+                            <select
+                              value={p.blood_collection_cabin ?? ""}
+                              disabled={scheduleUpdateLoading === p.user_id || !p.engagement_date}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!next || next === (p.blood_collection_cabin ?? "")) return;
+                                void handleScheduleUpdate(p, { blood_collection_cabin: next });
+                              }}
+                              className="max-w-[180px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
+                              aria-label={`Blood collection cabin for ${fullName(p)}`}
+                            >
+                              <option value="">—</option>
+                              {getAvailableCabins(
+                                engagementPublicSlotDetail,
+                                p.engagement_date ?? "",
+                                p.blood_collection_cabin
+                              ).map((cabin) => (
+                                <option key={cabin.cabin_key} value={cabin.cabin_key}>
+                                  {cabin.cabin_name || cabin.cabin_key}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            p.blood_collection_cabin || "—"
+                          )}
                         </td>
                         <td
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
