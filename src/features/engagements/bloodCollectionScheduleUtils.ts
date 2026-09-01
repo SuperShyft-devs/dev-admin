@@ -113,3 +113,25 @@ export function hasConfiguredBloodCollectionSchedule(
   const section = getBloodSection(slotDetail);
   return Boolean(section && Object.keys(section).length > 0);
 }
+
+export function isCabinAvailableOnDate(
+  slotDetail: PublicSlotDetail | null | undefined,
+  date: string,
+  cabinKey: string
+): boolean {
+  if (!date.trim() || !cabinKey.trim()) return false;
+  return getAvailableCabins(slotDetail, date).some((cabin) => cabin.cabin_key === cabinKey);
+}
+
+export function isScheduleCombinationAvailable(
+  slotDetail: PublicSlotDetail | null | undefined,
+  date: string,
+  cabinKey: string,
+  slotTime: string
+): boolean {
+  if (!date.trim() || !cabinKey.trim() || !slotTime.trim()) return false;
+  const normalizedSlot = normalizeSlotToHhmm(slotTime);
+  return getAvailableSlots(slotDetail, date, cabinKey).some(
+    (slot) => normalizeSlotToHhmm(slot.slot) === normalizedSlot && (slot.spot_left ?? 0) > 0
+  );
+}

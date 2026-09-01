@@ -21,8 +21,15 @@ import {
   getAvailableDates,
   getAvailableSlots,
   hasConfiguredBloodCollectionSchedule,
+  isScheduleCombinationAvailable,
   normalizeSlotToHhmm,
 } from "../../features/engagements/bloodCollectionScheduleUtils";
+
+type ScheduleDraft = {
+  engagement_date: string;
+  blood_collection_cabin: string;
+  slot_start_time: string;
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -465,6 +472,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [bloodCollectionCabinEditMode, setBloodCollectionCabinEditMode] = useState(false);
   const [scheduleUpdateLoading, setScheduleUpdateLoading] = useState<number | null>(null);
   const [scheduleUpdateError, setScheduleUpdateError] = useState<string | null>(null);
+  const [scheduleDrafts, setScheduleDrafts] = useState<Record<number, ScheduleDraft>>({});
   const [engagementPublicSlotDetail, setEngagementPublicSlotDetail] = useState<PublicSlotDetail | null>(
     null
   );
@@ -598,6 +606,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setBloodCollectionCabinEditMode(false);
       setScheduleUpdateLoading(null);
       setScheduleUpdateError(null);
+      setScheduleDrafts({});
       setEngagementPublicSlotDetail(null);
       setEngagementBloodCollectionType(null);
       setEngagementConsultations(null);
@@ -806,22 +815,30 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   }, [source]);
 
+  const clearScheduleDraft = (userId: number) => {
+    setScheduleDrafts((prev) => {
+      if (!(userId in prev)) return prev;
+      const next = { ...prev };
+      delete next[userId];
+      return next;
+    });
+  };
+
   const handleScheduleUpdate = async (
     participant: Participant,
-    updates: Partial<{
+    updates: {
       engagement_date: string;
       slot_start_time: string;
       blood_collection_cabin: string;
-    }>
+    }
   ) => {
     if (!engagementIdForDepartment || !participant.user_id) return;
 
-    const nextDate = updates.engagement_date ?? participant.engagement_date ?? "";
-    const nextSlotRaw = updates.slot_start_time ?? participant.slot_start_time ?? "";
-    const nextCabin = updates.blood_collection_cabin ?? participant.blood_collection_cabin ?? "";
-    const nextSlot = normalizeSlotToHhmm(nextSlotRaw);
+    const nextDate = updates.engagement_date;
+    const nextCabin = updates.blood_collection_cabin;
+    const nextSlot = normalizeSlotToHhmm(updates.slot_start_time);
 
-    if (!nextDate || !nextSlot) return;
+    if (!nextDate || !nextSlot || !nextCabin) return;
 
     const currentDate = participant.engagement_date ?? "";
     const currentSlot = normalizeSlotToHhmm(participant.slot_start_time ?? "");
@@ -830,8 +847,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     if (
       nextDate === currentDate &&
       nextSlot === currentSlot &&
-      (nextCabin || null) === (currentCabin || null)
+      nextCabin === currentCabin
     ) {
+      clearScheduleDraft(participant.user_id);
       return;
     }
 
@@ -844,7 +862,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         {
           engagement_date: nextDate,
           slot_start_time: nextSlot,
-          blood_collection_cabin: nextCabin || null,
+          blood_collection_cabin: nextCabin,
         }
       );
       const data = res.data.data;
@@ -855,17 +873,125 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 ...row,
                 engagement_date: data.engagement_date ?? nextDate,
                 slot_start_time: data.slot_start_time ?? nextSlot,
-                blood_collection_cabin: data.blood_collection_cabin ?? (nextCabin || null),
+                blood_collection_cabin: data.blood_collection_cabin ?? nextCabin,
               }
             : row
         )
       );
+      clearScheduleDraft(participant.user_id);
       await refreshEngagementSlotDetail();
     } catch (err) {
       setScheduleUpdateError(getApiError(err));
     } finally {
       setScheduleUpdateLoading(null);
     }
+  };
+
+  const beginScheduleDraft = (participant: Participant, draft: ScheduleDraft) => {
+    if (!participant.user_id) return;
+    setScheduleDrafts((prev) => ({
+      ...prev,
+      [participant.user_id]: draft,
+    }));
+    setScheduleUpdateError(null);
+  };
+
+  const handleDateChange = (participant: Participant, nextDate: string) => {
+    if (!nextDate) return;
+
+    const draft = participant.user_id ? scheduleDrafts[participant.user_id] : undefined;
+    const baselineDate = draft?.engagement_date ?? participant.engagement_date ?? "";
+    if (nextDate === baselineDate && !draft) return;
+
+    if (draft) {
+      beginScheduleDraft(participant, {
+        engagement_date: nextDate,
+        blood_collection_cabin: "",
+        slot_start_time: "",
+      });
+      return;
+    }
+
+    const currentCabin = participant.blood_collection_cabin ?? "";
+    const currentSlot = normalizeSlotToHhmm(participant.slot_start_time ?? "");
+
+    if (
+      currentCabin &&
+      currentSlot &&
+      isScheduleCombinationAvailable(
+        engagementPublicSlotDetail,
+        nextDate,
+        currentCabin,
+        currentSlot
+      )
+    ) {
+      void handleScheduleUpdate(participant, {
+        engagement_date: nextDate,
+        blood_collection_cabin: currentCabin,
+        slot_start_time: currentSlot,
+      });
+      return;
+    }
+
+    beginScheduleDraft(participant, {
+      engagement_date: nextDate,
+      blood_collection_cabin: "",
+      slot_start_time: "",
+    });
+  };
+
+  const handleCabinChange = (participant: Participant, nextCabin: string) => {
+    if (!nextCabin) return;
+
+    const draft = participant.user_id ? scheduleDrafts[participant.user_id] : undefined;
+    if (!draft && nextCabin === (participant.blood_collection_cabin ?? "")) return;
+
+    const date = draft?.engagement_date ?? participant.engagement_date ?? "";
+    const currentSlot = normalizeSlotToHhmm(
+      draft?.slot_start_time || participant.slot_start_time || ""
+    );
+
+    if (
+      !draft &&
+      currentSlot &&
+      isScheduleCombinationAvailable(engagementPublicSlotDetail, date, nextCabin, currentSlot)
+    ) {
+      void handleScheduleUpdate(participant, {
+        engagement_date: date,
+        blood_collection_cabin: nextCabin,
+        slot_start_time: currentSlot,
+      });
+      return;
+    }
+
+    beginScheduleDraft(participant, {
+      engagement_date: date,
+      blood_collection_cabin: nextCabin,
+      slot_start_time: "",
+    });
+  };
+
+  const handleSlotChange = (participant: Participant, nextSlot: string) => {
+    if (!nextSlot) return;
+
+    const draft = participant.user_id ? scheduleDrafts[participant.user_id] : undefined;
+    if (
+      !draft &&
+      normalizeSlotToHhmm(nextSlot) === normalizeSlotToHhmm(participant.slot_start_time ?? "")
+    ) {
+      return;
+    }
+
+    const date = draft?.engagement_date ?? participant.engagement_date ?? "";
+    const cabin = draft?.blood_collection_cabin ?? participant.blood_collection_cabin ?? "";
+
+    if (!date || !cabin) return;
+
+    void handleScheduleUpdate(participant, {
+      engagement_date: date,
+      blood_collection_cabin: cabin,
+      slot_start_time: nextSlot,
+    });
   };
 
   const renderConsultationCell = (p: Participant, field: ConsultationField) => {
@@ -1278,6 +1404,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             {scheduleUpdateError && (
               <p className="text-sm text-red-600 mb-3">{scheduleUpdateError}</p>
             )}
+            {Object.keys(scheduleDrafts).length > 0 && (
+              <p className="text-sm text-amber-700 mb-3">
+                Date changed — select a cabin and slot to complete the update.
+              </p>
+            )}
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
@@ -1404,6 +1535,21 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 <tbody>
                   {visibleRows.map((p, idx) => {
                     const checked = selectedUserIds.has(p.user_id);
+                    const scheduleDraft = scheduleDrafts[p.user_id];
+                    const draftDate = scheduleDraft?.engagement_date ?? p.engagement_date ?? "";
+                    const draftCabin = scheduleDraft
+                      ? scheduleDraft.blood_collection_cabin
+                      : p.blood_collection_cabin ?? "";
+                    const draftSlot = scheduleDraft
+                      ? scheduleDraft.slot_start_time
+                      : normalizeSlotToHhmm(p.slot_start_time);
+                    const showDateEditor =
+                      (engagementDateEditMode && canEditSchedule) || Boolean(scheduleDraft);
+                    const showCabinEditor =
+                      (bloodCollectionCabinEditMode && canEditSchedule) || Boolean(scheduleDraft);
+                    const showSlotEditor =
+                      (slotStartTimeEditMode && canEditSchedule) ||
+                      Boolean(scheduleDraft?.blood_collection_cabin);
                     return (
                       <tr
                         key={`${p.engagement_participant_id ?? p.user_id}-${idx}`}
@@ -1470,23 +1616,23 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
                           onClick={(ev) => {
-                            if (engagementDateEditMode && canEditSchedule) ev.stopPropagation();
+                            if (showDateEditor && canEditSchedule) ev.stopPropagation();
                           }}
                         >
-                          {engagementDateEditMode && canEditSchedule ? (
+                          {showDateEditor && canEditSchedule ? (
                             <select
-                              value={p.engagement_date ?? ""}
+                              value={draftDate}
                               disabled={scheduleUpdateLoading === p.user_id}
                               onChange={(e) => {
                                 const next = e.target.value;
-                                if (!next || next === (p.engagement_date ?? "")) return;
-                                void handleScheduleUpdate(p, { engagement_date: next });
+                                if (!next) return;
+                                handleDateChange(p, next);
                               }}
                               className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
                               aria-label={`Engagement date for ${fullName(p)}`}
                             >
                               <option value="">—</option>
-                              {getAvailableDates(engagementPublicSlotDetail, p.engagement_date).map(
+                              {getAvailableDates(engagementPublicSlotDetail, draftDate || p.engagement_date).map(
                                 (dateOption) => (
                                   <option key={dateOption} value={dateOption}>
                                     {dateOption}
@@ -1501,37 +1647,43 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
                           onClick={(ev) => {
-                            if (slotStartTimeEditMode && canEditSchedule) ev.stopPropagation();
+                            if (showSlotEditor && canEditSchedule) ev.stopPropagation();
                           }}
                         >
-                          {slotStartTimeEditMode && canEditSchedule ? (
+                          {showSlotEditor && canEditSchedule ? (
                             <select
-                              value={normalizeSlotToHhmm(p.slot_start_time)}
+                              value={draftSlot}
                               disabled={
                                 scheduleUpdateLoading === p.user_id ||
-                                !p.engagement_date ||
-                                !p.blood_collection_cabin
+                                !draftDate ||
+                                !draftCabin
                               }
                               onChange={(e) => {
                                 const next = e.target.value;
-                                if (!next || normalizeSlotToHhmm(p.slot_start_time) === next) return;
-                                void handleScheduleUpdate(p, { slot_start_time: next });
+                                if (!next) return;
+                                handleSlotChange(p, next);
                               }}
                               className="max-w-[160px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
                               aria-label={`Slot start time for ${fullName(p)}`}
                             >
-                              <option value="">—</option>
+                              <option value="">
+                                {scheduleDraft && !scheduleDraft.blood_collection_cabin
+                                  ? "Select cabin first"
+                                  : "—"}
+                              </option>
                               {getAvailableSlots(
                                 engagementPublicSlotDetail,
-                                p.engagement_date ?? "",
-                                p.blood_collection_cabin ?? "",
-                                p.slot_start_time
+                                draftDate,
+                                draftCabin,
+                                draftSlot || p.slot_start_time
                               ).map((slotOption) => (
                                 <option key={slotOption.slot} value={normalizeSlotToHhmm(slotOption.slot)}>
                                   {slotOption.slot}
                                 </option>
                               ))}
                             </select>
+                          ) : scheduleDraft && !scheduleDraft.blood_collection_cabin ? (
+                            <span className="text-xs text-amber-700">Select cabin</span>
                           ) : (
                             p.slot_start_time || "—"
                           )}
@@ -1539,26 +1691,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         <td
                           className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-600 whitespace-nowrap"
                           onClick={(ev) => {
-                            if (bloodCollectionCabinEditMode && canEditSchedule) ev.stopPropagation();
+                            if (showCabinEditor && canEditSchedule) ev.stopPropagation();
                           }}
                         >
-                          {bloodCollectionCabinEditMode && canEditSchedule ? (
+                          {showCabinEditor && canEditSchedule ? (
                             <select
-                              value={p.blood_collection_cabin ?? ""}
-                              disabled={scheduleUpdateLoading === p.user_id || !p.engagement_date}
+                              value={draftCabin}
+                              disabled={scheduleUpdateLoading === p.user_id || !draftDate}
                               onChange={(e) => {
                                 const next = e.target.value;
-                                if (!next || next === (p.blood_collection_cabin ?? "")) return;
-                                void handleScheduleUpdate(p, { blood_collection_cabin: next });
+                                if (!next) return;
+                                handleCabinChange(p, next);
                               }}
                               className="max-w-[180px] px-2 py-1 rounded-lg border border-zinc-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 disabled:opacity-50"
                               aria-label={`Blood collection cabin for ${fullName(p)}`}
                             >
-                              <option value="">—</option>
+                              <option value="">
+                                {scheduleDraft ? "Select cabin" : "—"}
+                              </option>
                               {getAvailableCabins(
                                 engagementPublicSlotDetail,
-                                p.engagement_date ?? "",
-                                p.blood_collection_cabin
+                                draftDate,
+                                draftCabin || p.blood_collection_cabin
                               ).map((cabin) => (
                                 <option key={cabin.cabin_key} value={cabin.cabin_key}>
                                   {cabin.cabin_name || cabin.cabin_key}
