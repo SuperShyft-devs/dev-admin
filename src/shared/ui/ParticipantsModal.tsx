@@ -242,6 +242,52 @@ function isBloodTestComplete(p: Participant): boolean {
   return p.blood_test_complete === true;
 }
 
+const BLOOD_TEST_TOOLTIP_NAME_LIMIT = 80;
+
+function BloodTestCompleteCount({
+  complete,
+  total,
+  notReadyParticipants,
+}: {
+  complete: number;
+  total: number;
+  notReadyParticipants: Participant[];
+}) {
+  const notReadyNames = notReadyParticipants.map(fullName);
+  const shownNames = notReadyNames.slice(0, BLOOD_TEST_TOOLTIP_NAME_LIMIT);
+  const remainingCount = notReadyNames.length - shownNames.length;
+
+  return (
+    <span className="inline-flex items-baseline">
+      <span className="relative group inline-flex">
+        <span className="font-medium text-zinc-700 underline decoration-dotted decoration-zinc-400 cursor-help">
+          {complete}
+        </span>
+        {notReadyNames.length > 0 && (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 max-h-48 overflow-y-auto rounded-md border border-zinc-200 bg-white p-2 text-left text-xs font-normal text-zinc-700 shadow-lg group-hover:block"
+          >
+            <span className="mb-1 block font-medium text-zinc-500">Not ready</span>
+            {shownNames.map((name, index) => (
+              <span key={`${name}-${index}`} className="block truncate">
+                {name}
+              </span>
+            ))}
+            {remainingCount > 0 && (
+              <span className="block text-zinc-500">+{remainingCount} more</span>
+            )}
+          </span>
+        )}
+      </span>
+      <span>
+        {" / "}
+        {total} complete blood test
+      </span>
+    </span>
+  );
+}
+
 function applyColumnFilters(
   rows: Participant[],
   filters: ColumnFilters,
@@ -1109,6 +1155,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     () => participants.filter(isBloodTestComplete).length,
     [participants]
   );
+  const bloodTestNotReadyInView = useMemo(
+    () => visibleRows.filter((p) => !isBloodTestComplete(p)),
+    [visibleRows]
+  );
+  const bloodTestNotReadyTotal = useMemo(
+    () => participants.filter((p) => !isBloodTestComplete(p)),
+    [participants]
+  );
   const hasParticipantViewFilter = search.trim() !== "" || hasActiveColumnFilters;
 
   const toggleRowSelection = (userId: number) => {
@@ -1415,18 +1469,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 Clear filters
               </button>
             )}
-            <div className="ml-auto pb-1.5 text-xs text-zinc-600">
-              <span className="font-medium text-zinc-800">{bloodTestCompleteInView}</span>
-              {" / "}
-              {hasParticipantViewFilter ? visibleRows.length : participants.length}
-              {" complete blood test"}
-              {hasParticipantViewFilter && (
-                <span className="text-zinc-500">
-                  {" "}
-                  · {bloodTestCompleteTotal} / {participants.length} overall
-                </span>
-              )}
-            </div>
           </div>
         )}
 
@@ -1501,6 +1543,23 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 {visibleRows.length === participants.length
                   ? `${participants.length} participant${participants.length !== 1 ? "s" : ""}`
                   : `${visibleRows.length} shown · ${participants.length} total`}
+                {" · "}
+                <BloodTestCompleteCount
+                  complete={bloodTestCompleteInView}
+                  total={hasParticipantViewFilter ? visibleRows.length : participants.length}
+                  notReadyParticipants={bloodTestNotReadyInView}
+                />
+                {hasParticipantViewFilter && (
+                  <>
+                    {" · "}
+                    <BloodTestCompleteCount
+                      complete={bloodTestCompleteTotal}
+                      total={participants.length}
+                      notReadyParticipants={bloodTestNotReadyTotal}
+                    />
+                    <span className="text-zinc-500"> overall</span>
+                  </>
+                )}
                 <span className="text-zinc-400"> — select rows for bulk actions</span>
               </p>
             )}
