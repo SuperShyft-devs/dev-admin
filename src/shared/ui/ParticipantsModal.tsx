@@ -592,8 +592,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     {}
   );
   const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
-
-  const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
   const [engagementDateOptions, setEngagementDateOptions] = useState<string[]>([]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
