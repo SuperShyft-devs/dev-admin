@@ -238,6 +238,10 @@ function isParticipantBooked(p: Participant): boolean {
   return Boolean(p.booking_id?.trim());
 }
 
+function isBloodTestComplete(p: Participant): boolean {
+  return p.blood_test_complete === true;
+}
+
 function applyColumnFilters(
   rows: Participant[],
   filters: ColumnFilters,
@@ -1097,6 +1101,16 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     columnFilters.bookingId !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
 
+  const bloodTestCompleteInView = useMemo(
+    () => visibleRows.filter(isBloodTestComplete).length,
+    [visibleRows]
+  );
+  const bloodTestCompleteTotal = useMemo(
+    () => participants.filter(isBloodTestComplete).length,
+    [participants]
+  );
+  const hasParticipantViewFilter = search.trim() !== "" || hasActiveColumnFilters;
+
   const toggleRowSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
       const next = new Set(prev);
@@ -1401,6 +1415,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 Clear filters
               </button>
             )}
+            <div className="ml-auto pb-1.5 text-xs text-zinc-600">
+              <span className="font-medium text-zinc-800">{bloodTestCompleteInView}</span>
+              {" / "}
+              {hasParticipantViewFilter ? visibleRows.length : participants.length}
+              {" complete blood test"}
+              {hasParticipantViewFilter && (
+                <span className="text-zinc-500">
+                  {" "}
+                  · {bloodTestCompleteTotal} / {participants.length} overall
+                </span>
+              )}
+            </div>
           </div>
         )}
 

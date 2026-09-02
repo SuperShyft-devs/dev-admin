@@ -2224,6 +2224,7 @@ export interface Participant {
   barcode?: string | null;
   booking_id?: string | null;
   booked_by_user_id?: number | null;
+  blood_test_complete?: boolean;
   engagement_name?: string | null;
   engagement_code?: string | null;
   engagement_type?: string | null;
