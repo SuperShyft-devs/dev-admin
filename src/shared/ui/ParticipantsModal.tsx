@@ -13,6 +13,8 @@ import {
   type ExpertTypeItem,
   type ConsultationPreference,
   type PublicSlotDetail,
+  type EngagementParticipantStats,
+  type ParticipantListQueryParams,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
@@ -63,6 +65,41 @@ const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
   bookingId: "all",
   consultationFilters: {},
 };
+
+const PARTICIPANTS_PAGE_SIZE = 50;
+
+function buildParticipantQueryParams(
+  page: number,
+  search: string,
+  columnFilters: ColumnFilters
+): ParticipantListQueryParams {
+  const params: ParticipantListQueryParams = {
+    page,
+    limit: PARTICIPANTS_PAGE_SIZE,
+  };
+  const trimmedSearch = search.trim();
+  if (trimmedSearch) params.search = trimmedSearch;
+  if (columnFilters.engagementDate) params.engagement_date = columnFilters.engagementDate;
+  if (columnFilters.bookingDate) params.booking_date = columnFilters.bookingDate;
+  if (columnFilters.department) params.department = columnFilters.department;
+  if (columnFilters.bookingId !== "all") params.has_booking_id = columnFilters.bookingId;
+  for (const [key, filter] of Object.entries(columnFilters.consultationFilters)) {
+    if (filter !== "all") params[`consultation_${key}`] = filter;
+  }
+  return params;
+}
+
+function buildParticipantStatsParams(
+  search: string,
+  columnFilters: ColumnFilters
+): Omit<ParticipantListQueryParams, "page" | "limit"> {
+  const { page: _page, limit: _limit, ...params } = buildParticipantQueryParams(
+    1,
+    search,
+    columnFilters
+  );
+  return params;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -248,14 +285,17 @@ function BloodTestCompleteCount({
   complete,
   total,
   notReadyParticipants,
+  notReadyNames,
 }: {
   complete: number;
   total: number;
-  notReadyParticipants: Participant[];
+  notReadyParticipants?: Participant[];
+  notReadyNames?: string[];
 }) {
-  const notReadyNames = notReadyParticipants.map(fullName);
-  const shownNames = notReadyNames.slice(0, BLOOD_TEST_TOOLTIP_NAME_LIMIT);
-  const remainingCount = notReadyNames.length - shownNames.length;
+  const resolvedNames =
+    notReadyNames ?? notReadyParticipants?.map((participant) => fullName(participant)) ?? [];
+  const shownNames = resolvedNames.slice(0, BLOOD_TEST_TOOLTIP_NAME_LIMIT);
+  const remainingCount = resolvedNames.length - shownNames.length;
 
   return (
     <span className="inline-flex items-baseline">
@@ -263,7 +303,7 @@ function BloodTestCompleteCount({
         <span className="font-medium text-zinc-700 underline decoration-dotted decoration-zinc-400 cursor-help">
           {complete}
         </span>
-        {notReadyNames.length > 0 && (
+        {resolvedNames.length > 0 && (
           <span
             role="tooltip"
             className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-64 max-h-48 overflow-y-auto rounded-md border border-zinc-200 bg-white p-2 text-left text-xs font-normal text-zinc-700 shadow-lg group-hover:block"
@@ -493,7 +533,12 @@ const filterSelectClass =
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ParticipantsModal({ open, onClose, source }: ParticipantsModalProps) {
+  const useServerPagination = source.kind === "engagement-id";
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [participantStats, setParticipantStats] = useState<EngagementParticipantStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -548,57 +593,81 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   );
   const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
 
+  const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
+  const [engagementDateOptions, setEngagementDateOptions] = useState<string[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const buildListParams = useCallback(
+    () => buildParticipantQueryParams(page, debouncedSearch, columnFilters),
+    [page, debouncedSearch, columnFilters]
+  );
+
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       if (source.kind === "organization") {
-        const res = await participantsApi.byOrganization(source.orgId);
-        setParticipants(res.data.data ?? []);
+        const res = await participantsApi.byOrganization(source.orgId, {
+          page,
+          limit: PARTICIPANTS_PAGE_SIZE,
+        });
+        const chunk = res.data.data ?? [];
+        setParticipants(chunk);
+        setTotal(Number(res.data.meta?.total ?? chunk.length));
       } else if (source.kind === "camp") {
-        const limit = 100;
-        let page = 1;
-        let total = 0;
-        const all: Participant[] = [];
-
-        do {
-          const res = await participantsApi.byCamp(source.campNo, { page, limit });
-          const chunk = res.data.data ?? [];
-          total = Number(res.data.meta?.total ?? chunk.length);
-          all.push(...chunk);
-          page += 1;
-          if (chunk.length === 0) break;
-        } while (all.length < total);
-
-        setParticipants(all);
+        const res = await participantsApi.byCamp(source.campNo, {
+          page,
+          limit: PARTICIPANTS_PAGE_SIZE,
+        });
+        const chunk = res.data.data ?? [];
+        setParticipants(chunk);
+        setTotal(Number(res.data.meta?.total ?? chunk.length));
+      } else if (source.kind === "engagement-id") {
+        const res = await participantsApi.byEngagementId(
+          source.engagementId,
+          buildListParams()
+        );
+        const chunk = res.data.data ?? [];
+        setParticipants(chunk);
+        setTotal(Number(res.data.meta?.total ?? chunk.length));
       } else {
-        const limit = 100;
-        let page = 1;
-        let total = 0;
-        const all: Participant[] = [];
-
-        do {
-          const res =
-            source.kind === "engagement-id"
-              ? await participantsApi.byEngagementId(source.engagementId, { page, limit })
-              : source.kind === "engagement-code"
-              ? await participantsApi.byEngagementCode(source.code, { page, limit })
-              : await participantsApi.public({ page, limit });
-          const chunk = res.data.data ?? [];
-          total = Number(res.data.meta?.total ?? chunk.length);
-          all.push(...chunk);
-          page += 1;
-          if (chunk.length === 0) break;
-        } while (all.length < total);
-
-        setParticipants(all);
+        const res =
+          source.kind === "engagement-code"
+            ? await participantsApi.byEngagementCode(source.code, {
+                page,
+                limit: PARTICIPANTS_PAGE_SIZE,
+              })
+            : await participantsApi.public({ page, limit: PARTICIPANTS_PAGE_SIZE });
+        const chunk = res.data.data ?? [];
+        setParticipants(chunk);
+        setTotal(Number(res.data.meta?.total ?? chunk.length));
       }
     } catch (err) {
       setError(getApiError(err));
     } finally {
       setLoading(false);
     }
-  }, [source]);
+  }, [source, page, buildListParams]);
+
+  const fetchParticipantStats = useCallback(async () => {
+    if (source.kind !== "engagement-id") {
+      setParticipantStats(null);
+      return;
+    }
+
+    setStatsLoading(true);
+    try {
+      const res = await participantsApi.stats(
+        source.engagementId,
+        buildParticipantStatsParams(debouncedSearch, columnFilters)
+      );
+      setParticipantStats(res.data.data);
+    } catch {
+      setParticipantStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [source, debouncedSearch, columnFilters]);
 
   const fetchOrganizationDepartments = useCallback(async () => {
     if (source.kind === "camp") {
@@ -650,18 +719,24 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     if (source.kind !== "engagement-id") {
       setBookingDateOptions([]);
       setBookingDateUserIdsByDate({});
+      setEngagementDateOptions([]);
       return;
     }
 
     setBookingDatesLoading(true);
     try {
-      const res = await participantsApi.bookingDates(source.engagementId);
-      const data = res.data.data;
+      const [bookingDatesRes, filterOptionsRes] = await Promise.all([
+        participantsApi.bookingDates(source.engagementId),
+        participantsApi.filterOptions(source.engagementId),
+      ]);
+      const data = bookingDatesRes.data.data;
       setBookingDateOptions(data.dates ?? []);
       setBookingDateUserIdsByDate(data.user_ids_by_date ?? {});
+      setEngagementDateOptions(filterOptionsRes.data.data.engagement_dates ?? []);
     } catch {
       setBookingDateOptions([]);
       setBookingDateUserIdsByDate({});
+      setEngagementDateOptions([]);
     } finally {
       setBookingDatesLoading(false);
     }
@@ -672,8 +747,19 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    if (!open) return;
+    setPage(1);
+  }, [debouncedSearch, columnFilters]);
+
+  useEffect(() => {
     if (open) {
       setSearch("");
+      setDebouncedSearch("");
       setColumnFilters(DEFAULT_COLUMN_FILTERS);
       setSelectedUserIds(new Set());
       setDeleteSelectedOpen(false);
@@ -700,15 +786,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setConsultationConfigLoaded(source.kind !== "engagement-id");
       setBookingDateOptions([]);
       setBookingDateUserIdsByDate({});
-      fetchParticipants();
+      setEngagementDateOptions([]);
+      setParticipantStats(null);
+      setPage(1);
+      setTotal(0);
       void fetchOrganizationDepartments();
       void fetchBookingDates();
     }
-  }, [open, fetchParticipants, fetchOrganizationDepartments, fetchBookingDates]);
+  }, [open, fetchOrganizationDepartments, fetchBookingDates, source]);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchParticipants();
+  }, [open, fetchParticipants]);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchParticipantStats();
+  }, [open, fetchParticipantStats]);
 
   useEffect(() => {
     setSelectedUserIds(new Set());
-  }, [search, columnFilters]);
+  }, [search, columnFilters, page]);
 
   const hasEngagementFields = useMemo(
     () =>
@@ -722,12 +821,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   );
 
   const dateOptions = useMemo(() => {
+    if (useServerPagination) return engagementDateOptions;
     const dates = new Set<string>();
     for (const p of participants) {
       if (p.engagement_date) dates.add(p.engagement_date);
     }
     return Array.from(dates).sort((a, b) => b.localeCompare(a));
-  }, [participants]);
+  }, [useServerPagination, engagementDateOptions, participants]);
 
   const departmentOptions = useMemo(() => {
     if (orgDepartments.length > 0) {
@@ -762,15 +862,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     return new Set(bookingDateUserIdsByDate[columnFilters.bookingDate] ?? []);
   }, [columnFilters.bookingDate, bookingDateUserIdsByDate]);
 
-  const afterColumnFilters = useMemo(
-    () => applyColumnFilters(participants, columnFilters, bookingDateUserIds),
-    [participants, columnFilters, bookingDateUserIds]
-  );
+  const afterColumnFilters = useMemo(() => {
+    if (useServerPagination) return participants;
+    return applyColumnFilters(participants, columnFilters, bookingDateUserIds);
+  }, [useServerPagination, participants, columnFilters, bookingDateUserIds]);
 
-  const visibleRows = useMemo(
-    () => applySearch(afterColumnFilters, search),
-    [afterColumnFilters, search]
-  );
+  const visibleRows = useMemo(() => {
+    if (useServerPagination) return afterColumnFilters;
+    return applySearch(afterColumnFilters, search);
+  }, [useServerPagination, afterColumnFilters, search]);
 
   const selectedCount = selectedUserIds.size;
 
@@ -1146,15 +1246,24 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     columnFilters.department !== "" ||
     columnFilters.bookingId !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
+  const hasParticipantViewFilter = useServerPagination
+    ? hasActiveColumnFilters || debouncedSearch.trim() !== ""
+    : search.trim() !== "" || hasActiveColumnFilters;
 
-  const bloodTestCompleteInView = useMemo(
-    () => visibleRows.filter(isBloodTestComplete).length,
-    [visibleRows]
-  );
-  const bloodTestCompleteTotal = useMemo(
-    () => participants.filter(isBloodTestComplete).length,
-    [participants]
-  );
+  const bloodTestCompleteInView = useServerPagination && participantStats
+    ? participantStats.filtered_blood_test_complete
+    : visibleRows.filter(isBloodTestComplete).length;
+  const bloodTestFilteredTotal = useServerPagination && participantStats
+    ? participantStats.filtered_total
+    : hasParticipantViewFilter
+    ? visibleRows.length
+    : participants.length;
+  const bloodTestCompleteTotal = useServerPagination && participantStats
+    ? participantStats.overall_blood_test_complete
+    : participants.filter(isBloodTestComplete).length;
+  const bloodTestOverallTotal = useServerPagination && participantStats
+    ? participantStats.overall_total
+    : participants.length;
   const bloodTestNotReadyInView = useMemo(
     () => visibleRows.filter((p) => !isBloodTestComplete(p)),
     [visibleRows]
@@ -1163,7 +1272,9 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     () => participants.filter((p) => !isBloodTestComplete(p)),
     [participants]
   );
-  const hasParticipantViewFilter = search.trim() !== "" || hasActiveColumnFilters;
+  const bloodTestNotReadyNames = useServerPagination && participantStats
+    ? participantStats.not_ready_names
+    : undefined;
 
   const toggleRowSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
@@ -1242,6 +1353,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         return next;
       });
       await fetchParticipants();
+      await fetchParticipantStats();
     } catch (err) {
       setDeleteError(getApiError(err));
     } finally {
@@ -1279,6 +1391,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setDeleteSelectedOpen(false);
       clearSelection();
       await fetchParticipants();
+      await fetchParticipantStats();
 
       if (failed > 0) {
         setDeleteError(
@@ -1294,7 +1407,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   };
 
   const emptyMessage = () => {
-    if (participants.length === 0) return "No participants found.";
+    if ((useServerPagination ? total : participants.length) === 0) return "No participants found.";
     if (search.trim() || hasActiveColumnFilters) {
       return "No results match your filters or search.";
     }
@@ -1479,7 +1592,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             </span>
             <span className="text-zinc-400">·</span>
             <span>
-              {visibleRows.length} shown · {participants.length} total
+              {visibleRows.length} shown · {useServerPagination ? total : participants.length} total
             </span>
             <button
               type="button"
@@ -1540,21 +1653,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             )}
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
-                {visibleRows.length === participants.length
+                {useServerPagination
+                  ? `${visibleRows.length} shown · ${total} total`
+                  : visibleRows.length === participants.length
                   ? `${participants.length} participant${participants.length !== 1 ? "s" : ""}`
                   : `${visibleRows.length} shown · ${participants.length} total`}
                 {" · "}
-                <BloodTestCompleteCount
-                  complete={bloodTestCompleteInView}
-                  total={hasParticipantViewFilter ? visibleRows.length : participants.length}
-                  notReadyParticipants={bloodTestNotReadyInView}
-                />
-                {hasParticipantViewFilter && (
+                {statsLoading && useServerPagination ? (
+                  <span className="text-zinc-400">checking blood tests…</span>
+                ) : (
+                  <BloodTestCompleteCount
+                    complete={bloodTestCompleteInView}
+                    total={bloodTestFilteredTotal}
+                    notReadyParticipants={bloodTestNotReadyInView}
+                    notReadyNames={bloodTestNotReadyNames}
+                  />
+                )}
+                {hasParticipantViewFilter && !statsLoading && (
                   <>
                     {" · "}
                     <BloodTestCompleteCount
                       complete={bloodTestCompleteTotal}
-                      total={participants.length}
+                      total={bloodTestOverallTotal}
                       notReadyParticipants={bloodTestNotReadyTotal}
                     />
                     <span className="text-zinc-500"> overall</span>
@@ -1963,6 +2083,40 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 </tbody>
               </table>
             </div>
+
+            {total > PARTICIPANTS_PAGE_SIZE && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600">
+                <span>
+                  Showing {(page - 1) * PARTICIPANTS_PAGE_SIZE + 1}–
+                  {Math.min(page * PARTICIPANTS_PAGE_SIZE, total)} of {total}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={page <= 1 || loading}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    Page {page} of {Math.max(1, Math.ceil(total / PARTICIPANTS_PAGE_SIZE))}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((current) =>
+                        Math.min(Math.ceil(total / PARTICIPANTS_PAGE_SIZE), current + 1)
+                      )
+                    }
+                    disabled={page >= Math.ceil(total / PARTICIPANTS_PAGE_SIZE) || loading}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </Modal>

@@ -2260,11 +2260,43 @@ export interface EngagementBookingDatesData {
   user_ids_by_date: Record<string, number[]>;
 }
 
+export interface ParticipantListQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  engagement_date?: string;
+  booking_date?: string;
+  department?: string;
+  has_booking_id?: "yes" | "no";
+  [key: string]: string | number | undefined;
+}
+
+export interface EngagementParticipantStats {
+  filtered_total: number;
+  filtered_blood_test_complete: number;
+  overall_total: number;
+  overall_blood_test_complete: number;
+  not_ready_names: string[];
+}
+
+export interface EngagementParticipantFilterOptions {
+  engagement_dates: string[];
+}
+
 export const participantsApi = {
-  byEngagementId: (engagementId: number, params?: { page?: number; limit?: number }) =>
+  byEngagementId: (engagementId: number, params?: ParticipantListQueryParams) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
       `/engagements/${engagementId}/participants`,
       { params }
+    ),
+  stats: (engagementId: number, params?: Omit<ParticipantListQueryParams, "page" | "limit">) =>
+    api.get<{ data: EngagementParticipantStats }>(
+      `/engagements/${engagementId}/participants/stats`,
+      { params }
+    ),
+  filterOptions: (engagementId: number) =>
+    api.get<{ data: EngagementParticipantFilterOptions }>(
+      `/engagements/${engagementId}/participants/filter-options`
     ),
   // B2B: participants for a specific engagement by code
   byEngagementCode: (code: string, params?: { page?: number; limit?: number }) =>
