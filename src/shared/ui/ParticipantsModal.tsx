@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
@@ -15,6 +15,7 @@ import {
   type PublicSlotDetail,
   type EngagementParticipantStats,
   type ParticipantListQueryParams,
+  type LoadBloodReportsResult,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
@@ -553,6 +554,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [loadBloodOpen, setLoadBloodOpen] = useState(false);
+  const [loadingBloodReports, setLoadingBloodReports] = useState(false);
+  const [loadBloodResult, setLoadBloodResult] = useState<LoadBloodReportsResult | null>(null);
+  const [loadBloodError, setLoadBloodError] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [orgDepartments, setOrgDepartments] = useState<OrganizationDepartment[]>([]);
   const [organizationId, setOrganizationId] = useState<number | null>(null);
@@ -895,6 +900,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
   const canNotify = source.kind === "engagement-id";
+  const canLoadBloodReports = source.kind === "engagement-id";
 
   const engagementIdForDepartment =
     source.kind === "engagement-id" ? source.engagementId : undefined;
@@ -1404,6 +1410,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   };
 
+  const handleLoadBloodReports = async () => {
+    if (source.kind !== "engagement-id") return;
+    const userIds = Array.from(selectedUserIds);
+    if (userIds.length === 0) return;
+
+    try {
+      setLoadingBloodReports(true);
+      setLoadBloodError(null);
+      setLoadBloodResult(null);
+      const res = await participantsApi.loadBloodReports(source.engagementId, {
+        user_ids: userIds,
+      });
+      setLoadBloodResult(res.data.data);
+      await fetchParticipants();
+      await fetchParticipantStats();
+    } catch (err) {
+      setLoadBloodError(getApiError(err));
+    } finally {
+      setLoadingBloodReports(false);
+    }
+  };
+
   const emptyMessage = () => {
     if ((useServerPagination ? total : participants.length) === 0) return "No participants found.";
     if (search.trim() || hasActiveColumnFilters) {
@@ -1467,6 +1495,24 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               >
                 <Bell className="w-4 h-4" />
                 Send notification{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </button>
+            )}
+            {canLoadBloodReports && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadBloodError(null);
+                  setLoadBloodResult(null);
+                  setLoadBloodOpen(true);
+                }}
+                disabled={
+                  selectedCount === 0 || loading || loadingBloodReports || deleteLoading
+                }
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={selectedCount === 0 ? "Select rows to load blood reports" : undefined}
+              >
+                <TestTubes className="w-4 h-4" />
+                Load blood reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </button>
             )}
           </div>
@@ -2126,6 +2172,119 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           engagement={engagementForNotify}
           scopedRecipients={selectedParticipants}
         />
+      )}
+
+      {canLoadBloodReports && (
+        <Modal
+          open={loadBloodOpen}
+          onClose={() => {
+            if (!loadingBloodReports) {
+              setLoadBloodOpen(false);
+              setLoadBloodResult(null);
+              setLoadBloodError(null);
+            }
+          }}
+          title="Load Blood Reports"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            {!loadBloodResult && !loadBloodError && !loadingBloodReports && (
+              <>
+                <p className="text-sm text-zinc-700">
+                  Run the full blood report pipeline for{" "}
+                  <span className="font-semibold">{selectedCount}</span> selected participant
+                  {selectedCount !== 1 ? "s" : ""}:
+                </p>
+                <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                  <li>Fetch report and digital values from Healthians</li>
+                  <li>Update individual health report records</li>
+                  <li>Draft blood-parameter questionnaire responses</li>
+                  <li>Sync unsubmitted blood categories to Metsights</li>
+                </ul>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Notifications will <span className="font-semibold">not</span> be sent.
+                </p>
+              </>
+            )}
+
+            {loadingBloodReports && (
+              <div className="py-6 flex flex-col items-center gap-2 text-zinc-500">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="text-sm">
+                  Loading blood reports for {selectedCount} participant
+                  {selectedCount !== 1 ? "s" : ""}…
+                </span>
+                <span className="text-xs text-zinc-400">This may take several minutes.</span>
+              </div>
+            )}
+
+            {loadBloodError && <p className="text-sm text-red-600">{loadBloodError}</p>}
+
+            {loadBloodResult && (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-sm space-y-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div>
+                    <span className="text-zinc-500">Loaded:</span>{" "}
+                    <span className="font-medium text-emerald-700">{loadBloodResult.loaded}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Skipped:</span>{" "}
+                    <span className="font-medium">{loadBloodResult.skipped}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Failed:</span>{" "}
+                    <span className="font-medium text-red-600">{loadBloodResult.failed}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Matched:</span>{" "}
+                    <span className="font-medium">{loadBloodResult.matched}</span>
+                  </div>
+                </div>
+                {loadBloodResult.details.length > 0 && (
+                  <div className="pt-1 border-t border-zinc-200 text-xs text-zinc-600 space-y-0.5 max-h-40 overflow-y-auto">
+                    {loadBloodResult.details.slice(0, 8).map((detail, index) => (
+                      <div key={`${detail.user_id ?? "row"}-${index}`}>
+                        {detail.user_id != null ? `User ${detail.user_id}` : "Participant"}:{" "}
+                        {detail.action ?? "processed"}
+                        {detail.reason ? ` — ${detail.reason}` : ""}
+                      </div>
+                    ))}
+                    {loadBloodResult.details.length > 8 && (
+                      <div className="text-zinc-400">
+                        …and {loadBloodResult.details.length - 8} more
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              {!loadBloodResult && !loadBloodError && (
+                <button
+                  type="button"
+                  onClick={() => void handleLoadBloodReports()}
+                  disabled={loadingBloodReports || selectedCount === 0}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {loadingBloodReports ? "Loading…" : "Load Blood Reports"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadBloodOpen(false);
+                  setLoadBloodResult(null);
+                  setLoadBloodError(null);
+                }}
+                disabled={loadingBloodReports}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {loadBloodResult || loadBloodError ? "Close" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {canDeleteRows && deleteTarget && (

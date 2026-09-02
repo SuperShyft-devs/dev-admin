@@ -2283,6 +2283,23 @@ export interface EngagementParticipantFilterOptions {
   engagement_dates: string[];
 }
 
+export interface LoadBloodReportsResult {
+  as_of: string;
+  engagement_id: number;
+  matched: number;
+  loaded: number;
+  notified: number;
+  skipped: number;
+  failed: number;
+  dry_run: boolean;
+  details: Array<{
+    user_id?: number;
+    engagement_id?: number;
+    action?: string;
+    reason?: string;
+  }>;
+}
+
 export const participantsApi = {
   byEngagementId: (engagementId: number, params?: ParticipantListQueryParams) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
@@ -2297,6 +2314,12 @@ export const participantsApi = {
   filterOptions: (engagementId: number) =>
     api.get<{ data: EngagementParticipantFilterOptions }>(
       `/engagements/${engagementId}/participants/filter-options`
+    ),
+  loadBloodReports: (engagementId: number, payload: { user_ids: number[] }) =>
+    api.post<{ data: LoadBloodReportsResult }>(
+      `/engagements/${engagementId}/participants/load-blood-reports`,
+      payload,
+      { timeout: 300_000 }
     ),
   // B2B: participants for a specific engagement by code
   byEngagementCode: (code: string, params?: { page?: number; limit?: number }) =>
