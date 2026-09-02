@@ -1097,11 +1097,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     columnFilters.bookingId !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
 
-  const bookedCount = useMemo(
-    () => participants.filter(isParticipantBooked).length,
-    [participants]
-  );
-
   const toggleRowSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
       const next = new Set(prev);
@@ -1478,8 +1473,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             {selectedCount === 0 && (
               <p className="text-xs text-zinc-500 mb-3">
                 {visibleRows.length === participants.length
-                  ? `${participants.length} participant${participants.length !== 1 ? "s" : ""} · ${bookedCount} with booking ID`
-                  : `${visibleRows.length} shown · ${participants.length} total · ${bookedCount} with booking ID`}
+                  ? `${participants.length} participant${participants.length !== 1 ? "s" : ""}`
+                  : `${visibleRows.length} shown · ${participants.length} total`}
                 <span className="text-zinc-400"> — select rows for bulk actions</span>
               </p>
             )}
