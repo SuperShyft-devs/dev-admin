@@ -2254,6 +2254,11 @@ export interface EngagementParticipantUpdateResponse {
   blood_collection_cabin?: string | null;
 }
 
+export interface EngagementBookingDatesData {
+  dates: string[];
+  user_ids_by_date: Record<string, number[]>;
+}
+
 export const participantsApi = {
   byEngagementId: (engagementId: number, params?: { page?: number; limit?: number }) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
@@ -2282,6 +2287,10 @@ export const participantsApi = {
     api.get<{ data: Participant[]; meta: { page: number; limit: number; total: number } }>(
       `/reports/camps/${campNo}/participants`,
       { params }
+    ),
+  bookingDates: (engagementId: number) =>
+    api.get<{ data: EngagementBookingDatesData }>(
+      `/engagements/${engagementId}/booking-dates`
     ),
   removeFromEngagement: (engagementId: number, userId: number) =>
     api.delete<{ data: { engagement_id: number; user_id: number } }>(

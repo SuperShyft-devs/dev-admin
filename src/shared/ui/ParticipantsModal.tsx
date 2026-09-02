@@ -50,6 +50,7 @@ type BoolFilter = "all" | "yes" | "no";
 
 interface ColumnFilters {
   engagementDate: string;
+  bookingDate: string;
   department: string;
   bookingId: BoolFilter;
   consultationFilters: Record<string, BoolFilter>;
@@ -57,6 +58,7 @@ interface ColumnFilters {
 
 const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
   engagementDate: "",
+  bookingDate: "",
   department: "",
   bookingId: "all",
   consultationFilters: {},
@@ -236,8 +238,17 @@ function isParticipantBooked(p: Participant): boolean {
   return Boolean(p.booking_id?.trim());
 }
 
-function applyColumnFilters(rows: Participant[], filters: ColumnFilters): Participant[] {
+function applyColumnFilters(
+  rows: Participant[],
+  filters: ColumnFilters,
+  bookingDateUserIds: Set<number> | null
+): Participant[] {
   return rows.filter((p) => {
+    if (filters.bookingDate) {
+      if (!bookingDateUserIds?.has(p.user_id)) {
+        return false;
+      }
+    }
     if (filters.engagementDate && (p.engagement_date ?? "") !== filters.engagementDate) {
       return false;
     }
@@ -481,6 +492,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     null
   );
   const [consultationConfigLoaded, setConsultationConfigLoaded] = useState(false);
+  const [bookingDateOptions, setBookingDateOptions] = useState<string[]>([]);
+  const [bookingDateUserIdsByDate, setBookingDateUserIdsByDate] = useState<Record<string, number[]>>(
+    {}
+  );
+  const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
 
   const fetchParticipants = useCallback(async () => {
     setLoading(true);
@@ -580,6 +596,27 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   }, [source]);
 
+  const fetchBookingDates = useCallback(async () => {
+    if (source.kind !== "engagement-id") {
+      setBookingDateOptions([]);
+      setBookingDateUserIdsByDate({});
+      return;
+    }
+
+    setBookingDatesLoading(true);
+    try {
+      const res = await participantsApi.bookingDates(source.engagementId);
+      const data = res.data.data;
+      setBookingDateOptions(data.dates ?? []);
+      setBookingDateUserIdsByDate(data.user_ids_by_date ?? {});
+    } catch {
+      setBookingDateOptions([]);
+      setBookingDateUserIdsByDate({});
+    } finally {
+      setBookingDatesLoading(false);
+    }
+  }, [source]);
+
   useEffect(() => {
     expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
   }, []);
@@ -611,10 +648,13 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setEngagementBloodCollectionType(null);
       setEngagementConsultations(null);
       setConsultationConfigLoaded(source.kind !== "engagement-id");
+      setBookingDateOptions([]);
+      setBookingDateUserIdsByDate({});
       fetchParticipants();
       void fetchOrganizationDepartments();
+      void fetchBookingDates();
     }
-  }, [open, fetchParticipants, fetchOrganizationDepartments]);
+  }, [open, fetchParticipants, fetchOrganizationDepartments, fetchBookingDates]);
 
   useEffect(() => {
     setSelectedUserIds(new Set());
@@ -667,9 +707,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     return expertTypes.filter((et) => enabledKeys.has(et.type_key));
   }, [consultationConfigLoaded, engagementConsultations, expertTypes, source.kind]);
 
+  const bookingDateUserIds = useMemo(() => {
+    if (!columnFilters.bookingDate) return null;
+    return new Set(bookingDateUserIdsByDate[columnFilters.bookingDate] ?? []);
+  }, [columnFilters.bookingDate, bookingDateUserIdsByDate]);
+
   const afterColumnFilters = useMemo(
-    () => applyColumnFilters(participants, columnFilters),
-    [participants, columnFilters]
+    () => applyColumnFilters(participants, columnFilters, bookingDateUserIds),
+    [participants, columnFilters, bookingDateUserIds]
   );
 
   const visibleRows = useMemo(
@@ -1047,6 +1092,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const hasActiveColumnFilters =
     columnFilters.engagementDate !== "" ||
+    columnFilters.bookingDate !== "" ||
     columnFilters.department !== "" ||
     columnFilters.bookingId !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
@@ -1269,6 +1315,26 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 <option value="no">Without booking ID</option>
               </select>
             </div>
+            {source.kind === "engagement-id" && (
+              <div className="flex flex-col gap-0.5 min-w-[140px]">
+                <label className="text-xs font-medium text-zinc-500">Booking date</label>
+                <select
+                  value={columnFilters.bookingDate}
+                  onChange={(e) =>
+                    setColumnFilters((f) => ({ ...f, bookingDate: e.target.value }))
+                  }
+                  className={filterSelectClass}
+                  disabled={bookingDatesLoading}
+                >
+                  <option value="">All dates</option>
+                  {bookingDateOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {hasEngagementFields && (
               <>
             <div className="flex flex-col gap-0.5 min-w-[140px]">
