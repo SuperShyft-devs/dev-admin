@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Plus, Loader2, X, ScrollText, Search } from "lucide-react";
+import { Plus, Loader2, X, ScrollText, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
@@ -166,6 +166,8 @@ function NotificationsTab() {
   const [engagementIdFilter, setEngagementIdFilter] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [debouncedStatusFilters, setDebouncedStatusFilters] = useState<string[]>([]);
   const [debouncedTimePreset, setDebouncedTimePreset] = useState<TimePreset>(DEFAULT_TIME_PRESET);
@@ -313,13 +315,98 @@ function NotificationsTab() {
     if (!window.confirm(`Delete notification #${row.notification_id}? This cannot be undone.`)) return;
     try {
       await notificationsApi.delete(row.notification_id);
+      setSelectedIds((prev) => {
+        if (!prev.has(row.notification_id)) return prev;
+        const next = new Set(prev);
+        next.delete(row.notification_id);
+        return next;
+      });
       await fetchList();
     } catch (err) {
       setError(getApiError(err));
     }
   };
 
+  const pageIds = useMemo(() => data.map((r) => r.notification_id), [data]);
+  const selectedCount = selectedIds.size;
+  const allOnPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const someOnPageSelected = pageIds.some((id) => selectedIds.has(id));
+
+  const toggleRowSelection = (notificationId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(notificationId)) next.delete(notificationId);
+      else next.add(notificationId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        for (const id of pageIds) next.delete(id);
+      } else {
+        for (const id of pageIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedCount === 0) return;
+    const noun = selectedCount === 1 ? "notification" : "notifications";
+    if (!window.confirm(`Delete ${selectedCount} ${noun}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    setError(null);
+    try {
+      const ids = Array.from(selectedIds);
+      const chunkSize = 500;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        await notificationsApi.bulkDelete(ids.slice(i, i + chunkSize));
+      }
+      setSelectedIds(new Set());
+      await fetchList();
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const columns: Column<NotificationItem>[] = [
+    {
+      key: "_select",
+      label: (
+        <input
+          type="checkbox"
+          checked={allOnPageSelected}
+          ref={(el) => {
+            if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected;
+          }}
+          onChange={toggleSelectAllOnPage}
+          onClick={(e) => e.stopPropagation()}
+          disabled={data.length === 0 || bulkDeleting}
+          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+          aria-label="Select all notifications on this page"
+          title="Select all on this page"
+        />
+      ),
+      sortable: false,
+      className: "w-10",
+      render: (r) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(r.notification_id)}
+          onChange={() => toggleRowSelection(r.notification_id)}
+          disabled={bulkDeleting}
+          onClick={(e) => e.stopPropagation()}
+          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+          aria-label={`Select notification ${r.notification_id}`}
+        />
+      ),
+    },
     { key: "notification_id", label: "ID", sortable: false, className: "w-16" },
     {
       key: "service_display_name",
@@ -531,15 +618,32 @@ function NotificationsTab() {
             label="User"
             className="min-w-0"
           />
-          <EngagementSearchPicker
-            value={engagementIdFilter}
-            onChange={(id) => {
-              setEngagementIdFilter(id);
-              resetPage();
-            }}
-            label="Engagement"
-            className="min-w-0"
-          />
+          <div className="flex items-end gap-2 min-w-0">
+            <EngagementSearchPicker
+              value={engagementIdFilter}
+              onChange={(id) => {
+                setEngagementIdFilter(id);
+                resetPage();
+              }}
+              label="Engagement"
+              className="min-w-0 flex-1"
+            />
+            {selectedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting || loading}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              >
+                {bulkDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Delete ({selectedCount})
+              </button>
+            )}
+          </div>
           {hasActiveFilters && (
             <button
               type="button"

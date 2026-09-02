@@ -3780,6 +3780,14 @@ export const notificationsApi = {
     api.delete<{ data: { notification_id: number; deleted: boolean } }>(
       `/notifications/${notificationId}`
     ),
+  bulkDelete: (notificationIds: number[]) =>
+    api.post<{
+      data: {
+        deleted_ids: number[];
+        deleted_count: number;
+        not_found_ids: number[];
+      };
+    }>("/notifications/bulk-delete", { notification_ids: notificationIds }),
   deleteService: (notificationServiceId: number) =>
     api.delete<{ data: { notification_service_id: number; deleted: boolean } }>(
       `/notifications/services/${notificationServiceId}`
