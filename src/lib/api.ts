@@ -2268,6 +2268,7 @@ export interface ParticipantListQueryParams {
   booking_date?: string;
   department?: string;
   has_booking_id?: "yes" | "no";
+  reports_ready?: "yes" | "no";
   [key: string]: string | number | undefined;
 }
 

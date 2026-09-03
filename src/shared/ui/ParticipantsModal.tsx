@@ -70,6 +70,7 @@ interface ColumnFilters {
   bookingDate: string;
   department: string;
   bookingId: BoolFilter;
+  reportsReady: BoolFilter;
   consultationFilters: Record<string, BoolFilter>;
 }
 
@@ -78,6 +79,7 @@ const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
   bookingDate: "",
   department: "",
   bookingId: "all",
+  reportsReady: "all",
   consultationFilters: {},
 };
 
@@ -98,6 +100,7 @@ function buildParticipantQueryParams(
   if (columnFilters.bookingDate) params.booking_date = columnFilters.bookingDate;
   if (columnFilters.department) params.department = columnFilters.department;
   if (columnFilters.bookingId !== "all") params.has_booking_id = columnFilters.bookingId;
+  if (columnFilters.reportsReady !== "all") params.reports_ready = columnFilters.reportsReady;
   for (const [key, filter] of Object.entries(columnFilters.consultationFilters)) {
     if (filter !== "all") params[`consultation_${key}`] = filter;
   }
@@ -1354,6 +1357,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     columnFilters.bookingDate !== "" ||
     columnFilters.department !== "" ||
     columnFilters.bookingId !== "all" ||
+    columnFilters.reportsReady !== "all" ||
     Object.values(columnFilters.consultationFilters).some((f) => f !== "all");
   const hasParticipantViewFilter = useServerPagination
     ? hasActiveColumnFilters || debouncedSearch.trim() !== ""
@@ -1766,6 +1770,25 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       {d}
                     </option>
                   ))}
+                </select>
+              </div>
+            )}
+            {source.kind === "engagement-id" && (
+              <div className="flex flex-col gap-0.5 min-w-[160px]">
+                <label className="text-xs font-medium text-zinc-500">Reports ready</label>
+                <select
+                  value={columnFilters.reportsReady}
+                  onChange={(e) =>
+                    setColumnFilters((f) => ({
+                      ...f,
+                      reportsReady: e.target.value as BoolFilter,
+                    }))
+                  }
+                  className={filterSelectClass}
+                >
+                  <option value="all">All</option>
+                  <option value="yes">Bio AI + blood URLs ready</option>
+                  <option value="no">Missing report URL(s)</option>
                 </select>
               </div>
             )}
