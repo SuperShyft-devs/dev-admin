@@ -84,6 +84,34 @@ const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
 };
 
 const PARTICIPANTS_PAGE_SIZE = 50;
+/** API accepts up to 2000; chunk to keep each load request bounded. */
+const LOAD_REPORTS_CHUNK_SIZE = 50;
+
+function chunkIds(ids: number[], size: number): number[][] {
+  const chunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function mergeLoadReportsResults(
+  results: LoadBloodReportsResult[]
+): LoadBloodReportsResult | null {
+  if (results.length === 0) return null;
+  const first = results[0];
+  return {
+    as_of: first.as_of,
+    engagement_id: first.engagement_id,
+    matched: results.reduce((sum, r) => sum + r.matched, 0),
+    loaded: results.reduce((sum, r) => sum + r.loaded, 0),
+    notified: results.reduce((sum, r) => sum + r.notified, 0),
+    skipped: results.reduce((sum, r) => sum + r.skipped, 0),
+    failed: results.reduce((sum, r) => sum + r.failed, 0),
+    dry_run: results.some((r) => r.dry_run),
+    details: results.flatMap((r) => r.details ?? []),
+  };
+}
 
 function buildParticipantQueryParams(
   page: number,
@@ -1578,10 +1606,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadingBloodReports(true);
       setLoadBloodError(null);
       setLoadBloodResult(null);
-      const res = await participantsApi.loadBloodReports(source.engagementId, {
-        user_ids: userIds,
-      });
-      setLoadBloodResult(res.data.data);
+      const chunks = chunkIds(userIds, LOAD_REPORTS_CHUNK_SIZE);
+      const results: LoadBloodReportsResult[] = [];
+      for (const chunk of chunks) {
+        const res = await participantsApi.loadBloodReports(source.engagementId, {
+          user_ids: chunk,
+        });
+        results.push(res.data.data);
+      }
+      setLoadBloodResult(mergeLoadReportsResults(results));
       await fetchParticipants();
       await fetchParticipantStats();
     } catch (err) {
@@ -1600,10 +1633,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadingBioaiReports(true);
       setLoadBioaiError(null);
       setLoadBioaiResult(null);
-      const res = await participantsApi.loadBioaiReports(source.engagementId, {
-        user_ids: userIds,
-      });
-      setLoadBioaiResult(res.data.data);
+      const chunks = chunkIds(userIds, LOAD_REPORTS_CHUNK_SIZE);
+      const results: LoadBioaiReportsResult[] = [];
+      for (const chunk of chunks) {
+        const res = await participantsApi.loadBioaiReports(source.engagementId, {
+          user_ids: chunk,
+        });
+        results.push(res.data.data);
+      }
+      setLoadBioaiResult(mergeLoadReportsResults(results));
       await fetchParticipants();
       await fetchParticipantStats();
     } catch (err) {
