@@ -2313,6 +2313,11 @@ export const participantsApi = {
       `/engagements/${engagementId}/participants/stats`,
       { params }
     ),
+  ids: (engagementId: number, params?: Omit<ParticipantListQueryParams, "page" | "limit">) =>
+    api.get<{ data: { user_ids: number[]; total: number } }>(
+      `/engagements/${engagementId}/participants/ids`,
+      { params }
+    ),
   filterOptions: (engagementId: number) =>
     api.get<{ data: EngagementParticipantFilterOptions }>(
       `/engagements/${engagementId}/participants/filter-options`

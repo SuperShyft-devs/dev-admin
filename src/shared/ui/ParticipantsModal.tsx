@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
@@ -114,6 +114,48 @@ function buildParticipantStatsParams(
     columnFilters
   );
   return params;
+}
+
+async function resolveSelectedParticipants(
+  engagementId: number,
+  selectedUserIds: Set<number>,
+  loadedParticipants: Participant[],
+  filterParams: Omit<ParticipantListQueryParams, "page" | "limit">
+): Promise<Participant[]> {
+  const found = new Map<number, Participant>();
+  for (const participant of loadedParticipants) {
+    if (selectedUserIds.has(participant.user_id)) {
+      found.set(participant.user_id, participant);
+    }
+  }
+  if (found.size >= selectedUserIds.size) {
+    return Array.from(selectedUserIds)
+      .map((id) => found.get(id))
+      .filter((participant): participant is Participant => participant != null);
+  }
+
+  let page = 1;
+  let listTotal = Infinity;
+  while (found.size < selectedUserIds.size && (page - 1) * PARTICIPANTS_PAGE_SIZE < listTotal) {
+    const response = await participantsApi.byEngagementId(engagementId, {
+      ...filterParams,
+      page,
+      limit: PARTICIPANTS_PAGE_SIZE,
+    });
+    const chunk = response.data.data ?? [];
+    listTotal = Number(response.data.meta?.total ?? chunk.length);
+    for (const participant of chunk) {
+      if (selectedUserIds.has(participant.user_id)) {
+        found.set(participant.user_id, participant);
+      }
+    }
+    if (chunk.length === 0) break;
+    page += 1;
+  }
+
+  return Array.from(selectedUserIds)
+    .map((id) => found.get(id))
+    .filter((participant): participant is Participant => participant != null);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -588,7 +630,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     null
   );
   const [pushError, setPushError] = useState<string | null>(null);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
+  const [selectAllError, setSelectAllError] = useState<string | null>(null);
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
+  const [resolvingSelection, setResolvingSelection] = useState(false);
+  const [notifyRecipients, setNotifyRecipients] = useState<Participant[]>([]);
+  const [exportParticipants, setExportParticipants] = useState<Participant[]>([]);
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const bulkActionsRef = useRef<HTMLDivElement>(null);
   const [orgDepartments, setOrgDepartments] = useState<OrganizationDepartment[]>([]);
   const [organizationId, setOrganizationId] = useState<number | null>(null);
   const [departmentEditMode, setDepartmentEditMode] = useState(false);
@@ -787,7 +836,20 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   useEffect(() => {
     if (!open) return;
     setPage(1);
-  }, [debouncedSearch, columnFilters]);
+    setSelectedUserIds(new Set());
+    setSelectAllError(null);
+  }, [debouncedSearch, columnFilters, open]);
+
+  useEffect(() => {
+    if (!bulkActionsOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (bulkActionsRef.current && !bulkActionsRef.current.contains(event.target as Node)) {
+        setBulkActionsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [bulkActionsOpen]);
 
   useEffect(() => {
     if (open) {
@@ -906,26 +968,30 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [useServerPagination, afterColumnFilters, search]);
 
   const selectedCount = selectedUserIds.size;
+  const matchingTotal = useServerPagination ? total : visibleRows.length;
 
   const visibleUserIds = useMemo(
     () => visibleRows.map((p) => p.user_id).filter((id) => id != null),
     [visibleRows]
   );
 
-  const allVisibleSelected =
-    visibleUserIds.length > 0 && visibleUserIds.every((id) => selectedUserIds.has(id));
-
-  const someVisibleSelected = visibleUserIds.some((id) => selectedUserIds.has(id));
+  const allMatchingSelected = matchingTotal > 0 && selectedCount === matchingTotal;
+  const someSelected = selectedCount > 0;
 
   useEffect(() => {
     if (selectAllRef.current) {
-      selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+      selectAllRef.current.indeterminate = someSelected && !allMatchingSelected;
     }
-  }, [someVisibleSelected, allVisibleSelected]);
+  }, [someSelected, allMatchingSelected]);
 
   const selectedParticipants = useMemo(
     () => participants.filter((p) => selectedUserIds.has(p.user_id)),
     [participants, selectedUserIds]
+  );
+
+  const participantFilterParams = useMemo(
+    () => buildParticipantStatsParams(debouncedSearch, columnFilters),
+    [debouncedSearch, columnFilters]
   );
 
   const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
@@ -1328,33 +1394,83 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     });
   };
 
-  const toggleSelectAllVisible = () => {
-    if (allVisibleSelected) {
-      setSelectedUserIds((prev) => {
-        const next = new Set(prev);
-        for (const id of visibleUserIds) next.delete(id);
-        return next;
-      });
-    } else {
-      setSelectedUserIds((prev) => {
-        const next = new Set(prev);
-        for (const id of visibleUserIds) next.add(id);
-        return next;
-      });
+  const toggleSelectAllMatching = async () => {
+    if (allMatchingSelected) {
+      clearSelection();
+      return;
+    }
+
+    if (useServerPagination && source.kind === "engagement-id") {
+      setSelectAllLoading(true);
+      setSelectAllError(null);
+      try {
+        const response = await participantsApi.ids(source.engagementId, participantFilterParams);
+        const ids = response.data.data?.user_ids ?? [];
+        setSelectedUserIds(new Set(ids));
+      } catch (err) {
+        setSelectAllError(getApiError(err));
+      } finally {
+        setSelectAllLoading(false);
+      }
+      return;
+    }
+
+    setSelectedUserIds(new Set(visibleUserIds));
+  };
+
+  const clearSelection = () => {
+    setSelectedUserIds(new Set());
+    setSelectAllError(null);
+  };
+
+  const resolveSelectionForBulkAction = async (): Promise<Participant[]> => {
+    if (source.kind !== "engagement-id") {
+      return selectedParticipants;
+    }
+    if (selectedParticipants.length === selectedCount) {
+      return selectedParticipants;
+    }
+    return resolveSelectedParticipants(
+      source.engagementId,
+      selectedUserIds,
+      participants,
+      participantFilterParams
+    );
+  };
+
+  const handleExportSelected = async () => {
+    if (selectedCount === 0) return;
+    setResolvingSelection(true);
+    try {
+      const rows = await resolveSelectionForBulkAction();
+      if (rows.length === 0) return;
+      setExportParticipants(rows);
+      setExportFormat("csv");
+      setExportWithAddress(false);
+      setExportFormatOpen(true);
+    } finally {
+      setResolvingSelection(false);
+      setBulkActionsOpen(false);
     }
   };
 
-  const clearSelection = () => setSelectedUserIds(new Set());
-
-  const handleExportSelected = () => {
-    if (selectedParticipants.length === 0) return;
-    setExportFormat("csv");
-    setExportWithAddress(false);
-    setExportFormatOpen(true);
+  const handleOpenNotify = async () => {
+    if (selectedCount === 0) return;
+    setResolvingSelection(true);
+    try {
+      const rows = await resolveSelectionForBulkAction();
+      if (rows.length === 0) return;
+      setNotifyRecipients(rows);
+      setNotifyOpen(true);
+    } finally {
+      setResolvingSelection(false);
+      setBulkActionsOpen(false);
+    }
   };
 
   const handleConfirmExport = () => {
-    if (selectedParticipants.length === 0) return;
+    const rows = exportParticipants.length > 0 ? exportParticipants : selectedParticipants;
+    if (rows.length === 0) return;
     const codePart =
       source.kind === "engagement-id"
         ? `engagement-${source.engagementId}-selected`
@@ -1373,11 +1489,12 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       withAddress: exportWithAddress,
     });
     if (exportFormat === "excel") {
-      exportParticipantsToExcel(selectedParticipants, filenamePrefix, exportColumns);
+      exportParticipantsToExcel(rows, filenamePrefix, exportColumns);
     } else {
-      exportParticipantsToCsv(selectedParticipants, filenamePrefix, exportColumns);
+      exportParticipantsToCsv(rows, filenamePrefix, exportColumns);
     }
     setExportFormatOpen(false);
+    setExportParticipants([]);
   };
 
   const handleConfirmDelete = async () => {
@@ -1602,8 +1719,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         maxWidthClassName="max-w-5xl"
       >
         {/* Search */}
-        <div className="mb-3 flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
+        <div className="mb-3">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="search"
@@ -1612,101 +1729,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
             />
-          </div>
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            {canDeleteRows && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteError(null);
-                  setDeleteSelectedOpen(true);
-                }}
-                disabled={selectedCount === 0 || loading || deleteLoading || !engagementIdForDelete || bulkActionBusy}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete selected{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleExportSelected}
-              disabled={selectedCount === 0 || loading}
-              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={selectedCount === 0 ? "Select rows to export" : undefined}
-            >
-              <Download className="w-4 h-4" />
-              Export selected{selectedCount > 0 ? ` (${selectedCount})` : ""}
-            </button>
-            {canNotify && (
-              <button
-                type="button"
-                onClick={() => setNotifyOpen(true)}
-                disabled={selectedCount === 0 || loading}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={selectedCount === 0 ? "Select rows to send notification" : undefined}
-              >
-                <Bell className="w-4 h-4" />
-                Send notification{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
-            {canLoadBloodReports && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLoadBloodError(null);
-                  setLoadBloodResult(null);
-                  setLoadBloodOpen(true);
-                }}
-                disabled={selectedCount === 0 || loading || bulkActionBusy}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={selectedCount === 0 ? "Select rows to load blood reports" : undefined}
-              >
-                <TestTubes className="w-4 h-4" />
-                Load blood reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
-            {canLoadBioaiReports && (
-              <button
-                type="button"
-                onClick={() => {
-                  setLoadBioaiError(null);
-                  setLoadBioaiResult(null);
-                  setLoadBioaiOpen(true);
-                }}
-                disabled={
-                  selectedCount === 0 || loading || bulkActionBusy
-                }
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={selectedCount === 0 ? "Select rows to load BioAI reports" : undefined}
-              >
-                <Brain className="w-4 h-4" />
-                Load BioAI reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
-            {canPushAnswers && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPushError(null);
-                  setPushResult(null);
-                  setPushProgress(null);
-                  setPushAnswersOpen(true);
-                }}
-                disabled={selectedCount === 0 || loading || bulkActionBusy}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={
-                  selectedCount === 0
-                    ? "Select rows to push answers"
-                    : pushOverParticipantLimit
-                    ? `Select at most ${MAX_PUSH_PARTICIPANTS} participants`
-                    : undefined
-                }
-              >
-                <Send className="w-4 h-4" />
-                Push answers{selectedCount > 0 ? ` (${selectedCount})` : ""}
-              </button>
-            )}
           </div>
         </div>
 
@@ -1825,19 +1847,138 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             <span>
               <span className="font-medium">{selectedCount}</span> selected
+              {allMatchingSelected && matchingTotal > visibleRows.length && (
+                <span className="text-zinc-500"> (all {matchingTotal} matching)</span>
+              )}
             </span>
             <span className="text-zinc-400">·</span>
             <span>
               {visibleRows.length} shown · {useServerPagination ? total : participants.length} total
             </span>
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
-            >
-              <X className="w-3.5 h-3.5" />
-              Clear selection
-            </button>
+            {selectAllError && (
+              <>
+                <span className="text-zinc-400">·</span>
+                <span className="text-red-600 text-xs">{selectAllError}</span>
+              </>
+            )}
+            <div ref={bulkActionsRef} className="relative ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setBulkActionsOpen((open) => !open)}
+                disabled={bulkActionBusy || resolvingSelection}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resolvingSelection ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : null}
+                Actions
+                {!resolvingSelection && <ChevronDown className="w-4 h-4" />}
+              </button>
+              {bulkActionsOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={handleExportSelected}
+                    disabled={resolvingSelection}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export
+                  </button>
+                  {canNotify && (
+                    <button
+                      type="button"
+                      onClick={handleOpenNotify}
+                      disabled={resolvingSelection}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      <Bell className="w-4 h-4" />
+                      Send notification
+                    </button>
+                  )}
+                  {canLoadBloodReports && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadBloodError(null);
+                        setLoadBloodResult(null);
+                        setLoadBloodOpen(true);
+                        setBulkActionsOpen(false);
+                      }}
+                      disabled={bulkActionBusy}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      <TestTubes className="w-4 h-4" />
+                      Load blood reports
+                    </button>
+                  )}
+                  {canLoadBioaiReports && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoadBioaiError(null);
+                        setLoadBioaiResult(null);
+                        setLoadBioaiOpen(true);
+                        setBulkActionsOpen(false);
+                      }}
+                      disabled={bulkActionBusy}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      <Brain className="w-4 h-4" />
+                      Load BioAI reports
+                    </button>
+                  )}
+                  {canPushAnswers && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPushError(null);
+                        setPushResult(null);
+                        setPushProgress(null);
+                        setPushAnswersOpen(true);
+                        setBulkActionsOpen(false);
+                      }}
+                      disabled={bulkActionBusy || pushOverParticipantLimit}
+                      title={
+                        pushOverParticipantLimit
+                          ? `Select at most ${MAX_PUSH_PARTICIPANTS} participants`
+                          : undefined
+                      }
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      <Send className="w-4 h-4" />
+                      Push answers
+                    </button>
+                  )}
+                  {canDeleteRows && (
+                    <>
+                      <div className="my-1 border-t border-zinc-100" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteError(null);
+                          setDeleteSelectedOpen(true);
+                          setBulkActionsOpen(false);
+                        }}
+                        disabled={bulkActionBusy || !engagementIdForDelete}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="inline-flex items-center gap-1 text-xs font-medium text-zinc-600 hover:text-zinc-900"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            </div>
           </div>
         )}
 
@@ -1916,7 +2057,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     <span className="text-zinc-500"> overall</span>
                   </>
                 )}
-                <span className="text-zinc-400"> — select rows for bulk actions</span>
+                <span className="text-zinc-400"> — use the checkbox to select all matching participants</span>
               </p>
             )}
 
@@ -1925,15 +2066,27 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50">
                     <th className="w-10 px-2 py-3 text-left">
-                      <input
-                        ref={selectAllRef}
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={toggleSelectAllVisible}
-                        className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                        aria-label="Select all visible participants"
-                        title="Select all visible"
-                      />
+                      {selectAllLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-zinc-400" aria-hidden />
+                      ) : (
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allMatchingSelected}
+                          onChange={() => void toggleSelectAllMatching()}
+                          className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                          aria-label={
+                            useServerPagination
+                              ? `Select all ${matchingTotal} matching participants`
+                              : "Select all participants"
+                          }
+                          title={
+                            useServerPagination
+                              ? `Select all ${matchingTotal} matching participants across all pages`
+                              : "Select all"
+                          }
+                        />
+                      )}
                     </th>
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Name
@@ -2362,7 +2515,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           open={notifyOpen}
           onClose={() => setNotifyOpen(false)}
           engagement={engagementForNotify}
-          scopedRecipients={selectedParticipants}
+          scopedRecipients={notifyRecipients.length > 0 ? notifyRecipients : selectedParticipants}
         />
       )}
 
