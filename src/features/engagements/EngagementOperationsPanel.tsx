@@ -48,6 +48,10 @@ import {
   formatPushEstimatedTime,
   pushCategoriesForTypeCode,
 } from "./engagementOperationsUtils";
+import {
+  fetchInstancesForPush,
+  runPushQuestionnairesBatch,
+} from "./pushQuestionnairesBatch";
 
 const METSIGHTS_CATEGORY_COLUMNS = [
   { key: "physical-measurement", label: "Anthropometry" },
@@ -335,54 +339,33 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
     setPushError(null);
     setPushProgress(null);
     try {
-      const listRes = await engagementAssessmentPackagesApi.listInstances(
-        engagement.engagement_id,
-        pushConfirmPkg.package_id
-      );
-      const instances = listRes.data.data ?? [];
-      const total = instances.length;
-      let pushed = 0;
-      let skipped = 0;
-      let errors = 0;
-      const errorMessages: string[] = [];
+      const instances = await fetchInstancesForPush({
+        engagementId: engagement.engagement_id,
+        packageId: pushConfirmPkg.package_id,
+      });
 
-      if (total === 0) {
+      if (instances.length === 0) {
         setPushResult({ pushed: 0, skipped: 0, errors: 0 });
         return;
       }
 
-      for (let i = 0; i < instances.length; i++) {
-        const inst = instances[i];
-        setPushProgress({ current: i + 1, total });
-        try {
-          const res = await engagementAssessmentPackagesApi.pushQuestionnaires(
-            engagement.engagement_id,
-            pushConfirmPkg.package_id,
-            inst.assessment_instance_id,
-            pushSelectedCategories
-          );
-          const d = res.data.data;
-          pushed += d.pushed ?? 0;
-          skipped += d.skipped ?? 0;
-          errors += d.errors ?? 0;
-        } catch (err) {
-          const details = getApiErrorDetails(err);
-          if (details.status === 422) {
-            skipped += 1;
-          } else {
-            errors += 1;
-            if (errorMessages.length < 5) {
-              errorMessages.push(
-                `#${inst.assessment_instance_id}: ${details.message}`
-              );
-            }
-          }
-        }
-      }
+      const result = await runPushQuestionnairesBatch({
+        engagementId: engagement.engagement_id,
+        packageId: pushConfirmPkg.package_id,
+        categories: pushSelectedCategories,
+        instances,
+        onProgress: setPushProgress,
+      });
 
-      setPushResult({ pushed, skipped, errors });
-      if (errors > 0 && pushed === 0 && skipped === 0) {
-        setPushError(errorMessages.join(" · ") || "Push failed for all participants");
+      setPushResult({
+        pushed: result.pushed,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+      if (result.errors > 0 && result.pushed === 0 && result.skipped === 0) {
+        setPushError(
+          result.errorMessages.join(" · ") || "Push failed for all participants"
+        );
       }
     } catch (err) {
       setPushError(getApiError(err));

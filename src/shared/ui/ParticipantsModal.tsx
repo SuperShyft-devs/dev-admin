@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
@@ -17,9 +17,22 @@ import {
   type ParticipantListQueryParams,
   type LoadBloodReportsResult,
   type LoadBioaiReportsResult,
+  engagementAssessmentPackagesApi,
+  type EngagementAssessmentPackageSummary,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
+import {
+  estimatePushSeconds,
+  formatPushEstimatedTime,
+  isPushableAssessmentPackage,
+  MAX_PUSH_PARTICIPANTS,
+  pushCategoriesForTypeCode,
+} from "../../features/engagements/engagementOperationsUtils";
+import {
+  fetchInstancesForPush,
+  runPushQuestionnairesBatch,
+} from "../../features/engagements/pushQuestionnairesBatch";
 import {
   getAvailableCabins,
   getAvailableDates,
@@ -563,6 +576,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [loadingBioaiReports, setLoadingBioaiReports] = useState(false);
   const [loadBioaiResult, setLoadBioaiResult] = useState<LoadBioaiReportsResult | null>(null);
   const [loadBioaiError, setLoadBioaiError] = useState<string | null>(null);
+  const [pushAnswersOpen, setPushAnswersOpen] = useState(false);
+  const [pushPackages, setPushPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
+  const [pushPackagesLoading, setPushPackagesLoading] = useState(false);
+  const [pushSelectedPackage, setPushSelectedPackage] =
+    useState<EngagementAssessmentPackageSummary | null>(null);
+  const [pushSelectedCategories, setPushSelectedCategories] = useState<string[]>([]);
+  const [pushingAnswers, setPushingAnswers] = useState(false);
+  const [pushProgress, setPushProgress] = useState<{ current: number; total: number } | null>(null);
+  const [pushResult, setPushResult] = useState<{ pushed: number; skipped: number; errors: number } | null>(
+    null
+  );
+  const [pushError, setPushError] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [orgDepartments, setOrgDepartments] = useState<OrganizationDepartment[]>([]);
   const [organizationId, setOrganizationId] = useState<number | null>(null);
@@ -907,6 +932,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const canNotify = source.kind === "engagement-id";
   const canLoadBloodReports = source.kind === "engagement-id";
   const canLoadBioaiReports = source.kind === "engagement-id";
+  const canPushAnswers = source.kind === "engagement-id";
+  const pushOverParticipantLimit = selectedCount > MAX_PUSH_PARTICIPANTS;
+  const pushEstimatedSeconds = useMemo(
+    () => estimatePushSeconds(selectedCount, pushSelectedCategories.length),
+    [selectedCount, pushSelectedCategories.length]
+  );
+  const bulkActionBusy =
+    deleteLoading || loadingBloodReports || loadingBioaiReports || pushingAnswers;
 
   const engagementIdForDepartment =
     source.kind === "engagement-id" ? source.engagementId : undefined;
@@ -1460,6 +1493,98 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   };
 
+  const loadPushPackages = useCallback(async () => {
+    if (source.kind !== "engagement-id") return;
+    setPushPackagesLoading(true);
+    try {
+      const res = await engagementAssessmentPackagesApi.list(source.engagementId);
+      const pushable = (res.data.data ?? []).filter(isPushableAssessmentPackage);
+      setPushPackages(pushable);
+      if (pushable.length > 0) {
+        setPushSelectedPackage(pushable[0]);
+        setPushSelectedCategories(
+          pushCategoriesForTypeCode(pushable[0].assessment_type_code).map((c) => c.key)
+        );
+      } else {
+        setPushSelectedPackage(null);
+        setPushSelectedCategories([]);
+      }
+    } catch {
+      setPushPackages([]);
+      setPushSelectedPackage(null);
+      setPushSelectedCategories([]);
+    } finally {
+      setPushPackagesLoading(false);
+    }
+  }, [source]);
+
+  useEffect(() => {
+    if (!pushAnswersOpen || source.kind !== "engagement-id") return;
+    void loadPushPackages();
+  }, [pushAnswersOpen, source, loadPushPackages]);
+
+  const handlePushPackageChange = (packageId: number) => {
+    const pkg = pushPackages.find((item) => item.package_id === packageId);
+    if (!pkg) return;
+    setPushSelectedPackage(pkg);
+    setPushSelectedCategories(
+      pushCategoriesForTypeCode(pkg.assessment_type_code).map((c) => c.key)
+    );
+  };
+
+  const togglePushCategory = (key: string) => {
+    setPushSelectedCategories((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  };
+
+  const handlePushAnswers = async () => {
+    if (source.kind !== "engagement-id" || !pushSelectedPackage) return;
+    if (selectedCount === 0 || pushOverParticipantLimit || pushSelectedCategories.length === 0) {
+      return;
+    }
+
+    try {
+      setPushingAnswers(true);
+      setPushError(null);
+      setPushResult(null);
+      setPushProgress(null);
+
+      const instances = await fetchInstancesForPush({
+        engagementId: source.engagementId,
+        packageId: pushSelectedPackage.package_id,
+        userIds: selectedUserIds,
+      });
+
+      if (instances.length === 0) {
+        setPushResult({ pushed: 0, skipped: 0, errors: 0 });
+        return;
+      }
+
+      const result = await runPushQuestionnairesBatch({
+        engagementId: source.engagementId,
+        packageId: pushSelectedPackage.package_id,
+        categories: pushSelectedCategories,
+        instances,
+        onProgress: setPushProgress,
+      });
+
+      setPushResult({
+        pushed: result.pushed,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+      if (result.errors > 0 && result.pushed === 0 && result.skipped === 0) {
+        setPushError(result.errorMessages.join(" · ") || "Push failed for all participants");
+      }
+    } catch (err) {
+      setPushError(getApiError(err));
+    } finally {
+      setPushingAnswers(false);
+      setPushProgress(null);
+    }
+  };
+
   const emptyMessage = () => {
     if ((useServerPagination ? total : participants.length) === 0) return "No participants found.";
     if (search.trim() || hasActiveColumnFilters) {
@@ -1496,7 +1621,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   setDeleteError(null);
                   setDeleteSelectedOpen(true);
                 }}
-                disabled={selectedCount === 0 || loading || deleteLoading || !engagementIdForDelete}
+                disabled={selectedCount === 0 || loading || deleteLoading || !engagementIdForDelete || bulkActionBusy}
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-200 text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-4 h-4" />
@@ -1533,9 +1658,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   setLoadBloodResult(null);
                   setLoadBloodOpen(true);
                 }}
-                disabled={
-                  selectedCount === 0 || loading || loadingBloodReports || loadingBioaiReports || deleteLoading
-                }
+                disabled={selectedCount === 0 || loading || bulkActionBusy}
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={selectedCount === 0 ? "Select rows to load blood reports" : undefined}
               >
@@ -1552,17 +1675,36 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   setLoadBioaiOpen(true);
                 }}
                 disabled={
-                  selectedCount === 0 ||
-                  loading ||
-                  loadingBloodReports ||
-                  loadingBioaiReports ||
-                  deleteLoading
+                  selectedCount === 0 || loading || bulkActionBusy
                 }
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={selectedCount === 0 ? "Select rows to load BioAI reports" : undefined}
               >
                 <Brain className="w-4 h-4" />
                 Load BioAI reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </button>
+            )}
+            {canPushAnswers && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPushError(null);
+                  setPushResult(null);
+                  setPushProgress(null);
+                  setPushAnswersOpen(true);
+                }}
+                disabled={selectedCount === 0 || loading || bulkActionBusy}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  selectedCount === 0
+                    ? "Select rows to push answers"
+                    : pushOverParticipantLimit
+                    ? `Select at most ${MAX_PUSH_PARTICIPANTS} participants`
+                    : undefined
+                }
+              >
+                <Send className="w-4 h-4" />
+                Push answers{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </button>
             )}
           </div>
@@ -2443,6 +2585,196 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
               >
                 {loadBioaiResult || loadBioaiError ? "Close" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {canPushAnswers && (
+        <Modal
+          open={pushAnswersOpen}
+          onClose={() => {
+            if (!pushingAnswers) {
+              setPushAnswersOpen(false);
+              setPushResult(null);
+              setPushError(null);
+              setPushProgress(null);
+            }
+          }}
+          title={`Push ${pushSelectedPackage?.display_name ?? "Answers"} to Metsights`}
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            {pushPackagesLoading && (
+              <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-xs">Loading assessment packages…</span>
+              </div>
+            )}
+
+            {!pushPackagesLoading && !pushResult && !pushError && !pushingAnswers && (
+              <>
+                {pushPackages.length === 0 ? (
+                  <p className="text-sm text-red-600">
+                    No pushable assessment packages found for this engagement.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-zinc-700">
+                      Push answers for{" "}
+                      <span className="font-semibold">{selectedCount}</span> selected participant
+                      {selectedCount !== 1 ? "s" : ""}
+                      {source.kind === "engagement-id" && source.name ? (
+                        <>
+                          {" "}
+                          of <span className="font-semibold">{source.name}</span>
+                        </>
+                      ) : null}{" "}
+                      to Metsights.
+                    </p>
+
+                    {pushPackages.length > 1 && (
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="push-package" className="text-xs font-medium text-zinc-700">
+                          Assessment package
+                        </label>
+                        <select
+                          id="push-package"
+                          value={pushSelectedPackage?.package_id ?? ""}
+                          onChange={(e) => handlePushPackageChange(Number(e.target.value))}
+                          className={filterSelectClass}
+                        >
+                          {pushPackages.map((pkg) => (
+                            <option key={pkg.package_id} value={pkg.package_id}>
+                              {pkg.display_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-xs font-medium text-zinc-700 mb-2">Categories to push</p>
+                      <div className="space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                        {pushCategoriesForTypeCode(pushSelectedPackage?.assessment_type_code).map(
+                          (cat) => {
+                            const checked = pushSelectedCategories.includes(cat.key);
+                            return (
+                              <label
+                                key={cat.key}
+                                className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => togglePushCategory(cat.key)}
+                                  className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                                />
+                                {cat.label}
+                              </label>
+                            );
+                          }
+                        )}
+                      </div>
+                      {pushSelectedCategories.length === 0 && (
+                        <p className="mt-1.5 text-xs text-red-600">Select at least one category.</p>
+                      )}
+                    </div>
+
+                    <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                      <li>Participants who haven&apos;t filled any questions will be skipped.</li>
+                      <li>Partially filled questionnaires will push whatever answers exist.</li>
+                      <li>Answers from all assessment packages will be merged per participant.</li>
+                      <li>Each participant is processed one at a time to avoid timeouts.</li>
+                    </ul>
+
+                    {pushOverParticipantLimit && (
+                      <p className="text-xs text-red-600">
+                        Select at most {MAX_PUSH_PARTICIPANTS} participants per push run.
+                      </p>
+                    )}
+
+                    {pushSelectedCategories.length > 0 && selectedCount > 0 && !pushOverParticipantLimit && (
+                      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-700">
+                        <div className="flex items-start gap-2">
+                          <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-500" />
+                          <div>
+                            <p>
+                              Estimated time:{" "}
+                              <span className="font-semibold text-zinc-900">
+                                {formatPushEstimatedTime(pushEstimatedSeconds)}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 text-zinc-500">
+                              {selectedCount} selected participant
+                              {selectedCount === 1 ? "" : "s"} × {pushSelectedCategories.length}{" "}
+                              categor
+                              {pushSelectedCategories.length === 1 ? "y" : "ies"}, one at a time.
+                              Skipped participants finish faster.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {pushingAnswers && (
+              <div className="py-6 flex flex-col items-center gap-2 text-zinc-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-xs">
+                  Pushing {pushSelectedPackage?.display_name ?? "answers"} to Metsights
+                  {pushProgress ? `… ${pushProgress.current}/${pushProgress.total}` : "…"}
+                </span>
+              </div>
+            )}
+
+            {pushError && <p className="text-sm text-red-600">{pushError}</p>}
+
+            {pushResult && (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-xs space-y-1">
+                <div className="text-emerald-700">Pushed: {pushResult.pushed}</div>
+                <div className="text-zinc-500">
+                  Skipped (no answers / no Metsights record): {pushResult.skipped}
+                </div>
+                {pushResult.errors > 0 && (
+                  <div className="text-red-600">Errors: {pushResult.errors}</div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              {!pushResult && !pushError && pushPackages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handlePushAnswers()}
+                  disabled={
+                    pushingAnswers ||
+                    pushPackagesLoading ||
+                    pushSelectedCategories.length === 0 ||
+                    selectedCount === 0 ||
+                    pushOverParticipantLimit
+                  }
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {pushingAnswers ? "Pushing…" : "Push Answers"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setPushAnswersOpen(false);
+                  setPushResult(null);
+                  setPushError(null);
+                  setPushProgress(null);
+                }}
+                disabled={pushingAnswers}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {pushResult || pushError ? "Close" : "Cancel"}
               </button>
             </div>
           </div>
