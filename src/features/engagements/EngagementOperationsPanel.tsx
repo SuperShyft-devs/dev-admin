@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCheck,
   ChevronDown,
@@ -44,6 +44,8 @@ import {
 } from "../../lib/api";
 import {
   METSIGHTS_BLOOD_PACKAGE_CODES,
+  estimatePushSeconds,
+  formatPushEstimatedTime,
   pushCategoriesForTypeCode,
 } from "./engagementOperationsUtils";
 
@@ -413,6 +415,12 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   }, []);
+
+  const pushParticipantCount = pushConfirmPkg?.assigned_count ?? 0;
+  const pushEstimatedSeconds = useMemo(
+    () => estimatePushSeconds(pushParticipantCount, pushSelectedCategories.length),
+    [pushParticipantCount, pushSelectedCategories.length]
+  );
 
   const handleDraftBloodParameters = useCallback(async () => {
     if (!engagement) return;
@@ -1395,6 +1403,33 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                 <li>Answers from all assessment packages will be merged per participant.</li>
                 <li>Each participant is processed one at a time to avoid timeouts.</li>
               </ul>
+              {pushSelectedCategories.length > 0 && pushParticipantCount > 0 && (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-700">
+                  <div className="flex items-start gap-2">
+                    <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-500" />
+                    <div>
+                      <p>
+                        Estimated time:{" "}
+                        <span className="font-semibold text-zinc-900">
+                          {formatPushEstimatedTime(pushEstimatedSeconds)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-zinc-500">
+                        {pushParticipantCount} participant
+                        {pushParticipantCount === 1 ? "" : "s"} ×{" "}
+                        {pushSelectedCategories.length} categor
+                        {pushSelectedCategories.length === 1 ? "y" : "ies"}, one at a time.
+                        Skipped participants finish faster.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {pushSelectedCategories.length > 0 && pushParticipantCount === 0 && (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-500">
+                  No assigned participants for this package — nothing to push.
+                </div>
+              )}
             </>
           )}
 
