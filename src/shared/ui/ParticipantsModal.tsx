@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown, FileX } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
@@ -17,6 +17,7 @@ import {
   type ParticipantListQueryParams,
   type LoadBloodReportsResult,
   type LoadBioaiReportsResult,
+  type RemoveReportsResult,
   engagementAssessmentPackagesApi,
   type EngagementAssessmentPackageSummary,
   getApiError,
@@ -110,6 +111,17 @@ function mergeLoadReportsResults(
     failed: results.reduce((sum, r) => sum + r.failed, 0),
     dry_run: results.some((r) => r.dry_run),
     details: results.flatMap((r) => r.details ?? []),
+  };
+}
+
+function mergeRemoveReportsResults(
+  results: RemoveReportsResult[]
+): RemoveReportsResult | null {
+  if (results.length === 0) return null;
+  return {
+    removed: results.reduce((sum, r) => sum + r.removed, 0),
+    users_processed: results.reduce((sum, r) => sum + r.users_processed, 0),
+    users_with_no_reports: results.reduce((sum, r) => sum + r.users_with_no_reports, 0),
   };
 }
 
@@ -657,6 +669,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     current: number;
     total: number;
   } | null>(null);
+  const [removeReportsOpen, setRemoveReportsOpen] = useState(false);
+  const [removingReports, setRemovingReports] = useState(false);
+  const [removeReportsResult, setRemoveReportsResult] = useState<RemoveReportsResult | null>(null);
+  const [removeReportsError, setRemoveReportsError] = useState<string | null>(null);
+  const [removeReportsProgress, setRemoveReportsProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [pushAnswersOpen, setPushAnswersOpen] = useState(false);
   const [pushPackages, setPushPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
   const [pushPackagesLoading, setPushPackagesLoading] = useState(false);
@@ -1038,12 +1058,17 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const canLoadBloodReports = source.kind === "engagement-id";
   const canLoadBioaiReports = source.kind === "engagement-id";
   const canPushAnswers = source.kind === "engagement-id";
+  const canRemoveReports = source.kind === "engagement-id";
   const pushEstimatedSeconds = useMemo(
     () => estimatePushSeconds(selectedCount, pushSelectedCategories.length),
     [selectedCount, pushSelectedCategories.length]
   );
   const bulkActionBusy =
-    deleteLoading || loadingBloodReports || loadingBioaiReports || pushingAnswers;
+    deleteLoading ||
+    loadingBloodReports ||
+    loadingBioaiReports ||
+    pushingAnswers ||
+    removingReports;
 
   const engagementIdForDepartment =
     source.kind === "engagement-id" ? source.engagementId : undefined;
@@ -1669,6 +1694,38 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   };
 
+  const handleRemoveReports = async () => {
+    if (source.kind !== "engagement-id") return;
+    const userIds = Array.from(selectedUserIds);
+    if (userIds.length === 0) return;
+
+    try {
+      setRemovingReports(true);
+      setRemoveReportsError(null);
+      setRemoveReportsResult(null);
+      setRemoveReportsProgress({ current: 0, total: userIds.length });
+      const chunks = chunkIds(userIds, LOAD_REPORTS_CHUNK_SIZE);
+      const results: RemoveReportsResult[] = [];
+      let completed = 0;
+      for (const chunk of chunks) {
+        const res = await participantsApi.removeReports(source.engagementId, {
+          user_ids: chunk,
+        });
+        results.push(res.data.data);
+        completed += chunk.length;
+        setRemoveReportsProgress({ current: completed, total: userIds.length });
+      }
+      setRemoveReportsResult(mergeRemoveReportsResults(results));
+      await fetchParticipants();
+      await fetchParticipantStats();
+    } catch (err) {
+      setRemoveReportsError(getApiError(err));
+    } finally {
+      setRemovingReports(false);
+      setRemoveReportsProgress(null);
+    }
+  };
+
   const loadPushPackages = useCallback(async () => {
     if (source.kind !== "engagement-id") return;
     setPushPackagesLoading(true);
@@ -2026,6 +2083,26 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       <Send className="w-4 h-4" />
                       Push answers
                     </button>
+                  )}
+                  {canRemoveReports && (
+                    <>
+                      <div className="my-1 border-t border-zinc-100" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRemoveReportsError(null);
+                          setRemoveReportsResult(null);
+                          setRemoveReportsProgress(null);
+                          setRemoveReportsOpen(true);
+                          setBulkActionsOpen(false);
+                        }}
+                        disabled={bulkActionBusy}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <FileX className="w-4 h-4" />
+                        Remove Reports
+                      </button>
+                    </>
                   )}
                   {canDeleteRows && (
                     <>
@@ -2877,6 +2954,129 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
               >
                 {loadBioaiResult || loadBioaiError ? "Close" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {canRemoveReports && (
+        <Modal
+          open={removeReportsOpen}
+          onClose={() => {
+            if (!removingReports) {
+              setRemoveReportsOpen(false);
+              setRemoveReportsResult(null);
+              setRemoveReportsError(null);
+            }
+          }}
+          title="Remove Reports"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            {!removeReportsResult && !removeReportsError && !removingReports && (
+              <>
+                <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <p className="text-sm text-red-700">
+                    This will permanently delete all individual health report rows for the selected
+                    participants in this engagement, including blood and BioAI data across all
+                    assessments. Participants and their questionnaire data will not be removed.
+                  </p>
+                </div>
+                <p className="text-sm text-zinc-700">
+                  Remove reports for{" "}
+                  <span className="font-semibold">{selectedCount}</span> selected participant
+                  {selectedCount !== 1 ? "s" : ""}?
+                </p>
+              </>
+            )}
+
+            {removingReports && (
+              <div className="py-6 flex flex-col items-center gap-3 text-zinc-500">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <div className="text-center space-y-1">
+                  <p className="text-sm">
+                    Removing reports
+                    {removeReportsProgress
+                      ? `… ${removeReportsProgress.current}/${removeReportsProgress.total}`
+                      : ` for ${selectedCount} participant${selectedCount !== 1 ? "s" : ""}…`}
+                  </p>
+                </div>
+                {removeReportsProgress && removeReportsProgress.total > 0 && (
+                  <div className="w-full max-w-xs space-y-1">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                      <div
+                        className="h-full rounded-full bg-red-600 transition-[width] duration-300"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (removeReportsProgress.current / removeReportsProgress.total) * 100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-center text-xs text-zinc-400">
+                      {Math.round(
+                        (removeReportsProgress.current / removeReportsProgress.total) * 100
+                      )}
+                      % complete
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {removeReportsError && <p className="text-sm text-red-600">{removeReportsError}</p>}
+
+            {removeReportsResult && (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-sm space-y-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div>
+                    <span className="text-zinc-500">Reports removed:</span>{" "}
+                    <span className="font-medium text-emerald-700">{removeReportsResult.removed}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Participants processed:</span>{" "}
+                    <span className="font-medium">{removeReportsResult.users_processed}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-zinc-500">With no reports:</span>{" "}
+                    <span className="font-medium">{removeReportsResult.users_with_no_reports}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              {!removeReportsResult && !removeReportsError && (
+                <button
+                  type="button"
+                  onClick={() => void handleRemoveReports()}
+                  disabled={removingReports || selectedCount === 0}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                >
+                  {removingReports && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {removingReports
+                    ? removeReportsProgress
+                      ? `Removing… ${removeReportsProgress.current}/${removeReportsProgress.total}`
+                      : "Removing…"
+                    : "Remove Reports"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setRemoveReportsOpen(false);
+                  setRemoveReportsResult(null);
+                  setRemoveReportsError(null);
+                }}
+                disabled={removingReports}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {removeReportsResult || removeReportsError ? "Close" : "Cancel"}
               </button>
             </div>
           </div>

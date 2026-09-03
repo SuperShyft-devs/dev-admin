@@ -2303,6 +2303,12 @@ export interface LoadBloodReportsResult {
 
 export type LoadBioaiReportsResult = LoadBloodReportsResult;
 
+export type RemoveReportsResult = {
+  removed: number;
+  users_processed: number;
+  users_with_no_reports: number;
+};
+
 export const participantsApi = {
   byEngagementId: (engagementId: number, params?: ParticipantListQueryParams) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
@@ -2334,6 +2340,11 @@ export const participantsApi = {
       `/engagements/${engagementId}/participants/load-bioai-reports`,
       payload,
       { timeout: 300_000 }
+    ),
+  removeReports: (engagementId: number, payload: { user_ids: number[] }) =>
+    api.post<{ data: RemoveReportsResult }>(
+      `/engagements/${engagementId}/participants/remove-reports`,
+      payload
     ),
   // B2B: participants for a specific engagement by code
   byEngagementCode: (code: string, params?: { page?: number; limit?: number }) =>
