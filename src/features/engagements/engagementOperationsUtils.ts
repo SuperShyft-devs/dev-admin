@@ -64,5 +64,3 @@ export function isPushableAssessmentPackage(pkg: {
 }): boolean {
   return pushCategoriesForTypeCode(pkg.assessment_type_code).length > 0;
 }
-
-export const MAX_PUSH_PARTICIPANTS = 50;

@@ -26,7 +26,6 @@ import {
   estimatePushSeconds,
   formatPushEstimatedTime,
   isPushableAssessmentPackage,
-  MAX_PUSH_PARTICIPANTS,
   pushCategoriesForTypeCode,
 } from "../../features/engagements/engagementOperationsUtils";
 import {
@@ -1003,7 +1002,6 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const canLoadBloodReports = source.kind === "engagement-id";
   const canLoadBioaiReports = source.kind === "engagement-id";
   const canPushAnswers = source.kind === "engagement-id";
-  const pushOverParticipantLimit = selectedCount > MAX_PUSH_PARTICIPANTS;
   const pushEstimatedSeconds = useMemo(
     () => estimatePushSeconds(selectedCount, pushSelectedCategories.length),
     [selectedCount, pushSelectedCategories.length]
@@ -1662,7 +1660,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
 
   const handlePushAnswers = async () => {
     if (source.kind !== "engagement-id" || !pushSelectedPackage) return;
-    if (selectedCount === 0 || pushOverParticipantLimit || pushSelectedCategories.length === 0) {
+    if (selectedCount === 0 || pushSelectedCategories.length === 0) {
       return;
     }
 
@@ -1964,12 +1962,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         setPushAnswersOpen(true);
                         setBulkActionsOpen(false);
                       }}
-                      disabled={bulkActionBusy || pushOverParticipantLimit}
-                      title={
-                        pushOverParticipantLimit
-                          ? `Select at most ${MAX_PUSH_PARTICIPANTS} participants`
-                          : undefined
-                      }
+                      disabled={bulkActionBusy}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
                     >
                       <Send className="w-4 h-4" />
@@ -2868,13 +2861,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       <li>Each participant is processed one at a time to avoid timeouts.</li>
                     </ul>
 
-                    {pushOverParticipantLimit && (
-                      <p className="text-xs text-red-600">
-                        Select at most {MAX_PUSH_PARTICIPANTS} participants per push run.
-                      </p>
-                    )}
-
-                    {pushSelectedCategories.length > 0 && selectedCount > 0 && !pushOverParticipantLimit && (
+                    {pushSelectedCategories.length > 0 && selectedCount > 0 && (
                       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-700">
                         <div className="flex items-start gap-2">
                           <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0 text-zinc-500" />
@@ -2934,8 +2921,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     pushingAnswers ||
                     pushPackagesLoading ||
                     pushSelectedCategories.length === 0 ||
-                    selectedCount === 0 ||
-                    pushOverParticipantLimit
+                    selectedCount === 0
                   }
                   className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
                 >
