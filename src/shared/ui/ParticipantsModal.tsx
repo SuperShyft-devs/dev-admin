@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
 import {
@@ -16,6 +16,7 @@ import {
   type EngagementParticipantStats,
   type ParticipantListQueryParams,
   type LoadBloodReportsResult,
+  type LoadBioaiReportsResult,
   getApiError,
 } from "../../lib/api";
 import { EngagementNotificationModal } from "../../features/engagements/EngagementNotificationModal";
@@ -558,6 +559,10 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [loadingBloodReports, setLoadingBloodReports] = useState(false);
   const [loadBloodResult, setLoadBloodResult] = useState<LoadBloodReportsResult | null>(null);
   const [loadBloodError, setLoadBloodError] = useState<string | null>(null);
+  const [loadBioaiOpen, setLoadBioaiOpen] = useState(false);
+  const [loadingBioaiReports, setLoadingBioaiReports] = useState(false);
+  const [loadBioaiResult, setLoadBioaiResult] = useState<LoadBioaiReportsResult | null>(null);
+  const [loadBioaiError, setLoadBioaiError] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [orgDepartments, setOrgDepartments] = useState<OrganizationDepartment[]>([]);
   const [organizationId, setOrganizationId] = useState<number | null>(null);
@@ -901,6 +906,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
   const canNotify = source.kind === "engagement-id";
   const canLoadBloodReports = source.kind === "engagement-id";
+  const canLoadBioaiReports = source.kind === "engagement-id";
 
   const engagementIdForDepartment =
     source.kind === "engagement-id" ? source.engagementId : undefined;
@@ -1432,6 +1438,28 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     }
   };
 
+  const handleLoadBioaiReports = async () => {
+    if (source.kind !== "engagement-id") return;
+    const userIds = Array.from(selectedUserIds);
+    if (userIds.length === 0) return;
+
+    try {
+      setLoadingBioaiReports(true);
+      setLoadBioaiError(null);
+      setLoadBioaiResult(null);
+      const res = await participantsApi.loadBioaiReports(source.engagementId, {
+        user_ids: userIds,
+      });
+      setLoadBioaiResult(res.data.data);
+      await fetchParticipants();
+      await fetchParticipantStats();
+    } catch (err) {
+      setLoadBioaiError(getApiError(err));
+    } finally {
+      setLoadingBioaiReports(false);
+    }
+  };
+
   const emptyMessage = () => {
     if ((useServerPagination ? total : participants.length) === 0) return "No participants found.";
     if (search.trim() || hasActiveColumnFilters) {
@@ -1506,13 +1534,35 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   setLoadBloodOpen(true);
                 }}
                 disabled={
-                  selectedCount === 0 || loading || loadingBloodReports || deleteLoading
+                  selectedCount === 0 || loading || loadingBloodReports || loadingBioaiReports || deleteLoading
                 }
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={selectedCount === 0 ? "Select rows to load blood reports" : undefined}
               >
                 <TestTubes className="w-4 h-4" />
                 Load blood reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </button>
+            )}
+            {canLoadBioaiReports && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadBioaiError(null);
+                  setLoadBioaiResult(null);
+                  setLoadBioaiOpen(true);
+                }}
+                disabled={
+                  selectedCount === 0 ||
+                  loading ||
+                  loadingBloodReports ||
+                  loadingBioaiReports ||
+                  deleteLoading
+                }
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={selectedCount === 0 ? "Select rows to load BioAI reports" : undefined}
+              >
+                <Brain className="w-4 h-4" />
+                Load BioAI reports{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </button>
             )}
           </div>
@@ -2281,6 +2331,118 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
               >
                 {loadBloodResult || loadBloodError ? "Close" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {canLoadBioaiReports && (
+        <Modal
+          open={loadBioaiOpen}
+          onClose={() => {
+            if (!loadingBioaiReports) {
+              setLoadBioaiOpen(false);
+              setLoadBioaiResult(null);
+              setLoadBioaiError(null);
+            }
+          }}
+          title="Load BioAI Reports"
+          maxWidthClassName="max-w-md"
+        >
+          <div className="space-y-4">
+            {!loadBioaiResult && !loadBioaiError && !loadingBioaiReports && (
+              <>
+                <p className="text-sm text-zinc-700">
+                  Run the full BioAI report pipeline for{" "}
+                  <span className="font-semibold">{selectedCount}</span> selected participant
+                  {selectedCount !== 1 ? "s" : ""}:
+                </p>
+                <ul className="text-xs text-zinc-500 space-y-1 list-disc pl-4">
+                  <li>Check MetSights blood parameters are complete</li>
+                  <li>Fetch BioAI report data from MetSights</li>
+                  <li>Register permanent PDF URL and update individual health report records</li>
+                </ul>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Notifications will <span className="font-semibold">not</span> be sent.
+                </p>
+              </>
+            )}
+
+            {loadingBioaiReports && (
+              <div className="py-6 flex flex-col items-center gap-2 text-zinc-500">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="text-sm">
+                  Loading BioAI reports for {selectedCount} participant
+                  {selectedCount !== 1 ? "s" : ""}…
+                </span>
+                <span className="text-xs text-zinc-400">This may take several minutes.</span>
+              </div>
+            )}
+
+            {loadBioaiError && <p className="text-sm text-red-600">{loadBioaiError}</p>}
+
+            {loadBioaiResult && (
+              <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3 text-sm space-y-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div>
+                    <span className="text-zinc-500">Loaded:</span>{" "}
+                    <span className="font-medium text-emerald-700">{loadBioaiResult.loaded}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Skipped:</span>{" "}
+                    <span className="font-medium">{loadBioaiResult.skipped}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Failed:</span>{" "}
+                    <span className="font-medium text-red-600">{loadBioaiResult.failed}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Matched:</span>{" "}
+                    <span className="font-medium">{loadBioaiResult.matched}</span>
+                  </div>
+                </div>
+                {loadBioaiResult.details.length > 0 && (
+                  <div className="pt-1 border-t border-zinc-200 text-xs text-zinc-600 space-y-0.5 max-h-40 overflow-y-auto">
+                    {loadBioaiResult.details.slice(0, 8).map((detail, index) => (
+                      <div key={`${detail.user_id ?? "row"}-${index}`}>
+                        {detail.user_id != null ? `User ${detail.user_id}` : "Participant"}:{" "}
+                        {detail.action ?? "processed"}
+                        {detail.reason ? ` — ${detail.reason}` : ""}
+                      </div>
+                    ))}
+                    {loadBioaiResult.details.length > 8 && (
+                      <div className="text-zinc-400">
+                        …and {loadBioaiResult.details.length - 8} more
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+              {!loadBioaiResult && !loadBioaiError && (
+                <button
+                  type="button"
+                  onClick={() => void handleLoadBioaiReports()}
+                  disabled={loadingBioaiReports || selectedCount === 0}
+                  className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {loadingBioaiReports ? "Loading…" : "Load BioAI Reports"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadBioaiOpen(false);
+                  setLoadBioaiResult(null);
+                  setLoadBioaiError(null);
+                }}
+                disabled={loadingBioaiReports}
+                className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {loadBioaiResult || loadBioaiError ? "Close" : "Cancel"}
               </button>
             </div>
           </div>

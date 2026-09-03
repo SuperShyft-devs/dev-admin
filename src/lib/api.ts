@@ -2300,6 +2300,8 @@ export interface LoadBloodReportsResult {
   }>;
 }
 
+export type LoadBioaiReportsResult = LoadBloodReportsResult;
+
 export const participantsApi = {
   byEngagementId: (engagementId: number, params?: ParticipantListQueryParams) =>
     api.get<{ data: Participant[]; meta?: { page?: number; limit?: number; total: number } }>(
@@ -2318,6 +2320,12 @@ export const participantsApi = {
   loadBloodReports: (engagementId: number, payload: { user_ids: number[] }) =>
     api.post<{ data: LoadBloodReportsResult }>(
       `/engagements/${engagementId}/participants/load-blood-reports`,
+      payload,
+      { timeout: 300_000 }
+    ),
+  loadBioaiReports: (engagementId: number, payload: { user_ids: number[] }) =>
+    api.post<{ data: LoadBioaiReportsResult }>(
+      `/engagements/${engagementId}/participants/load-bioai-reports`,
       payload,
       { timeout: 300_000 }
     ),
