@@ -84,8 +84,8 @@ const DEFAULT_COLUMN_FILTERS: ColumnFilters = {
 };
 
 const PARTICIPANTS_PAGE_SIZE = 50;
-/** API accepts up to 2000; chunk to keep each load request bounded. */
-const LOAD_REPORTS_CHUNK_SIZE = 50;
+/** Chunk size for load blood/BioAI requests — small enough for visible progress. */
+const LOAD_REPORTS_CHUNK_SIZE = 10;
 
 function chunkIds(ids: number[], size: number): number[][] {
   const chunks: number[][] = [];
@@ -645,10 +645,18 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [loadingBloodReports, setLoadingBloodReports] = useState(false);
   const [loadBloodResult, setLoadBloodResult] = useState<LoadBloodReportsResult | null>(null);
   const [loadBloodError, setLoadBloodError] = useState<string | null>(null);
+  const [loadBloodProgress, setLoadBloodProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [loadBioaiOpen, setLoadBioaiOpen] = useState(false);
   const [loadingBioaiReports, setLoadingBioaiReports] = useState(false);
   const [loadBioaiResult, setLoadBioaiResult] = useState<LoadBioaiReportsResult | null>(null);
   const [loadBioaiError, setLoadBioaiError] = useState<string | null>(null);
+  const [loadBioaiProgress, setLoadBioaiProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [pushAnswersOpen, setPushAnswersOpen] = useState(false);
   const [pushPackages, setPushPackages] = useState<EngagementAssessmentPackageSummary[]>([]);
   const [pushPackagesLoading, setPushPackagesLoading] = useState(false);
@@ -1606,13 +1614,17 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadingBloodReports(true);
       setLoadBloodError(null);
       setLoadBloodResult(null);
+      setLoadBloodProgress({ current: 0, total: userIds.length });
       const chunks = chunkIds(userIds, LOAD_REPORTS_CHUNK_SIZE);
       const results: LoadBloodReportsResult[] = [];
+      let completed = 0;
       for (const chunk of chunks) {
         const res = await participantsApi.loadBloodReports(source.engagementId, {
           user_ids: chunk,
         });
         results.push(res.data.data);
+        completed += chunk.length;
+        setLoadBloodProgress({ current: completed, total: userIds.length });
       }
       setLoadBloodResult(mergeLoadReportsResults(results));
       await fetchParticipants();
@@ -1621,6 +1633,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadBloodError(getApiError(err));
     } finally {
       setLoadingBloodReports(false);
+      setLoadBloodProgress(null);
     }
   };
 
@@ -1633,13 +1646,17 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadingBioaiReports(true);
       setLoadBioaiError(null);
       setLoadBioaiResult(null);
+      setLoadBioaiProgress({ current: 0, total: userIds.length });
       const chunks = chunkIds(userIds, LOAD_REPORTS_CHUNK_SIZE);
       const results: LoadBioaiReportsResult[] = [];
+      let completed = 0;
       for (const chunk of chunks) {
         const res = await participantsApi.loadBioaiReports(source.engagementId, {
           user_ids: chunk,
         });
         results.push(res.data.data);
+        completed += chunk.length;
+        setLoadBioaiProgress({ current: completed, total: userIds.length });
       }
       setLoadBioaiResult(mergeLoadReportsResults(results));
       await fetchParticipants();
@@ -1648,6 +1665,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setLoadBioaiError(getApiError(err));
     } finally {
       setLoadingBioaiReports(false);
+      setLoadBioaiProgress(null);
     }
   };
 
@@ -1964,6 +1982,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       onClick={() => {
                         setLoadBloodError(null);
                         setLoadBloodResult(null);
+                        setLoadBloodProgress(null);
                         setLoadBloodOpen(true);
                         setBulkActionsOpen(false);
                       }}
@@ -1980,6 +1999,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       onClick={() => {
                         setLoadBioaiError(null);
                         setLoadBioaiResult(null);
+                        setLoadBioaiProgress(null);
                         setLoadBioaiOpen(true);
                         setBulkActionsOpen(false);
                       }}
@@ -2610,13 +2630,40 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             )}
 
             {loadingBloodReports && (
-              <div className="py-6 flex flex-col items-center gap-2 text-zinc-500">
+              <div className="py-6 flex flex-col items-center gap-3 text-zinc-500">
                 <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-sm">
-                  Loading blood reports for {selectedCount} participant
-                  {selectedCount !== 1 ? "s" : ""}…
-                </span>
-                <span className="text-xs text-zinc-400">This may take several minutes.</span>
+                <div className="text-center space-y-1">
+                  <p className="text-sm">
+                    Loading blood reports
+                    {loadBloodProgress
+                      ? `… ${loadBloodProgress.current}/${loadBloodProgress.total}`
+                      : ` for ${selectedCount} participant${selectedCount !== 1 ? "s" : ""}…`}
+                  </p>
+                  <p className="text-xs text-zinc-400">This may take several minutes.</p>
+                </div>
+                {loadBloodProgress && loadBloodProgress.total > 0 && (
+                  <div className="w-full max-w-xs space-y-1">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                      <div
+                        className="h-full rounded-full bg-zinc-800 transition-[width] duration-300"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (loadBloodProgress.current / loadBloodProgress.total) * 100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-center text-xs text-zinc-400">
+                      {Math.round(
+                        (loadBloodProgress.current / loadBloodProgress.total) * 100
+                      )}
+                      % complete
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2669,7 +2716,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   disabled={loadingBloodReports || selectedCount === 0}
                   className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
                 >
-                  {loadingBloodReports ? "Loading…" : "Load Blood Reports"}
+                  {loadingBloodReports
+                    ? loadBloodProgress
+                      ? `Loading… ${loadBloodProgress.current}/${loadBloodProgress.total}`
+                      : "Loading…"
+                    : "Load Blood Reports"}
                 </button>
               )}
               <button
@@ -2722,13 +2773,40 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
             )}
 
             {loadingBioaiReports && (
-              <div className="py-6 flex flex-col items-center gap-2 text-zinc-500">
+              <div className="py-6 flex flex-col items-center gap-3 text-zinc-500">
                 <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-sm">
-                  Loading BioAI reports for {selectedCount} participant
-                  {selectedCount !== 1 ? "s" : ""}…
-                </span>
-                <span className="text-xs text-zinc-400">This may take several minutes.</span>
+                <div className="text-center space-y-1">
+                  <p className="text-sm">
+                    Loading BioAI reports
+                    {loadBioaiProgress
+                      ? `… ${loadBioaiProgress.current}/${loadBioaiProgress.total}`
+                      : ` for ${selectedCount} participant${selectedCount !== 1 ? "s" : ""}…`}
+                  </p>
+                  <p className="text-xs text-zinc-400">This may take several minutes.</p>
+                </div>
+                {loadBioaiProgress && loadBioaiProgress.total > 0 && (
+                  <div className="w-full max-w-xs space-y-1">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200">
+                      <div
+                        className="h-full rounded-full bg-zinc-800 transition-[width] duration-300"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (loadBioaiProgress.current / loadBioaiProgress.total) * 100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-center text-xs text-zinc-400">
+                      {Math.round(
+                        (loadBioaiProgress.current / loadBioaiProgress.total) * 100
+                      )}
+                      % complete
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2781,7 +2859,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   disabled={loadingBioaiReports || selectedCount === 0}
                   className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
                 >
-                  {loadingBioaiReports ? "Loading…" : "Load BioAI Reports"}
+                  {loadingBioaiReports
+                    ? loadBioaiProgress
+                      ? `Loading… ${loadBioaiProgress.current}/${loadBioaiProgress.total}`
+                      : "Loading…"
+                    : "Load BioAI Reports"}
                 </button>
               )}
               <button
