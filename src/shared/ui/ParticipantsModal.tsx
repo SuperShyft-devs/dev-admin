@@ -64,13 +64,14 @@ interface ParticipantsModalProps {
 }
 
 type BoolFilter = "all" | "yes" | "no";
+type ReportsReadyFilter = "all" | "bio_ai" | "blood" | "both" | "missing";
 
 interface ColumnFilters {
   engagementDate: string;
   bookingDate: string;
   department: string;
   bookingId: BoolFilter;
-  reportsReady: BoolFilter;
+  reportsReady: ReportsReadyFilter;
   consultationFilters: Record<string, BoolFilter>;
 }
 
@@ -1774,21 +1775,23 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               </div>
             )}
             {source.kind === "engagement-id" && (
-              <div className="flex flex-col gap-0.5 min-w-[160px]">
+              <div className="flex flex-col gap-0.5 min-w-[180px]">
                 <label className="text-xs font-medium text-zinc-500">Reports ready</label>
                 <select
                   value={columnFilters.reportsReady}
                   onChange={(e) =>
                     setColumnFilters((f) => ({
                       ...f,
-                      reportsReady: e.target.value as BoolFilter,
+                      reportsReady: e.target.value as ReportsReadyFilter,
                     }))
                   }
                   className={filterSelectClass}
                 >
                   <option value="all">All</option>
-                  <option value="yes">Bio AI + blood URLs ready</option>
-                  <option value="no">Missing report URL(s)</option>
+                  <option value="bio_ai">BioAi url ready</option>
+                  <option value="blood">Blood report url ready</option>
+                  <option value="both">BioAi + Blood report url ready</option>
+                  <option value="missing">Missing report Url</option>
                 </select>
               </div>
             )}

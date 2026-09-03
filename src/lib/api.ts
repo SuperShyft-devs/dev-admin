@@ -2268,7 +2268,7 @@ export interface ParticipantListQueryParams {
   booking_date?: string;
   department?: string;
   has_booking_id?: "yes" | "no";
-  reports_ready?: "yes" | "no";
+  reports_ready?: "bio_ai" | "blood" | "both" | "missing";
   [key: string]: string | number | undefined;
 }
 
