@@ -259,6 +259,7 @@ export function IntegrationSyncLogsModal({
 
   const [logs, setLogs] = useState<IntegrationSyncLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [logsRequested, setLogsRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -289,6 +290,10 @@ export function IntegrationSyncLogsModal({
       setPayloadSearch("");
       setPayloadSearchDebounced("");
       setExpandedId(null);
+      setLogsRequested(false);
+      setLogs([]);
+      setTotal(0);
+      setError(null);
     }
   }, [open, defaultProvider, initialEngagementId]);
 
@@ -365,11 +370,10 @@ export function IntegrationSyncLogsModal({
     }
   }, [listParams]);
 
-  useEffect(() => {
-    if (open) {
-      void fetchLogs();
-    }
-  }, [open, fetchLogs]);
+  const requestLogs = useCallback(() => {
+    setLogsRequested(true);
+    void fetchLogs();
+  }, [fetchLogs]);
 
   const toggleStatus = (status: string) => {
     setStatusFilters((prev) =>
@@ -399,12 +403,12 @@ export function IntegrationSyncLogsModal({
                 </div>
                 <button
                   type="button"
-                  onClick={() => void fetchLogs()}
+                  onClick={requestLogs}
                   disabled={loading}
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                  Refresh
+                  {logsRequested ? "Refresh" : "Load sync logs"}
                 </button>
               </div>
               <textarea
@@ -423,12 +427,12 @@ export function IntegrationSyncLogsModal({
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => void fetchLogs()}
+                onClick={requestLogs}
                 disabled={loading}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                Refresh
+                {logsRequested ? "Refresh" : "Load sync logs"}
               </button>
             </div>
           )}
@@ -518,7 +522,18 @@ export function IntegrationSyncLogsModal({
         )}
 
         <div className="flex-1 min-h-0 overflow-auto border border-zinc-200 rounded-xl bg-white">
-          {loading ? (
+          {!logsRequested ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-zinc-500">
+              <p className="text-sm">Sync logs are not loaded yet.</p>
+              <button
+                type="button"
+                onClick={requestLogs}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+              >
+                Load sync logs
+              </button>
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center py-12 text-zinc-500">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading logs...
             </div>

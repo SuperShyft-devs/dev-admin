@@ -12,22 +12,32 @@ import {
   getApiError,
 } from "../../lib/api";
 
-async function fetchEngagementParticipants(engagement: Engagement): Promise<Participant[]> {
+async function fetchParticipantCacheForSend(
+  engagementId: number,
+  userIds: number[],
+  existing: Map<number, Participant>
+): Promise<Map<number, Participant>> {
+  const cache = new Map(existing);
+  const missing = new Set(userIds.filter((id) => !cache.has(id)));
+  if (missing.size === 0) return cache;
+
   const limit = 100;
   let page = 1;
   let total = 0;
-  const all: Participant[] = [];
 
   do {
-    const res = await participantsApi.byEngagementId(engagement.engagement_id, { page, limit });
+    const res = await participantsApi.byEngagementId(engagementId, { page, limit });
     const chunk = res.data.data ?? [];
     total = Number(res.data.meta?.total ?? chunk.length);
-    all.push(...chunk);
+    for (const participant of chunk) {
+      cache.set(participant.user_id, participant);
+      missing.delete(participant.user_id);
+    }
     page += 1;
     if (chunk.length === 0) break;
-  } while (all.length < total);
+  } while (missing.size > 0 && (page - 1) * limit < total);
 
-  return all;
+  return cache;
 }
 
 async function fetchNotifiedUserIds(
@@ -127,6 +137,8 @@ export function EngagementNotificationModal({
   const [services, setServices] = useState<NotificationServiceItem[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [recipients, setRecipients] = useState<Participant[]>([]);
+  const [recipientUserIds, setRecipientUserIds] = useState<number[]>([]);
+  const [recipientsLoaded, setRecipientsLoaded] = useState(false);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState<string | null>(null);
 
@@ -149,37 +161,57 @@ export function EngagementNotificationModal({
     [services, serviceKey]
   );
 
-  const recipientUserIds = useMemo(() => {
-    const seen = new Set<number>();
-    const ids: number[] = [];
-    for (const p of recipients) {
-      if (!seen.has(p.user_id)) {
-        seen.add(p.user_id);
-        ids.push(p.user_id);
+  const recipientUserIdsResolved = useMemo(() => {
+    if (scopedRecipients != null) {
+      const seen = new Set<number>();
+      const ids: number[] = [];
+      for (const participant of scopedRecipients) {
+        if (!seen.has(participant.user_id)) {
+          seen.add(participant.user_id);
+          ids.push(participant.user_id);
+        }
       }
+      return ids;
     }
-    return ids;
-  }, [recipients]);
+    return recipientUserIds;
+  }, [scopedRecipients, recipientUserIds]);
 
-  const totalRecipients = recipientUserIds.length;
-  const alreadyNotifiedCount = recipientUserIds.filter((id) => notifiedIds.has(id)).length;
-  const pendingUserIds = recipientUserIds.filter((id) => !notifiedIds.has(id));
+  const totalRecipients = recipientUserIdsResolved.length;
+  const alreadyNotifiedCount = recipientUserIdsResolved.filter((id) => notifiedIds.has(id)).length;
+  const pendingUserIds = recipientUserIdsResolved.filter((id) => !notifiedIds.has(id));
 
   const loadRecipients = useCallback(async () => {
     if (!engagement) return;
     if (scopedRecipients != null) {
       setRecipients(scopedRecipients);
+      setRecipientsLoaded(true);
       setRecipientsLoading(false);
       setRecipientsError(null);
       return;
     }
+
     setRecipientsLoading(true);
     setRecipientsError(null);
     try {
-      const rows = await fetchEngagementParticipants(engagement);
-      setRecipients(rows);
+      const idsRes = await participantsApi.ids(engagement.engagement_id);
+      const userIds = idsRes.data.data?.user_ids ?? [];
+      setRecipientUserIds(userIds);
+      if (userIds.length === 0) {
+        setRecipients([]);
+        setRecipientsLoaded(true);
+        return;
+      }
+
+      const pageRes = await participantsApi.byEngagementId(engagement.engagement_id, {
+        page: 1,
+        limit: 100,
+      });
+      setRecipients(pageRes.data.data ?? []);
+      setRecipientsLoaded(true);
     } catch (err) {
       setRecipients([]);
+      setRecipientUserIds([]);
+      setRecipientsLoaded(false);
       setRecipientsError(getApiError(err));
     } finally {
       setRecipientsLoading(false);
@@ -211,6 +243,10 @@ export function EngagementNotificationModal({
     setSuccess(null);
     setSendProgress(null);
     setDropdownOpen(false);
+    setRecipients([]);
+    setRecipientUserIds([]);
+    setRecipientsLoaded(false);
+    setRecipientsError(null);
 
     setServicesLoading(true);
     notificationsApi
@@ -219,8 +255,10 @@ export function EngagementNotificationModal({
       .catch(() => setServices([]))
       .finally(() => setServicesLoading(false));
 
-    loadRecipients();
-  }, [open, engagement, loadRecipients]);
+    if (scopedRecipients != null) {
+      void loadRecipients();
+    }
+  }, [open, engagement, scopedRecipients, loadRecipients]);
 
   useEffect(() => {
     if (open && engagement && serviceKey) {
@@ -263,7 +301,15 @@ export function EngagementNotificationModal({
     setSuccess(null);
     setSendProgress({ done: 0, total: pendingUserIds.length });
 
-    const participantsByUserId = new Map(recipients.map((p) => [p.user_id, p]));
+    let participantsByUserId = new Map(recipients.map((participant) => [participant.user_id, participant]));
+    if (svc.require_session_details || svc.require_participant_detail) {
+      participantsByUserId = await fetchParticipantCacheForSend(
+        engagement.engagement_id,
+        pendingUserIds,
+        participantsByUserId
+      );
+    }
+
     let sentCount = 0;
     let lastError: string | null = null;
 
@@ -340,7 +386,9 @@ export function EngagementNotificationModal({
   const scopeHint = engagement
     ? scopedRecipients != null
       ? `Sending to ${totalRecipients} selected participant${totalRecipients === 1 ? "" : "s"} only.`
-      : `Participants enrolled on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
+      : recipientsLoaded
+      ? `Participants enrolled on this engagement only (${totalRecipients} user${totalRecipients === 1 ? "" : "s"}).`
+      : "Load recipients to see how many users will receive this notification."
     : "";
 
   return (
@@ -364,6 +412,16 @@ export function EngagementNotificationModal({
 
         {!recipientsLoading && recipientsError && (
           <p className="text-sm text-red-600">{recipientsError}</p>
+        )}
+
+        {!recipientsLoading && !recipientsError && engagement && scopedRecipients == null && !recipientsLoaded && (
+          <button
+            type="button"
+            onClick={() => void loadRecipients()}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            Load recipients
+          </button>
         )}
 
         {!recipientsLoading && !recipientsError && engagement && (
@@ -481,7 +539,7 @@ export function EngagementNotificationModal({
           </div>
         )}
 
-        {!recipientsLoading && totalRecipients === 0 && (
+        {!recipientsLoading && recipientsLoaded && totalRecipients === 0 && (
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             No participants found. Add participants before sending notifications.
           </p>
@@ -494,6 +552,7 @@ export function EngagementNotificationModal({
             disabled={
               submitting ||
               !serviceKey ||
+              !recipientsLoaded ||
               (selectedService?.require_external_link && !externalLink.trim()) ||
               totalRecipients === 0 ||
               pendingUserIds.length === 0 ||

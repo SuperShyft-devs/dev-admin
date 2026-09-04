@@ -640,6 +640,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [participantStats, setParticipantStats] = useState<EngagementParticipantStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>(DEFAULT_COLUMN_FILTERS);
@@ -737,6 +738,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [bookingDatesLoading, setBookingDatesLoading] = useState(false);
   const [engagementDateOptions, setEngagementDateOptions] = useState<string[]>([]);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const buildListParams = useCallback(
     () => buildParticipantQueryParams(page, debouncedSearch, columnFilters),
@@ -744,7 +747,12 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   );
 
   const fetchParticipants = useCallback(async () => {
-    setLoading(true);
+    const append = page > 1;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       if (source.kind === "organization") {
@@ -753,7 +761,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           limit: PARTICIPANTS_PAGE_SIZE,
         });
         const chunk = res.data.data ?? [];
-        setParticipants(chunk);
+        setParticipants((prev) => (append ? [...prev, ...chunk] : chunk));
         setTotal(Number(res.data.meta?.total ?? chunk.length));
       } else if (source.kind === "camp") {
         const res = await participantsApi.byCamp(source.campNo, {
@@ -761,7 +769,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           limit: PARTICIPANTS_PAGE_SIZE,
         });
         const chunk = res.data.data ?? [];
-        setParticipants(chunk);
+        setParticipants((prev) => (append ? [...prev, ...chunk] : chunk));
         setTotal(Number(res.data.meta?.total ?? chunk.length));
       } else if (source.kind === "engagement-id") {
         const res = await participantsApi.byEngagementId(
@@ -769,7 +777,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           buildListParams()
         );
         const chunk = res.data.data ?? [];
-        setParticipants(chunk);
+        setParticipants((prev) => (append ? [...prev, ...chunk] : chunk));
         setTotal(Number(res.data.meta?.total ?? chunk.length));
       } else {
         const res =
@@ -780,13 +788,21 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               })
             : await participantsApi.public({ page, limit: PARTICIPANTS_PAGE_SIZE });
         const chunk = res.data.data ?? [];
-        setParticipants(chunk);
+        setParticipants((prev) => (append ? [...prev, ...chunk] : chunk));
         setTotal(Number(res.data.meta?.total ?? chunk.length));
       }
     } catch (err) {
+      if (!append) {
+        setParticipants([]);
+        setTotal(0);
+      }
       setError(getApiError(err));
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [source, page, buildListParams]);
 
@@ -895,8 +911,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   useEffect(() => {
     if (!open) return;
     setPage(1);
+    setParticipants([]);
+    setTotal(0);
     setSelectedUserIds(new Set());
     setSelectAllError(null);
+    setParticipantStats(null);
   }, [debouncedSearch, columnFilters, open]);
 
   useEffect(() => {
@@ -942,6 +961,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setBookingDateUserIdsByDate({});
       setEngagementDateOptions([]);
       setParticipantStats(null);
+      setParticipants([]);
       setPage(1);
       setTotal(0);
       void fetchOrganizationDepartments();
@@ -954,10 +974,26 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     void fetchParticipants();
   }, [open, fetchParticipants]);
 
+  const hasMore = participants.length < total;
+
   useEffect(() => {
-    if (!open) return;
-    void fetchParticipantStats();
-  }, [open, fetchParticipantStats]);
+    if (!open || loading || loadingMore || !hasMore || error) return;
+    const sentinel = loadMoreRef.current;
+    const root = scrollContainerRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !loadingMore) {
+          setPage((current) => current + 1);
+        }
+      },
+      { root, rootMargin: "120px", threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [open, loading, loadingMore, hasMore, error, participants.length, total]);
 
   useEffect(() => {
     setSelectedUserIds(new Set());
@@ -2137,7 +2173,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         )}
 
         {/* State: loading */}
-        {loading && (
+        {loading && participants.length === 0 && (
           <div className="py-12 flex flex-col items-center gap-3 text-zinc-400">
             <Loader2 className="w-7 h-7 animate-spin" />
             <span className="text-sm">Loading participants…</span>
@@ -2145,11 +2181,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         )}
 
         {/* State: error */}
-        {!loading && error && (
+        {!loading && error && participants.length === 0 && (
           <div className="py-6 text-center">
             <p className="text-red-600 text-sm mb-3">{error}</p>
             <button
-              onClick={fetchParticipants}
+              onClick={() => {
+                setPage(1);
+                void fetchParticipants();
+              }}
               className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
             >
               Retry
@@ -2158,7 +2197,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         )}
 
         {/* State: empty */}
-        {!loading && !error && visibleRows.length === 0 && (
+        {!loading && !error && visibleRows.length === 0 && participants.length === 0 && (
           <div className="py-12 flex flex-col items-center gap-3 text-zinc-400">
             <Users className="w-10 h-10" />
             <p className="text-sm">{emptyMessage()}</p>
@@ -2166,7 +2205,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
         )}
 
         {/* Table */}
-        {!loading && !error && visibleRows.length > 0 && (
+        {!error && visibleRows.length > 0 && (
           <>
             {consultationUpdateError && (
               <p className="text-sm text-red-600 mb-3">{consultationUpdateError}</p>
@@ -2190,8 +2229,38 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   ? `${participants.length} participant${participants.length !== 1 ? "s" : ""}`
                   : `${visibleRows.length} shown · ${participants.length} total`}
                 {" · "}
-                {statsLoading && useServerPagination ? (
-                  <span className="text-zinc-400">checking blood tests…</span>
+                {useServerPagination ? (
+                  statsLoading ? (
+                    <span className="text-zinc-400">checking blood tests…</span>
+                  ) : participantStats ? (
+                    <>
+                      <BloodTestCompleteCount
+                        complete={bloodTestCompleteInView}
+                        total={bloodTestFilteredTotal}
+                        notReadyParticipants={bloodTestNotReadyInView}
+                        notReadyNames={bloodTestNotReadyNames}
+                      />
+                      {hasParticipantViewFilter && (
+                        <>
+                          {" · "}
+                          <BloodTestCompleteCount
+                            complete={bloodTestCompleteTotal}
+                            total={bloodTestOverallTotal}
+                            notReadyParticipants={bloodTestNotReadyTotal}
+                          />
+                          <span className="text-zinc-500"> overall</span>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void fetchParticipantStats()}
+                      className="text-zinc-700 underline decoration-dotted decoration-zinc-400 hover:text-zinc-900"
+                    >
+                      Check blood test status
+                    </button>
+                  )
                 ) : (
                   <BloodTestCompleteCount
                     complete={bloodTestCompleteInView}
@@ -2200,22 +2269,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     notReadyNames={bloodTestNotReadyNames}
                   />
                 )}
-                {hasParticipantViewFilter && !statsLoading && (
-                  <>
-                    {" · "}
-                    <BloodTestCompleteCount
-                      complete={bloodTestCompleteTotal}
-                      total={bloodTestOverallTotal}
-                      notReadyParticipants={bloodTestNotReadyTotal}
-                    />
-                    <span className="text-zinc-500"> overall</span>
-                  </>
-                )}
                 <span className="text-zinc-400"> — use the checkbox to select all matching participants</span>
               </p>
             )}
 
-            <div className="overflow-x-auto rounded-lg border border-zinc-200">
+            <div
+              ref={scrollContainerRef}
+              className="overflow-x-auto overflow-y-auto max-h-[min(60vh,640px)] rounded-lg border border-zinc-200"
+            >
               <table className="w-full text-sm min-w-[1500px]">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50">
@@ -2625,39 +2686,30 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   })}
                 </tbody>
               </table>
+              {hasMore && <div ref={loadMoreRef} className="h-4 w-full" aria-hidden />}
             </div>
 
-            {total > PARTICIPANTS_PAGE_SIZE && (
+            {(total > 0 || loadingMore) && (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600">
                 <span>
-                  Showing {(page - 1) * PARTICIPANTS_PAGE_SIZE + 1}–
-                  {Math.min(page * PARTICIPANTS_PAGE_SIZE, total)} of {total}
+                  Showing {visibleRows.length} of {total}
+                  {loadingMore ? " · loading more…" : ""}
                 </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    disabled={page <= 1 || loading}
-                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Previous
-                  </button>
-                  <span>
-                    Page {page} of {Math.max(1, Math.ceil(total / PARTICIPANTS_PAGE_SIZE))}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((current) =>
-                        Math.min(Math.ceil(total / PARTICIPANTS_PAGE_SIZE), current + 1)
-                      )
-                    }
-                    disabled={page >= Math.ceil(total / PARTICIPANTS_PAGE_SIZE) || loading}
-                    className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next
-                  </button>
-                </div>
+                {loadingMore && (
+                  <Loader2 className="w-4 h-4 animate-spin text-zinc-400" aria-hidden />
+                )}
+              </div>
+            )}
+            {error && participants.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-red-600">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  onClick={() => void fetchParticipants()}
+                  className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50"
+                >
+                  Retry
+                </button>
               </div>
             )}
           </>
