@@ -531,6 +531,7 @@ function buildExportColumns(options: {
     { header: "phone", value: (p) => p.phone },
     { header: "email", value: (p) => p.email },
     { header: "participants_employee_id", value: (p) => p.participants_employee_id },
+    { header: "booking_id", value: (p) => p.booking_id },
   ];
 
   if (options.withAddress) {
