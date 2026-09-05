@@ -74,17 +74,29 @@ const ROUTE_ORDER = [
   "fitness-parameters",
 ];
 
-/** Categories shown in the engagement console questionnaire modal. */
-const CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS = [
-  "vitals",
-] as const;
+/** Phlebos (onboarding_assistant) only see these categories in the console questionnaire modal. */
+const PHLEBO_CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS = ["vitals"] as const;
 
+export type ConsoleQuestionnaireEmployeeRole =
+  | "admin"
+  | "onboarding_assistant"
+  | "organization_manager"
+  | "expert"
+  | null;
+
+/**
+ * Categories shown in the engagement console questionnaire modal.
+ * Admins (and org managers) see all MetSights categories; phlebos only see Vitals.
+ */
 export function filterConsoleQuestionnaireCategories<
   T extends { category_key?: string | null },
->(categories: T[]): T[] {
+>(categories: T[], employeeRole?: ConsoleQuestionnaireEmployeeRole): T[] {
+  const isPhlebo = employeeRole === "onboarding_assistant" || employeeRole == null;
+  if (!isPhlebo) return categories;
+
   return categories.filter((category) => {
     const key = String(category.category_key ?? "").toLowerCase();
-    return CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS.some(
+    return PHLEBO_CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS.some(
       (allowed) => key.includes(allowed) || allowed.includes(key)
     );
   });

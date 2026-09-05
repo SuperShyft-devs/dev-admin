@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 import { Modal } from "../../shared/ui/Modal";
 import {
   consoleApi,
@@ -35,6 +36,7 @@ export function ParticipantQuestionnaireModal({
   participant,
   isEngagementRunning,
 }: ParticipantQuestionnaireModalProps) {
+  const { employeeRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<ConsoleParticipantAssessment | null>(null);
@@ -73,7 +75,9 @@ export function ParticipantQuestionnaireModal({
         { category_of: "metsights" }
       );
       setCategories(
-        sortCategories(filterConsoleQuestionnaireCategories(statusRes.data.data ?? []))
+        sortCategories(
+          filterConsoleQuestionnaireCategories(statusRes.data.data ?? [], employeeRole)
+        )
       );
     } catch (err) {
       setError(getApiError(err));
@@ -82,7 +86,7 @@ export function ParticipantQuestionnaireModal({
     } finally {
       setLoading(false);
     }
-  }, [engagementId, participant.user_id]);
+  }, [engagementId, participant.user_id, employeeRole]);
 
   useEffect(() => {
     if (open) {
