@@ -500,8 +500,11 @@ function consultationWantToYesNo(
   return consultationWant(consultationFieldValue(participant, field)) === true ? "Yes" : "No";
 }
 
-function doctorConsultationSlotDetail(participant: Participant): string {
-  const pref = normalizeConsultationPref(consultationFieldValue(participant, "doctor"));
+function consultationSlotDetail(
+  participant: Participant,
+  field: ConsultationField
+): string {
+  const pref = normalizeConsultationPref(consultationFieldValue(participant, field));
   if (!pref.date || !pref.slot) return "";
   return `${pref.date} ${pref.slot}`;
 }
@@ -562,12 +565,10 @@ function buildExportColumns(options: {
         header: column.header,
         value: (p) => consultationWantToYesNo(p, column.key),
       });
-      if (column.key === "doctor") {
-        columns.push({
-          header: "Doctor_Consultation_slot_detail",
-          value: (p) => doctorConsultationSlotDetail(p),
-        });
-      }
+      columns.push({
+        header: `${column.key}_consultation_slot_detail`,
+        value: (p) => consultationSlotDetail(p, column.key),
+      });
     }
   }
 
