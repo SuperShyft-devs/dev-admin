@@ -126,7 +126,7 @@ export function ExpertConsultationManagePage() {
     };
   }, [pdfBlobUrl]);
 
-  const canMarkDone = Boolean(detail && !detail.done && detail.slot_reached);
+  const canMarkDone = Boolean(detail && !detail.done && detail.within_engagement_window);
 
   const shared = detail?.shared_resources;
 
@@ -273,8 +273,8 @@ export function ExpertConsultationManagePage() {
             onClick={() => void handleDone()}
             className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-40 shrink-0"
             title={
-              detail && !detail.slot_reached
-                ? "Available after the scheduled slot time"
+              detail && !detail.within_engagement_window
+                ? "Available during the engagement period"
                 : detail?.done
                   ? "Already marked done"
                   : undefined
