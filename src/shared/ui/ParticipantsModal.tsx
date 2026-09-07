@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown, FileX } from "lucide-react";
+import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown, FileX, MousePointerClick } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
+import { UserDetailsModal } from "./UserDetailsModal";
 import {
   participantsApi,
   engagementsApi,
@@ -659,6 +660,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   const [search, setSearch] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>(DEFAULT_COLUMN_FILTERS);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [detailsUserId, setDetailsUserId] = useState<number | null>(null);
   const [exportFormatOpen, setExportFormatOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [exportWithAddress, setExportWithAddress] = useState(false);
@@ -949,6 +952,8 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
       setDebouncedSearch("");
       setColumnFilters(DEFAULT_COLUMN_FILTERS);
       setSelectedUserIds(new Set());
+      setSelectionMode(false);
+      setDetailsUserId(null);
       setDeleteSelectedOpen(false);
       setDeleteError(null);
       setDeleteProgress(null);
@@ -1537,6 +1542,21 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     setSelectAllError(null);
   };
 
+  const toggleSelectionMode = () => {
+    setSelectionMode((prev) => {
+      if (prev) clearSelection();
+      return !prev;
+    });
+  };
+
+  const handleRowClick = (userId: number) => {
+    if (selectionMode) {
+      toggleRowSelection(userId);
+      return;
+    }
+    setDetailsUserId(userId);
+  };
+
   const resolveSelectionForBulkAction = async (): Promise<Participant[]> => {
     if (source.kind !== "engagement-id") {
       return selectedParticipants;
@@ -2016,7 +2036,45 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                 </select>
               </div>
             ))}
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs font-medium text-zinc-500 invisible select-none" aria-hidden>
+                Select
+              </label>
+              <button
+                type="button"
+                onClick={toggleSelectionMode}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                  selectionMode
+                    ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
+                aria-pressed={selectionMode}
+              >
+                <MousePointerClick className="w-4 h-4" />
+                Select
+              </button>
+            </div>
               </>
+            )}
+            {!hasEngagementFields && (
+              <div className="flex flex-col gap-0.5">
+                <label className="text-xs font-medium text-zinc-500 invisible select-none" aria-hidden>
+                  Select
+                </label>
+                <button
+                  type="button"
+                  onClick={toggleSelectionMode}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                    selectionMode
+                      ? "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+                      : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                  }`}
+                  aria-pressed={selectionMode}
+                >
+                  <MousePointerClick className="w-4 h-4" />
+                  Select
+                </button>
+              </div>
             )}
             {hasActiveColumnFilters && (
               <button
@@ -2030,7 +2088,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           </div>
         )}
 
-        {selectedCount > 0 && !loading && !error && (
+        {selectionMode && selectedCount > 0 && !loading && !error && (
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             <span>
               <span className="font-medium">{selectedCount}</span> selected
@@ -2283,7 +2341,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                     notReadyNames={bloodTestNotReadyNames}
                   />
                 )}
-                <span className="text-zinc-400"> — use the checkbox to select all matching participants</span>
+                <span className="text-zinc-400">
+                  {selectionMode
+                    ? " — use the checkbox to select all matching participants"
+                    : " — click a participant to view details, or Select to multi-select"}
+                </span>
               </p>
             )}
 
@@ -2294,6 +2356,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               <table className="w-full text-sm min-w-[1500px]">
                 <thead>
                   <tr className="border-b border-zinc-200 bg-zinc-50">
+                    {selectionMode && (
                     <th className="w-10 px-2 py-3 text-left">
                       {selectAllLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin text-zinc-400" aria-hidden />
@@ -2317,6 +2380,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                         />
                       )}
                     </th>
+                    )}
                     <th className="px-3 sm:px-4 py-3 text-left font-medium text-zinc-600 whitespace-nowrap">
                       Name
                     </th>
@@ -2438,10 +2502,11 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                       <tr
                         key={`${p.engagement_participant_id ?? p.user_id}-${idx}`}
                         className={`border-b border-zinc-100 last:border-0 cursor-pointer hover:bg-zinc-50 ${
-                          checked ? "bg-zinc-50" : ""
+                          selectionMode && checked ? "bg-zinc-50" : ""
                         }`}
-                        onClick={() => toggleRowSelection(p.user_id)}
+                        onClick={() => handleRowClick(p.user_id)}
                       >
+                        {selectionMode && (
                         <td
                           className="w-10 px-2 py-2.5 sm:py-3"
                           onClick={(ev) => ev.stopPropagation()}
@@ -2454,6 +2519,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                             aria-label={`Select ${fullName(p)}`}
                           />
                         </td>
+                        )}
                         <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-zinc-800">
                           <div className="font-medium leading-tight whitespace-nowrap">
                             {fullName(p)}
@@ -3534,6 +3600,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
           </div>
         </Modal>
       )}
+
+      <UserDetailsModal
+        open={detailsUserId != null}
+        userId={detailsUserId}
+        onClose={() => setDetailsUserId(null)}
+        onSaved={() => {
+          void fetchParticipants();
+        }}
+      />
     </>
   );
 }
