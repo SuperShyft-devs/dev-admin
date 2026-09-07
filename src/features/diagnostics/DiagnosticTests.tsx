@@ -570,8 +570,12 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
                 value={form.parameter_key as string}
                 onChange={(e) => setForm((prev) => ({ ...prev, parameter_key: e.target.value }))}
                 className="w-full border border-zinc-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-zinc-900"
-                placeholder="e.g. haemoglobin"
+                placeholder="e.g. bun/creatinine_ratio"
+                autoComplete="off"
               />
+              <p className="text-xs text-zinc-500 mt-1">
+                Optional. Use the blood-report JSON key (any format, e.g. haemoglobin or bun/creatinine_ratio).
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1">Unit</label>
