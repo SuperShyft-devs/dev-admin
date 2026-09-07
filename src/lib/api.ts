@@ -1341,6 +1341,8 @@ export interface ConsultationManageDetail {
   phone?: string | null;
   engagement_id: number;
   engagement_code?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
   engagement_participant_id?: number;
   expert_type: string;
   expert_id?: number | null;
@@ -1361,7 +1363,7 @@ export interface ConsultationManageDetail {
     blood_report: ConsultationSharedResourceState;
     questionnaire: ConsultationSharedResourceState;
   };
-  slot_reached: boolean;
+  within_engagement_window: boolean;
 }
 
 export interface CampConsultationEngagementItem {

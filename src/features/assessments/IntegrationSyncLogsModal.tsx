@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, Loader2, RefreshCw, Search } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { integrationSyncLogsApi, getApiError, type IntegrationSyncLog } from "../../lib/api";
@@ -276,6 +276,7 @@ export function IntegrationSyncLogsModal({
   const [payloadSearchDebounced, setPayloadSearchDebounced] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [payloadTab, setPayloadTab] = useState<PayloadTab>("request");
+  const fetchSeqRef = useRef(0);
 
   useEffect(() => {
     if (open) {
@@ -294,24 +295,30 @@ export function IntegrationSyncLogsModal({
       setLogs([]);
       setTotal(0);
       setError(null);
+      fetchSeqRef.current += 1;
     }
   }, [open, defaultProvider, initialEngagementId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setEndpointSearchDebounced(endpointSearch.trim());
-      setPage(1);
+      const next = endpointSearch.trim();
+      setEndpointSearchDebounced((prev) => (prev === next ? prev : next));
     }, 350);
     return () => window.clearTimeout(timer);
   }, [endpointSearch]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setPayloadSearchDebounced(payloadSearch.trim());
-      setPage(1);
+      const next = payloadSearch.trim();
+      setPayloadSearchDebounced((prev) => (prev === next ? prev : next));
     }, 350);
     return () => window.clearTimeout(timer);
   }, [payloadSearch]);
+
+  // Reset to page 1 only when the applied (debounced) search actually changes.
+  useEffect(() => {
+    setPage(1);
+  }, [endpointSearchDebounced, payloadSearchDebounced]);
 
   const listParams = useMemo(() => {
     const range = getTimeRange(timePreset);
@@ -355,25 +362,44 @@ export function IntegrationSyncLogsModal({
   ]);
 
   const fetchLogs = useCallback(async () => {
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const res = await integrationSyncLogsApi.list(listParams);
+      if (seq !== fetchSeqRef.current) return;
       setLogs(res.data.data ?? []);
       setTotal(res.data.meta?.total ?? 0);
     } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
       setError(getApiError(err));
       setLogs([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   }, [listParams]);
 
-  const requestLogs = useCallback(() => {
-    setLogsRequested(true);
+  // Once logs are loaded, refetch whenever page/filters change (listParams → fetchLogs).
+  useEffect(() => {
+    if (!open || !logsRequested) return;
     void fetchLogs();
-  }, [fetchLogs]);
+  }, [open, logsRequested, fetchLogs]);
+
+  const requestLogs = useCallback(() => {
+    if (logsRequested) {
+      void fetchLogs();
+      return;
+    }
+    setLogsRequested(true);
+  }, [logsRequested, fetchLogs]);
+
+  const goToPage = (nextPage: number) => {
+    setPage((current) => {
+      const clamped = Math.min(Math.max(1, nextPage), Math.max(1, Math.ceil(total / limit)));
+      return clamped === current ? current : clamped;
+    });
+  };
 
   const toggleStatus = (status: string) => {
     setStatusFilters((prev) =>
@@ -665,8 +691,8 @@ export function IntegrationSyncLogsModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={!logsRequested || page <= 1 || loading}
+              onClick={() => goToPage(page - 1)}
               className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50 hover:bg-zinc-50"
             >
               Prev
@@ -674,8 +700,8 @@ export function IntegrationSyncLogsModal({
             <span className="text-xs text-zinc-600">Page {page} / {totalPages}</span>
             <button
               type="button"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage((p) => p + 1)}
+              disabled={!logsRequested || page >= totalPages || loading}
+              onClick={() => goToPage(page + 1)}
               className="px-3 py-1.5 rounded-lg border border-zinc-300 text-xs disabled:opacity-50 hover:bg-zinc-50"
             >
               Next
