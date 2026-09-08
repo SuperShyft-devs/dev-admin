@@ -510,6 +510,13 @@ function consultationSlotDetail(
   return `${pref.date} ${pref.slot}`;
 }
 
+function consultationCabin(
+  participant: Participant,
+  field: ConsultationField
+): string {
+  return normalizeConsultationPref(consultationFieldValue(participant, field)).cabin ?? "";
+}
+
 type ExportColumn = {
   header: string;
   value: (participant: Participant) => unknown;
@@ -569,6 +576,10 @@ function buildExportColumns(options: {
       columns.push({
         header: `${column.key}_consultation_slot_detail`,
         value: (p) => consultationSlotDetail(p, column.key),
+      });
+      columns.push({
+        header: `${column.key}_consultation_cabin`,
+        value: (p) => consultationCabin(p, column.key),
       });
     }
   }
