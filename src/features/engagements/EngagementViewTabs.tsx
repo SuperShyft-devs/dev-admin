@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PermissionGate } from "../../contexts/PermissionContext";
 import {
   Bell,
   ExternalLink,
@@ -197,14 +198,14 @@ export function EngagementOverviewTab({
         </div>
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <button
+          <PermissionGate category="engagements" taskKey="records" action="edit"><button
             type="button"
             onClick={onEdit}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
-          </button>
+          </button></PermissionGate>
           <button
             type="button"
             onClick={onViewParticipants}
@@ -213,15 +214,16 @@ export function EngagementOverviewTab({
             <Users className="w-3.5 h-3.5" />
             Participants ({engagement.participant_count ?? 0})
           </button>
-          <button
+          <PermissionGate category="notifications" action="edit"><button
             type="button"
             onClick={onNotify}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-medium"
           >
             <Bell className="w-3.5 h-3.5" />
             Notification
-          </button>
+          </button></PermissionGate>
           {onSyncLogs ? (
+            <PermissionGate category="system_monitoring">
             <button
               type="button"
               onClick={onSyncLogs}
@@ -230,6 +232,7 @@ export function EngagementOverviewTab({
               <ScrollText className="w-3.5 h-3.5" />
               Sync Logs
             </button>
+            </PermissionGate>
           ) : null}
         </div>
       </div>

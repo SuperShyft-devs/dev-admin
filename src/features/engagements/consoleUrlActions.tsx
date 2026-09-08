@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link2 } from "lucide-react";
+import { PermissionGate } from "../../contexts/PermissionContext";
 
 export function consoleUrlForEngagement(engagementId: number): string {
   return `${window.location.origin}/engagements/${engagementId}/console`;
@@ -20,6 +21,7 @@ export function ConsoleUrlActions({ engagementId }: { engagementId: number }) {
   };
 
   return (
+    <PermissionGate category="engagement_console">
     <div className="flex flex-col gap-2 mt-1">
       <code className="text-xs bg-zinc-100 px-2 py-1.5 rounded break-all text-zinc-700">{url}</code>
       <div className="flex flex-wrap items-center gap-2">
@@ -41,5 +43,6 @@ export function ConsoleUrlActions({ engagementId }: { engagementId: number }) {
         </a>
       </div>
     </div>
+    </PermissionGate>
   );
 }

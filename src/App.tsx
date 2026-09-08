@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { PermissionProvider, usePermissions } from "./contexts/PermissionContext";
+import type { PermissionCategory } from "./auth/permissions";
+import { AccessDenied } from "./pages/AccessDenied";
 import { AdminLayout } from "./layouts/AdminLayout";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./features/dashboard/Dashboard";
@@ -134,6 +137,17 @@ function OrgManagerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function PermissionRoute({
+  category,
+  children,
+}: {
+  category: PermissionCategory;
+  children: React.ReactNode;
+}) {
+  const { canView } = usePermissions();
+  return canView(category) ? <>{children}</> : <AccessDenied />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -152,15 +166,15 @@ function AppRoutes() {
       >
         <Route index element={<Dashboard />} />
         <Route path="organisations" element={<Navigate to="/organisations/organizations" replace />} />
-        <Route path="organisations/camps/:campNo/reports" element={<CampReportsPage />} />
-        <Route path="organisations/:tab" element={<Organisations />} />
-        <Route path="engagements" element={<Engagements />} />
-        <Route path="employees" element={<Employees />} />
+        <Route path="organisations/camps/:campNo/reports" element={<PermissionRoute category="reports"><CampReportsPage /></PermissionRoute>} />
+        <Route path="organisations/:tab" element={<PermissionRoute category="organizations"><Organisations /></PermissionRoute>} />
+        <Route path="engagements" element={<PermissionRoute category="engagements"><Engagements /></PermissionRoute>} />
+        <Route path="employees" element={<PermissionRoute category="employees"><Employees /></PermissionRoute>} />
         <Route
           path="assessments"
           element={<Navigate to="/assessments/packages" replace />}
         />
-        <Route path="assessments/:tab" element={<AssessmentPackages />} />
+        <Route path="assessments/:tab" element={<PermissionRoute category="assessments"><AssessmentPackages /></PermissionRoute>} />
         <Route
           path="assessment"
           element={<Navigate to="/assessments/packages" replace />}
@@ -193,33 +207,35 @@ function AppRoutes() {
           path="assessment-packages/questions"
           element={<Navigate to="/assessments/questions" replace />}
         />
-        <Route path="users/:userId/journey" element={<ParticipantJourneyPage />} />
-        <Route path="users" element={<Users />} />
-        <Route path="experts" element={<Experts />} />
+        <Route path="users/:userId/journey" element={<PermissionRoute category="users"><ParticipantJourneyPage /></PermissionRoute>} />
+        <Route path="users" element={<PermissionRoute category="users"><Users /></PermissionRoute>} />
+        <Route path="experts" element={<PermissionRoute category="experts"><Experts /></PermissionRoute>} />
         <Route path="diagnostics" element={<Navigate to="/diagnostics/packages" replace />} />
-        <Route path="diagnostics/packages" element={<DiagnosticPackages />} />
-        <Route path="diagnostics/filters-chips" element={<DiagnosticFilterChips />} />
+        <Route path="diagnostics/packages" element={<PermissionRoute category="diagnostics"><DiagnosticPackages /></PermissionRoute>} />
+        <Route path="diagnostics/filters-chips" element={<PermissionRoute category="diagnostics"><DiagnosticFilterChips /></PermissionRoute>} />
         <Route path="payments" element={<Navigate to="/payments/bookings" replace />} />
-        <Route path="payments/bookings" element={<Bookings />} />
-        <Route path="checklists" element={<ChecklistTemplates />} />
-        <Route path="library/health-metrics" element={<HealthMetrics />} />
+        <Route path="payments/bookings" element={<PermissionRoute category="payments_bookings"><Bookings /></PermissionRoute>} />
+        <Route path="checklists" element={<PermissionRoute category="checklists_tasks"><ChecklistTemplates /></PermissionRoute>} />
+        <Route path="library/health-metrics" element={<PermissionRoute category="diagnostics"><HealthMetrics /></PermissionRoute>} />
         <Route path="notifications" element={<Navigate to="/notifications/notifications" replace />} />
-        <Route path="notifications/:tab" element={<Notifications />} />
+        <Route path="notifications/:tab" element={<PermissionRoute category="notifications"><Notifications /></PermissionRoute>} />
         <Route
           path="admin/library/health-metrics"
           element={<Navigate to="/library/health-metrics" replace />}
         />
         <Route path="my-tasks" element={<MyTasks />} />
-        <Route path="support" element={<SupportTickets />} />
-        <Route path="server" element={<ServerHealth />} />
-        <Route path="settings" element={<Settings />} />
+        <Route path="support" element={<PermissionRoute category="support"><SupportTickets /></PermissionRoute>} />
+        <Route path="server" element={<PermissionRoute category="system_monitoring"><ServerHealth /></PermissionRoute>} />
+        <Route path="settings" element={<PermissionRoute category="platform_settings"><Settings /></PermissionRoute>} />
       </Route>
       <Route
         path="/engagements/console"
         element={
           <ProtectedRoute>
             <EmployeeRequiredRoute>
-              <ConsoleEngagementsPage />
+              <PermissionRoute category="engagement_console">
+                <ConsoleEngagementsPage />
+              </PermissionRoute>
             </EmployeeRequiredRoute>
           </ProtectedRoute>
         }
@@ -229,7 +245,9 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <EmployeeRequiredRoute>
-              <EngagementConsolePage />
+              <PermissionRoute category="engagement_console">
+                <EngagementConsolePage />
+              </PermissionRoute>
             </EmployeeRequiredRoute>
           </ProtectedRoute>
         }
@@ -323,7 +341,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <PermissionProvider>
+          <AppRoutes />
+        </PermissionProvider>
       </AuthProvider>
     </BrowserRouter>
   );

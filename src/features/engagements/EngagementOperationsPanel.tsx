@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { AssignParticipantsFromCsv } from "../../shared/ui/AssignParticipantsFromCsv";
+import { usePermissions } from "../../contexts/PermissionContext";
 import {
   CompletenessFlagIcon,
   CompletenessQuestionnaireIcon,
@@ -131,6 +132,11 @@ type Props = {
 };
 
 export function EngagementOperationsPanel({ engagement, active, onEngagementUpdated }: Props) {
+  const { canEditTask } = usePermissions();
+  const mayEditEngagements = canEditTask("engagements", "participants");
+  const mayEditAssessmentAssignments = canEditTask("engagements", "assessment_assignments");
+  const mayEditAssessmentIntegrations = canEditTask("assessments", "integrations");
+  const mayEditEngagementIntegrations = canEditTask("engagements", "integrations");
 
   const [qStatusOpen, setQStatusOpen] = useState(false);
   const [qStatusData, setQStatusData] = useState<EngagementQuestionnaireStatusResponse | null>(null);
@@ -809,15 +815,15 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
               Advanced Settings
             </div>
             <div className="flex flex-wrap gap-2">
-              <button
+              {mayEditAssessmentAssignments && <button
                 type="button"
                 onClick={() => openAssessmentsModal(engagement.engagement_id)}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-medium transition-colors"
               >
                 <ClipboardList className="w-3.5 h-3.5" />
                 Manage Assessments
-              </button>
-              <button
+              </button>}
+              {mayEditEngagements && <button
                 type="button"
                 onClick={() => {
                   setCreateProfilesOpen(true);
@@ -829,8 +835,8 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 Create Profiles
-              </button>
-              <button
+              </button>}
+              {mayEditAssessmentIntegrations && <button
                 type="button"
                 onClick={() => {
                   setDraftBloodOpen(true);
@@ -842,11 +848,11 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
               >
                 <CloudCog className="w-3.5 h-3.5" />
                 Draft Blood Parameters
-              </button>
+              </button>}
             </div>
 
             {/* ── Per-package Push Buttons ── */}
-            {advSettingsPackages.length === 0 && !advSettingsLoading && (
+            {mayEditEngagementIntegrations && advSettingsPackages.length === 0 && !advSettingsLoading && (
               <button
                 type="button"
                 onClick={() => loadAdvSettingsPackages(engagement.engagement_id)}
@@ -861,7 +867,7 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
                 Loading assessments…
               </div>
             )}
-            {advSettingsPackages.length > 0 && (
+            {mayEditEngagementIntegrations && advSettingsPackages.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {advSettingsPackages.map((pkg) => (
                   <button
@@ -877,11 +883,11 @@ export function EngagementOperationsPanel({ engagement, active, onEngagementUpda
               </div>
             )}
           </div>
-        <AssignParticipantsFromCsv
+        {mayEditEngagements && <AssignParticipantsFromCsv
           engagementId={engagement.engagement_id}
           engagementName={engagement.engagement_name ?? engagement.engagement_code}
           onComplete={() => onEngagementUpdated?.()}
-        />
+        />}
       </div>
       {/* ── Engagement Assessments Modal ── */}
       <Modal

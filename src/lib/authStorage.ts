@@ -1,3 +1,5 @@
+import type { EmployeeRole } from "../auth/permissions";
+
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 
@@ -55,7 +57,7 @@ export function loginPathWithRedirect(pathname: string, search = ""): string {
 }
 
 export function resolvePostLoginPath(
-  role: "admin" | "onboarding_assistant" | "organization_manager" | "expert" | null,
+  role: EmployeeRole | null,
   redirect?: string | null
 ): string {
   if (redirect && redirect.startsWith("/") && !redirect.startsWith("/login")) {

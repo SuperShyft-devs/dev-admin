@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -25,26 +25,28 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
+import { usePermissions } from "../contexts/PermissionContext";
+import type { PermissionCategory } from "../auth/permissions";
 
 const primaryNavItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true as const },
-  { to: "/users", icon: UserRound, label: "Users" },
-  { to: "/experts", icon: Stethoscope, label: "Experts" },
-  { to: "/organisations", icon: Building2, label: "Organisations" },
-  { to: "/engagements", icon: CalendarCheck, label: "Engagements" },
-  { to: "/support", icon: LifeBuoy, label: "Support" },
-  { to: "/server", icon: Server, label: "Server", adminOnly: true as const },
-  { to: "/settings", icon: Settings, label: "Settings" },
-  { to: "/employees", icon: Users, label: "Employees" },
+  { to: "/", icon: LayoutDashboard, label: "Dashboard", end: true as const, category: null },
+  { to: "/users", icon: UserRound, label: "Users", category: "users" },
+  { to: "/experts", icon: Stethoscope, label: "Experts", category: "experts" },
+  { to: "/organisations", icon: Building2, label: "Organisations", category: "organizations" },
+  { to: "/engagements", icon: CalendarCheck, label: "Engagements", category: "engagements" },
+  { to: "/support", icon: LifeBuoy, label: "Support", category: "support" },
+  { to: "/server", icon: Server, label: "Server", category: "system_monitoring" },
+  { to: "/settings", icon: Settings, label: "Settings", category: "platform_settings" },
+  { to: "/employees", icon: Users, label: "Employees", category: "employees" },
 ];
 
 const libraryNavItems = [
-  { to: "/assessments/packages", icon: ClipboardList, label: "Assessments" },
-  { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics" },
-  { to: "/payments/bookings", icon: CreditCard, label: "Payments" },
-  { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates" },
-  { to: "/library/health-metrics", icon: Activity, label: "Health Metrics" },
-  { to: "/notifications/notifications", icon: Bell, label: "Notifications" },
+  { to: "/assessments/packages", icon: ClipboardList, label: "Assessments", category: "assessments" },
+  { to: "/diagnostics/packages", icon: FlaskConical, label: "Diagnostics", category: "diagnostics" },
+  { to: "/payments/bookings", icon: CreditCard, label: "Payments", category: "payments_bookings" },
+  { to: "/checklists", icon: ClipboardCheck, label: "Checklist templates", category: "checklists_tasks" },
+  { to: "/library/health-metrics", icon: Activity, label: "Health Metrics", category: "diagnostics" },
+  { to: "/notifications/notifications", icon: Bell, label: "Notifications", category: "notifications" },
 ];
 
 const orgManagerNavItems = [
@@ -67,24 +69,24 @@ export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout, userProfile, userId, employeeRole } = useAuth();
+  const { canView } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const pendingTaskCount = usePendingTaskCount(location.pathname);
   const [libraryOpen, setLibraryOpen] = useState(() => isLibraryPath(location.pathname));
+  const libraryExpanded = libraryOpen || isLibraryPath(location.pathname);
   const isOrgManager = employeeRole === "organization_manager";
+  const visiblePrimaryItems = primaryNavItems.filter(
+    (item) => item.category === null || canView(item.category as PermissionCategory)
+  );
+  const visibleLibraryItems = libraryNavItems.filter((item) =>
+    canView(item.category as PermissionCategory)
+  );
 
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
   };
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (isLibraryPath(location.pathname)) setLibraryOpen(true);
-  }, [location.pathname]);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
   const toggleMobileMenu = () => setMobileMenuOpen((o) => !o);
@@ -123,7 +125,7 @@ export function AdminLayout() {
                 className="h-7 w-7 rounded-sm object-contain"
               />
               <span className="font-semibold text-zinc-900 tracking-tight">
-                Admin
+                {employeeRole === "inferior_admin" ? "Admin Workspace" : "Admin"}
               </span>
             </div>
           )}
@@ -161,7 +163,7 @@ export function AdminLayout() {
             ))
           ) : (
             <>
-          {primaryNavItems.slice(0, 4).map(({ to, icon: Icon, label, end }) => (
+          {visiblePrimaryItems.slice(0, 4).map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -177,7 +179,7 @@ export function AdminLayout() {
           ))}
 
           {sidebarCollapsed ? (
-            libraryNavItems.map(({ to, icon: Icon, label }) => (
+            visibleLibraryItems.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -190,7 +192,7 @@ export function AdminLayout() {
                 <Icon className="w-5 h-5 shrink-0" />
               </NavLink>
             ))
-          ) : (
+          ) : visibleLibraryItems.length > 0 ? (
             <div className="pt-0.5">
               <button
                 type="button"
@@ -200,20 +202,20 @@ export function AdminLayout() {
                     ? "bg-zinc-100 text-zinc-900"
                     : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
-                aria-expanded={libraryOpen}
+                aria-expanded={libraryExpanded}
               >
                 <Library className="w-5 h-5 shrink-0" />
                 <span className="flex-1 text-left">Library</span>
                 <ChevronDown
                   className={`w-4 h-4 shrink-0 text-zinc-400 transition-transform ${
-                    libraryOpen ? "rotate-180" : ""
+                    libraryExpanded ? "rotate-180" : ""
                   }`}
                   aria-hidden
                 />
               </button>
-              {libraryOpen && (
+              {libraryExpanded && (
                 <div className="mt-0.5 ml-2 pl-2 border-l border-zinc-200 space-y-0.5">
-                  {libraryNavItems.map(({ to, icon: Icon, label }) => (
+                  {visibleLibraryItems.map(({ to, icon: Icon, label }) => (
                     <NavLink
                       key={to}
                       to={to}
@@ -233,11 +235,10 @@ export function AdminLayout() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
-          {primaryNavItems
+          {visiblePrimaryItems
             .slice(4)
-            .filter((item) => !("adminOnly" in item && item.adminOnly) || employeeRole === "admin")
             .map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}

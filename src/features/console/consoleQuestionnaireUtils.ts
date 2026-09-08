@@ -79,6 +79,7 @@ const PHLEBO_CONSOLE_QUESTIONNAIRE_CATEGORY_KEYS = ["vitals"] as const;
 
 export type ConsoleQuestionnaireEmployeeRole =
   | "admin"
+  | "inferior_admin"
   | "onboarding_assistant"
   | "organization_manager"
   | "expert"

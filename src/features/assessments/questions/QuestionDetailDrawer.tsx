@@ -5,6 +5,7 @@ import { HealthyHabitRulesPanel } from "./HealthyHabitRulesPanel";
 import { MetsightsSyncSummary } from "./MetsightsSyncSummary";
 import { StatusBadge } from "./questionUi";
 import { VisibilityRulesDisplay } from "./VisibilityRulesDisplay";
+import { usePermissions } from "../../../contexts/PermissionContext";
 
 export type QuestionDrawerTab = "overview" | "visibility" | "habits" | "sync";
 
@@ -27,6 +28,8 @@ export function QuestionDetailDrawer({
   onConfigureSync,
   onUpdated,
 }: QuestionDetailDrawerProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditAssessments = canEditTask("assessments", "questions");
   const [activeTab, setActiveTab] = useState<QuestionDrawerTab>(initialTab);
   const [question, setQuestion] = useState<QuestionnaireQuestion | null>(null);
   const [loading, setLoading] = useState(false);
@@ -130,7 +133,9 @@ export function QuestionDetailDrawer({
         </div>
 
         <div
-          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50"
+          className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 ${
+            mayEditAssessments ? "" : "[&_button]:hidden [&_input]:hidden [&_select]:hidden"
+          }`}
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {error && (
@@ -209,7 +214,7 @@ export function QuestionDetailDrawer({
           )}
         </div>
 
-        {question && (
+        {question && mayEditAssessments && (
           <div className="px-4 sm:px-6 py-4 border-t border-zinc-200 bg-white flex flex-col sm:flex-row gap-2">
             <button
               type="button"

@@ -11,6 +11,7 @@ import {
   type DiagnosticFilterChip,
   type DiagnosticFilterChipFor,
 } from "../../lib/api";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 interface DiagnosticFilterChipsProps {
   embedded?: boolean;
@@ -26,6 +27,8 @@ const EMPTY_FORM = {
 };
 
 export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChipsProps) {
+  const { canEditTask } = usePermissions();
+  const mayEdit = canEditTask("diagnostics", "filter_chips");
   const [chipScope, setChipScope] = useState<DiagnosticFilterChipFor>("public_package");
   const [chips, setChips] = useState<DiagnosticFilterChip[]>([]);
   const [loading, setLoading] = useState(false);
@@ -242,14 +245,16 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
             placeholder="Search filter chips..."
           />
         </div>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
-        >
-          <Plus className="w-4 h-4" />
-          Add filter chip
-        </button>
+        {mayEdit && (
+          <button
+            type="button"
+            onClick={openAdd}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
+          >
+            <Plus className="w-4 h-4" />
+            Add filter chip
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
@@ -262,13 +267,13 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
             columns={columns}
             data={filteredRows}
             keyExtractor={(row) => row.filter_chip_id}
-            onEdit={openEdit}
-            onDelete={openDeleteConfirm}
+            onEdit={mayEdit ? openEdit : undefined}
+            onDelete={mayEdit ? openDeleteConfirm : undefined}
           />
         )}
       </div>
 
-      <div className="mt-4 bg-white rounded-xl border border-zinc-200 p-4">
+      {mayEdit && <div className="mt-4 bg-white rounded-xl border border-zinc-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-zinc-900">Drag to reorder</h2>
           {reorderSaving && <span className="text-xs text-zinc-500">Saving order...</span>}
@@ -295,7 +300,7 @@ export function DiagnosticFilterChips({ embedded = false }: DiagnosticFilterChip
             </div>
           </SortableContext>
         </DndContext>
-      </div>
+      </div>}
 
       <Modal
         open={modalOpen}

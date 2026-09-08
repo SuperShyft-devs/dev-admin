@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus, Loader2, X, ScrollText, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import { EngagementSearchPicker } from "../../shared/ui/EngagementSearchPicker";
@@ -152,6 +153,8 @@ function filterChipClass(active: boolean): string {
 // ── Notifications Tab ──────────────────────────────────────────────────
 
 function NotificationsTab() {
+  const { canEditTask } = usePermissions();
+  const mayEditNotifications = canEditTask("notifications", "messages");
   const [data, setData] = useState<NotificationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -628,7 +631,7 @@ function NotificationsTab() {
               label="Engagement"
               className="min-w-0 flex-1"
             />
-            {selectedCount > 0 && (
+            {mayEditNotifications && selectedCount > 0 && (
               <button
                 type="button"
                 onClick={handleBulkDelete}
@@ -682,6 +685,8 @@ function NotificationsTab() {
             keyExtractor={(r) => r.notification_id}
             onDelete={handleDelete}
             firstColumnClickableView={false}
+            mutationCategory="notifications"
+            mutationTaskKey="messages"
             pagination={{ page, limit, total, onPageChange: setPage }}
           />
         )}
@@ -766,6 +771,8 @@ function ServiceNameCell({ row }: { row: NotificationServiceItem }) {
 }
 
 function ServicesTab() {
+  const { canEditTask } = usePermissions();
+  const mayEditNotifications = canEditTask("notifications", "services");
   const [data, setData] = useState<NotificationServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -972,13 +979,13 @@ function ServicesTab() {
             </button>
           </div>
         </div>
-        <button
+        <PermissionGate category="notifications" taskKey="services" action="edit"><button
           onClick={openAdd}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4" />
           Add Service
-        </button>
+        </button></PermissionGate>
       </div>
 
       {!loading && data.length > 0 ? (
@@ -1003,10 +1010,12 @@ function ServicesTab() {
             columns={columns}
             data={filteredData}
             keyExtractor={(r) => r.notification_service_id}
-            onView={openEdit}
+            onView={mayEditNotifications ? openEdit : undefined}
             onEdit={openEdit}
             onDelete={handleDelete}
             firstColumnClickableView
+            mutationCategory="notifications"
+            mutationTaskKey="services"
           />
         )}
       </div>
@@ -1382,13 +1391,13 @@ function EventsTab() {
       )}
 
       <div className="mb-4 flex justify-end">
-        <button
+        <PermissionGate category="notifications" taskKey="events" action="edit"><button
           onClick={openAdd}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
         >
           <Plus className="w-4 h-4" />
           Add Event
-        </button>
+        </button></PermissionGate>
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
@@ -1405,6 +1414,8 @@ function EventsTab() {
             onEdit={openEdit}
             onDelete={handleDelete}
             firstColumnClickableView={false}
+            mutationCategory="notifications"
+            mutationTaskKey="events"
           />
         )}
       </div>

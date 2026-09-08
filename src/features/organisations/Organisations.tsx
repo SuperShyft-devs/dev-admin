@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Search, Plus, Loader2, Users, X, FileBarChart, FileText, MapPin } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
@@ -49,6 +50,10 @@ type TabKey = "organizations" | "camps";
 const TAB_KEYS: TabKey[] = ["organizations", "camps"];
 
 export function Organisations() {
+  const { canEditTask, canViewTask } = usePermissions();
+  const mayEditOrganizations = canEditTask("organizations", "organizations");
+  const mayViewReports = canViewTask("reports", "camp_reports");
+  const mayEditReports = canEditTask("reports", "camp_reports");
   const navigate = useNavigate();
   const { tab: tabParam } = useParams<{ tab?: string }>();
   const activeTab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : "organizations";
@@ -547,6 +552,15 @@ export function Organisations() {
       sortable: true,
       render: (row) => {
         const isActive = (row.status ?? "").toLowerCase() === "active";
+        if (!mayEditOrganizations) {
+          return (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+            }`}>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+          );
+        }
         return (
           <button
             type="button"
@@ -725,6 +739,7 @@ export function Organisations() {
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Organisations</h1>
         {activeTab === "organizations" && (
           <div className="flex items-center gap-3">
+            <PermissionGate category="organizations" taskKey="industries" action="edit">
             <button
               onClick={() => setManageIndustriesOpen(true)}
               className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-100 text-zinc-700 text-sm font-medium hover:bg-zinc-200 shrink-0 border border-zinc-200"
@@ -732,6 +747,8 @@ export function Organisations() {
               <span className="hidden sm:inline">Manage Industries</span>
               <span className="sm:hidden">Industries</span>
             </button>
+            </PermissionGate>
+            <PermissionGate category="organizations" taskKey="organizations" action="edit">
             <button
               onClick={openAdd}
               className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
@@ -739,9 +756,11 @@ export function Organisations() {
               <Plus className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">Add Organisation</span>
             </button>
+            </PermissionGate>
           </div>
         )}
         {activeTab === "camps" && (
+          <PermissionGate category="reports" taskKey="report_sections" action="edit">
           <button
             onClick={() => setReportSectionsOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
@@ -749,6 +768,7 @@ export function Organisations() {
             <span className="hidden sm:inline">Manage Report Sections</span>
             <span className="sm:hidden">Sections</span>
           </button>
+          </PermissionGate>
         )}
       </div>
 
@@ -911,6 +931,8 @@ export function Organisations() {
                 columns={campColumns}
                 data={campsData}
                 keyExtractor={(r) => r.camp_no}
+                mutationCategory="reports"
+                allowExtraMenuWhenReadOnly
                 sortKey={campsSortKey}
                 sortDir={campsSortDir}
                 onSort={handleCampsSort}
@@ -934,7 +956,7 @@ export function Organisations() {
                     setCampActionError(getApiError(err));
                   }
                 }}
-                onDelete={(r) => setCampReportDeleteConfirm(r)}
+                onDelete={mayEditReports ? (r) => setCampReportDeleteConfirm(r) : undefined}
                 onDeleteLabel="Delete Camp Report"
                 canDelete={(r) => initializedCampNos.has(r.camp_no)}
                 renderExtraMenuItems={(row, closeMenu) => (
@@ -949,7 +971,7 @@ export function Organisations() {
                     >
                       <MapPin className="w-4 h-4" /> View cities
                     </button>
-                    {initializedCampNos.has(row.camp_no) ? (
+                    {initializedCampNos.has(row.camp_no) && mayViewReports ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -960,7 +982,7 @@ export function Organisations() {
                       >
                         <FileBarChart className="w-4 h-4" /> Manage Reports
                       </button>
-                    ) : (
+                    ) : !initializedCampNos.has(row.camp_no) && mayEditReports ? (
                       <div className="border-t border-zinc-100">
                         <button
                           type="button"
@@ -974,7 +996,7 @@ export function Organisations() {
                           <FileText className="w-4 h-4" /> Init Camp Report
                         </button>
                       </div>
-                    )}
+                    ) : null}
                   </>
                 )}
                 pagination={{
@@ -1018,6 +1040,7 @@ export function Organisations() {
               {selectedCamp.departments.count}
             </div>
             <div className="pt-2 flex flex-wrap gap-2">
+              <PermissionGate category="organizations" taskKey="camps" action="edit">
               <button
                 type="button"
                 onClick={openChangeCampNo}
@@ -1025,13 +1048,16 @@ export function Organisations() {
               >
                 Change camp_no
               </button>
+              </PermissionGate>
               {!initializedCampNos.has(selectedCamp.camp_no) && (
+                <PermissionGate category="reports" taskKey="camp_reports" action="edit">
                 <CampReportInitMenu
                   campNo={selectedCamp.camp_no}
                   onFeedback={handleCampReportFeedback}
                   onInitialized={fetchCamps}
                   zIndexClassName="z-[60]"
                 />
+                </PermissionGate>
               )}
             </div>
           </div>

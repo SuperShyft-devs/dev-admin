@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Modal } from "../../../shared/ui/Modal";
+import { usePermissions } from "../../../contexts/PermissionContext";
 import {
   questionnaireQuestionsApi,
   type MetsightsSyncConfig,
@@ -29,6 +30,8 @@ export function MetsightsSyncConfigModal({
   question,
   onSaved,
 }: MetsightsSyncConfigModalProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditAssessments = canEditTask("assessments", "integrations");
   const [syncConfig, setSyncConfig] = useState<MetsightsSyncConfig>({});
   const [syncPullParamsJson, setSyncPullParamsJson] = useState("");
   const [syncPushParamsJson, setSyncPushParamsJson] = useState("");
@@ -130,7 +133,7 @@ export function MetsightsSyncConfigModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Configure Metsights Sync" maxWidthClassName="max-w-2xl">
+    <Modal open={open && mayEditAssessments} onClose={onClose} title="Configure Metsights Sync" maxWidthClassName="max-w-2xl">
       <div className="space-y-5">
         {syncError && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{syncError}</div>

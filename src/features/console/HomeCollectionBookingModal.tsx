@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Loader2, CheckCircle2, MapPin, Calendar, Lock, Package } from "lucide-react";
 import { Modal } from "../../shared/ui/Modal";
 import { consoleApi, getApiError, type Participant } from "../../lib/api";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 interface Props {
   open: boolean;
@@ -48,6 +49,8 @@ function formatDate(iso: string): string {
 }
 
 export function HomeCollectionBookingModal({ open, onClose, engagementId, participant, onBooked }: Props) {
+  const { canEditTask } = usePermissions();
+  const mayEditConsole = canEditTask("engagement_console", "bookings");
   const [step, setStep] = useState<Step>(1);
 
   const [addressLine, setAddressLine] = useState(participant.address ?? "");
@@ -159,7 +162,7 @@ export function HomeCollectionBookingModal({ open, onClose, engagementId, partic
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Home Collection Booking" maxWidthClassName="max-w-xl">
+    <Modal open={open && mayEditConsole} onClose={handleClose} title="Home Collection Booking" maxWidthClassName="max-w-xl">
       <div className="space-y-5">
         <p className="text-sm text-zinc-600">
           Booking for <span className="font-medium text-zinc-900">{fullName(participant)}</span>

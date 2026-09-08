@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Building2,
@@ -22,6 +22,9 @@ import {
   type MyTask,
   getApiError,
 } from "../../lib/api";
+import { usePermissions } from "../../contexts/PermissionContext";
+import { AccessDenied } from "../../pages/AccessDenied";
+import type { PermissionCategory } from "../../auth/permissions";
 
 interface StatCardProps {
   label: string;
@@ -82,6 +85,7 @@ interface Stats {
 }
 
 export function Dashboard() {
+  const { canView, hasAnyAccess } = usePermissions();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentEngagements, setRecentEngagements] = useState<EngagementListItem[]>([]);
   const [myTasksPending, setMyTasksPending] = useState<{
@@ -92,35 +96,52 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const permitted = (category: PermissionCategory) => canView(category);
       const [orgsAll, orgsActive, engsAll, engsActive, empsAll, empsActive, usersAll, usersActive] =
         await Promise.all([
-          organizationsApi.list({ limit: 1 }),
-          organizationsApi.list({ limit: 1, status: "active" }),
-          engagementsApi.list({ limit: 5 }),
-          engagementsApi.list({ limit: 1, status: "running" }),
-          employeesApi.list({ limit: 1 }),
-          employeesApi.list({ limit: 1, status: "active" }),
-          usersApi.list({ limit: 1 }),
-          usersApi.list({ limit: 1, status: "active" }),
+          permitted("organizations")
+            ? organizationsApi.list({ limit: 1 })
+            : Promise.resolve(null),
+          permitted("organizations")
+            ? organizationsApi.list({ limit: 1, status: "active" })
+            : Promise.resolve(null),
+          permitted("engagements")
+            ? engagementsApi.list({ limit: 5 })
+            : Promise.resolve(null),
+          permitted("engagements")
+            ? engagementsApi.list({ limit: 1, status: "running" })
+            : Promise.resolve(null),
+          permitted("employees")
+            ? employeesApi.list({ limit: 1 })
+            : Promise.resolve(null),
+          permitted("employees")
+            ? employeesApi.list({ limit: 1, status: "active" })
+            : Promise.resolve(null),
+          permitted("users")
+            ? usersApi.list({ limit: 1 })
+            : Promise.resolve(null),
+          permitted("users")
+            ? usersApi.list({ limit: 1, status: "active" })
+            : Promise.resolve(null),
         ]);
 
       setStats({
-        totalOrgs: orgsAll.data.meta.total,
-        activeOrgs: orgsActive.data.meta.total,
-        totalEngagements: engsAll.data.meta.total,
-        activeEngagements: engsActive.data.meta.total,
-        totalEmployees: empsAll.data.meta.total,
-        activeEmployees: empsActive.data.meta.total,
-        totalUsers: usersAll.data.meta.total,
-        activeUsers: usersActive.data.meta.total,
+        totalOrgs: orgsAll?.data.meta.total ?? 0,
+        activeOrgs: orgsActive?.data.meta.total ?? 0,
+        totalEngagements: engsAll?.data.meta.total ?? 0,
+        activeEngagements: engsActive?.data.meta.total ?? 0,
+        totalEmployees: empsAll?.data.meta.total ?? 0,
+        activeEmployees: empsActive?.data.meta.total ?? 0,
+        totalUsers: usersAll?.data.meta.total ?? 0,
+        activeUsers: usersActive?.data.meta.total ?? 0,
       });
 
       // Top 5 most recent engagements from the first call
-      setRecentEngagements(engsAll.data.data.slice(0, 5));
+      setRecentEngagements(engsAll?.data.data.slice(0, 5) ?? []);
 
       try {
         const tasksRes = await checklistTasksApi.myTasks({ status: "pending" });
@@ -137,11 +158,11 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canView]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   const statCards = [
     {
@@ -177,7 +198,15 @@ export function Dashboard() {
       color: "bg-emerald-50 text-emerald-600",
       to: "/users",
     },
-  ];
+  ].filter((card) => canView(
+    card.to === "/organisations"
+      ? "organizations"
+      : card.to === "/engagements"
+        ? "engagements"
+        : card.to === "/employees"
+          ? "employees"
+          : "users"
+  ));
 
   const quickLinks = [
     { label: "Users", icon: UserRound, to: "/users" },
@@ -185,7 +214,27 @@ export function Dashboard() {
     { label: "Engagements", icon: CalendarCheck, to: "/engagements" },
     { label: "Assessments", icon: ClipboardList, to: "/assessments/packages" },
     { label: "Employees", icon: Users, to: "/employees" },
-  ];
+  ].filter((link) => canView(
+    link.to === "/organisations"
+      ? "organizations"
+      : link.to === "/engagements"
+        ? "engagements"
+        : link.to === "/assessments/packages"
+          ? "assessments"
+          : link.to === "/employees"
+            ? "employees"
+            : "users"
+  ));
+
+  if (!hasAnyAccess) {
+    return (
+      <AccessDenied
+        title="No admin access assigned"
+        description="Your account is active, but no admin categories have been assigned yet. Contact a full administrator."
+        showHome={false}
+      />
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-6">
@@ -229,17 +278,17 @@ export function Dashboard() {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {statCards.length > 0 && <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {statCards.map((card) => (
           <StatCard key={card.label} {...card} loading={loading} />
         ))}
-      </div>
+      </div>}
 
       {/* Bottom section: Quick Links + My tasks + Recent Engagements */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="space-y-4">
           {/* Quick Links */}
-          <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
+          {quickLinks.length > 0 && <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp className="w-4 h-4 text-zinc-400" />
               <h2 className="text-sm font-semibold text-zinc-900">Quick Links</h2>
@@ -260,7 +309,7 @@ export function Dashboard() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* My tasks */}
           <div className="bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
@@ -315,7 +364,7 @@ export function Dashboard() {
         </div>
 
         {/* Recent Engagements */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
+        {canView("engagements") && <div className="lg:col-span-2 bg-white rounded-xl border border-zinc-200 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <CalendarCheck className="w-4 h-4 text-zinc-400" />
@@ -394,7 +443,7 @@ export function Dashboard() {
               })}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

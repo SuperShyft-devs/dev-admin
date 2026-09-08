@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
@@ -14,6 +15,8 @@ import {
 const STATUS_OPTIONS: SupportTicketStatus[] = ["open", "resolved", "closed"];
 
 export function SupportTickets() {
+  const { canEdit } = usePermissions();
+  const mayEditSupport = canEdit("support");
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -206,7 +209,7 @@ export function SupportTickets() {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Support Tickets</h1>
-        <button
+        <PermissionGate category="support" action="edit"><button
           type="button"
           onClick={() => {
             setCreateForm({ user_id: 0, query_text: "" });
@@ -217,7 +220,7 @@ export function SupportTickets() {
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">Create Ticket</span>
-        </button>
+        </button></PermissionGate>
       </div>
 
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
@@ -304,7 +307,7 @@ export function SupportTickets() {
                   onChange={(event) =>
                     updateSelectedStatus(event.target.value as SupportTicketStatus)
                   }
-                  disabled={updatingStatus}
+                  disabled={updatingStatus || !mayEditSupport}
                   className="w-full sm:w-56 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 >
                   {STATUS_OPTIONS.map((status) => (

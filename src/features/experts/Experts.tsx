@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
@@ -53,6 +54,8 @@ const emptyPayload = (): ExpertPayload => ({
 // ─── Expert Types Tab ──────────────────────────────────────────────────────────
 
 function ExpertTypesTab() {
+  const { canEditTask } = usePermissions();
+  const mayEditExpertTypes = canEditTask("experts", "expert_types");
   const [items, setItems] = useState<ExpertTypeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,14 +136,14 @@ function ExpertTypesTab() {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h2 className="text-base font-semibold text-zinc-900">Expert Types</h2>
-        <button
+        <PermissionGate category="experts" taskKey="expert_types" action="edit"><button
           type="button"
           onClick={openAdd}
           className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">Add type</span>
-        </button>
+        </button></PermissionGate>
       </div>
 
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{error}</div>}
@@ -169,6 +172,7 @@ function ExpertTypesTab() {
                   <td className="px-4 py-3 text-zinc-700 font-mono text-xs">{item.type_key}</td>
                   <td className="px-4 py-3 text-zinc-900">{item.type}</td>
                   <td className="px-4 py-3 text-right">
+                    {mayEditExpertTypes ? <>
                     <button
                       type="button"
                       onClick={() => openEdit(item)}
@@ -183,6 +187,7 @@ function ExpertTypesTab() {
                     >
                       <Trash2 className="w-3.5 h-3.5 inline" />
                     </button>
+                    </> : <span className="text-zinc-400">—</span>}
                   </td>
                 </tr>
               ))}
@@ -240,6 +245,8 @@ function ExpertTypesTab() {
 // ─── Experts List Tab ──────────────────────────────────────────────────────────
 
 function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
+  const { canEditTask } = usePermissions();
+  const mayEditExperts = canEditTask("experts", "experts");
   const [data, setData] = useState<ExpertListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -498,6 +505,15 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
       sortable: true,
       render: (row) => {
         const isActive = (row.status ?? "").toLowerCase() === "active";
+        if (!mayEditExperts) {
+          return (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+            }`}>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+          );
+        }
         return (
           <button
             type="button"
@@ -536,14 +552,14 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h2 className="text-base font-semibold text-zinc-900">Experts</h2>
-        <button
+        <PermissionGate category="experts" taskKey="experts" action="edit"><button
           type="button"
           onClick={openAdd}
           className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
           <span className="hidden sm:inline">Add expert</span>
-        </button>
+        </button></PermissionGate>
       </div>
 
       {error && (
@@ -594,6 +610,8 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
             columns={columns}
             data={data}
             keyExtractor={(r) => r.expert_id}
+            mutationCategory="experts"
+            mutationTaskKey="experts"
             sortKey={sortKey}
             sortDir={sortDir}
             onSort={handleSort}

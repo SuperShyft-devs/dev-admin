@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import {
   diagnosticPackagesApi,
@@ -53,6 +54,8 @@ function sortPackagesByDisplayOrder(items: DiagnosticPackageListItem[]) {
 }
 
 export function DiagnosticPackages() {
+  const { canEditTask } = usePermissions();
+  const mayEditDiagnostics = canEditTask("diagnostics", "packages");
   const [activeTab, setActiveTab] = useState<TabKey>("packages");
   const [rows, setRows] = useState<DiagnosticPackageListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -405,7 +408,7 @@ export function DiagnosticPackages() {
     {
       key: "status",
       label: "Status",
-      render: (row) => (
+      render: (row) => mayEditDiagnostics ? (
         <button
           type="button"
           onClick={(event) => {
@@ -425,6 +428,14 @@ export function DiagnosticPackages() {
             }`}
           />
         </button>
+      ) : (
+        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+          (row.status ?? "").toLowerCase() === "active"
+            ? "bg-emerald-50 text-emerald-700"
+            : "bg-zinc-100 text-zinc-600"
+        }`}>
+          {(row.status ?? "").toLowerCase() === "active" ? "Active" : "Inactive"}
+        </span>
       ),
     },
     { key: "collection_type", label: "Collection", render: (row) => row.collection_type ?? "—", hideOnTablet: true },
@@ -434,6 +445,7 @@ export function DiagnosticPackages() {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Diagnostics</h1>
+        <PermissionGate category="diagnostics" action="edit">
         {activeTab === "packages" && (
           <button
             type="button"
@@ -464,6 +476,7 @@ export function DiagnosticPackages() {
             Add Test
           </button>
         )}
+        </PermissionGate>
       </div>
 
       <div className="flex gap-1 mb-5 border-b border-zinc-200">

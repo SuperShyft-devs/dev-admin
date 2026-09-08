@@ -37,6 +37,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { useRef, useState } from "react";
 import { PortalMenu } from "./PortalMenu";
+import { useLocation } from "react-router-dom";
+import { usePermissions } from "../../contexts/PermissionContext";
+import { categoryForPath, type PermissionCategory } from "../../auth/permissions";
 
 export interface Column<T> {
   key: string;
@@ -75,8 +78,12 @@ interface DataTableProps<T> {
   onViewDepartments?: (row: T) => void;
   onSendMessage?: (row: T) => void;
   renderExtraMenuItems?: (row: T, closeMenu: () => void) => React.ReactNode;
+  allowExtraMenuWhenReadOnly?: boolean;
+  manageActionPermissions?: boolean;
   firstColumnClickableView?: boolean;
   onReorder?: (newOrderKeys: (string | number)[]) => void;
+  mutationCategory?: PermissionCategory;
+  mutationTaskKey?: string;
   pagination?: {
     page: number;
     limit: number;
@@ -264,6 +271,15 @@ function SortableRow<T extends object>(props: SortableRowProps<T>) {
 export function DataTable<T extends object>(
   props: DataTableProps<T>
 ) {
+  const location = useLocation();
+  const { canEdit, canEditTask } = usePermissions();
+  const currentCategory = props.mutationCategory ?? categoryForPath(location.pathname);
+  const mutationsAllowed =
+    props.manageActionPermissions ||
+    currentCategory === null ||
+    (props.mutationTaskKey
+      ? canEditTask(currentCategory, props.mutationTaskKey)
+      : canEdit(currentCategory));
   const {
     columns,
     data,
@@ -272,26 +288,40 @@ export function DataTable<T extends object>(
     sortDir,
     onSort,
     onView,
-    onEdit,
-    onDuplicate,
-    onDelete,
+    onEdit: requestedOnEdit,
+    onDuplicate: requestedOnDuplicate,
+    onDelete: requestedOnDelete,
     onDeleteLabel = "Delete",
     canDelete,
-    onQuestions,
+    onQuestions: requestedOnQuestions,
     onQuestionsLabel = "Manage Questions",
-    onParticipants,
-    onAssistants,
-    onOccupiedSlots,
-    onManageChecklists,
+    onParticipants: requestedOnParticipants,
+    onAssistants: requestedOnAssistants,
+    onOccupiedSlots: requestedOnOccupiedSlots,
+    onManageChecklists: requestedOnManageChecklists,
     onManageChecklistsLabel = "Manage Checklists",
     onViewEngagements,
     onViewDepartments,
-    onSendMessage,
-    renderExtraMenuItems,
+    onSendMessage: requestedOnSendMessage,
+    renderExtraMenuItems: requestedExtraMenuItems,
     firstColumnClickableView = true,
-    onReorder,
+    onReorder: requestedOnReorder,
     pagination,
   } = props;
+  const onEdit = mutationsAllowed ? requestedOnEdit : undefined;
+  const onDuplicate = mutationsAllowed ? requestedOnDuplicate : undefined;
+  const onDelete = mutationsAllowed ? requestedOnDelete : undefined;
+  const onQuestions = mutationsAllowed ? requestedOnQuestions : undefined;
+  const onParticipants = mutationsAllowed ? requestedOnParticipants : undefined;
+  const onAssistants = mutationsAllowed ? requestedOnAssistants : undefined;
+  const onOccupiedSlots = mutationsAllowed ? requestedOnOccupiedSlots : undefined;
+  const onManageChecklists = mutationsAllowed ? requestedOnManageChecklists : undefined;
+  const onSendMessage = mutationsAllowed ? requestedOnSendMessage : undefined;
+  const renderExtraMenuItems =
+    mutationsAllowed || props.allowExtraMenuWhenReadOnly
+      ? requestedExtraMenuItems
+      : undefined;
+  const onReorder = mutationsAllowed ? requestedOnReorder : undefined;
 
   const firstKey = columns[0]?.key;
 

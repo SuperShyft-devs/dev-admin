@@ -3,6 +3,7 @@ import { FileText, Loader2 } from "lucide-react";
 import axios from "axios";
 import { campReportsApi, getApiError } from "../../lib/api";
 import { Modal } from "./Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 interface CampReportInitMenuProps {
   campNo: number;
@@ -57,6 +58,8 @@ export function CampReportInitMenu({
   onInitialized,
   zIndexClassName,
 }: CampReportInitMenuProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditReports = canEditTask("reports", "camp_reports");
   const controlled = open !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -112,6 +115,8 @@ export function CampReportInitMenu({
     e?.stopPropagation();
     setModalOpen(true);
   };
+
+  if (!mayEditReports) return null;
 
   const openButton = hideTrigger ? null : variant === "menu" ? (
     <div className="border-t border-zinc-100">

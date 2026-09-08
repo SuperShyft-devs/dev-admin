@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, ScrollText, Search, Users } from "lucide-react";
 import { DuplicatedUsersModal } from "./DuplicatedUsersModal";
 import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
@@ -168,6 +169,15 @@ function totalPagesFromCount(total: number, pageSize: number) {
 }
 
 export function Settings() {
+  const { canEditTask, canViewTask } = usePermissions();
+  const mayEditSettings = canEditTask("platform_settings", "settings");
+  const mayViewAssessments = canViewTask("assessments", "packages");
+  const mayViewDiagnostics = canViewTask("diagnostics", "packages");
+  const mayViewEmployees = canViewTask("employees", "directory");
+  const mayViewNotifications = canViewTask("notifications", "defaults");
+  const mayEditNotifications = canEditTask("notifications", "defaults");
+  const mayEditUsers = canEditTask("users", "profiles");
+  const mayViewSystemMonitoring = canViewTask("system_monitoring", "audit_logs");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,12 +268,16 @@ export function Settings() {
         engagementTypesApi.list({ is_active: true }),
         platformSettingsApi.getDefaultOnboardingAssistants(),
         platformSettingsApi.getSupportQueryNotification(),
-        notificationsApi.listServices(),
-        fetchAllPages<AssessmentPackage>((page, limit) =>
-          assessmentPackagesApi.list({ page, limit, status: "active" })
-        ),
-        diagnosticPackagesApi.list(),
-        employeesApi.list({ status: "active", limit: 100 }),
+        mayViewNotifications ? notificationsApi.listServices() : Promise.resolve(null),
+        mayViewAssessments
+          ? fetchAllPages<AssessmentPackage>((page, limit) =>
+              assessmentPackagesApi.list({ page, limit, status: "active" })
+            )
+          : Promise.resolve([]),
+        mayViewDiagnostics ? diagnosticPackagesApi.list() : Promise.resolve(null),
+        mayViewEmployees
+          ? employeesApi.list({ status: "active", limit: 100 })
+          : Promise.resolve(null),
       ]);
 
       const types = typesRes.data.data ?? [];
@@ -283,15 +297,15 @@ export function Settings() {
         supportQueryRes.data.data?.default_support_query_notification ?? null
       );
       setNotificationServices(
-        (notifServicesRes.data.data ?? []).filter((s) => s.is_active !== false)
+        (notifServicesRes?.data.data ?? []).filter((s) => s.is_active !== false)
       );
 
       setAssessmentPackages(aPkgs);
-      const assignableEmployees = (employeesRes.data.data ?? []).filter((e) =>
+      const assignableEmployees = (employeesRes?.data.data ?? []).filter((e) =>
         ASSIGNABLE_ASSISTANT_ROLES.has((e.role ?? "").toLowerCase())
       );
       setDefaultAssistantEmployees(assignableEmployees);
-      const dPkgs = (dRes.data.data ?? []).filter(
+      const dPkgs = (dRes?.data.data ?? []).filter(
         (p) => (p.status ?? "active").toLowerCase() === "active"
       );
       setDiagnosticPackages(dPkgs);
@@ -300,7 +314,12 @@ export function Settings() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    mayViewAssessments,
+    mayViewDiagnostics,
+    mayViewEmployees,
+    mayViewNotifications,
+  ]);
 
   const refreshMsStats = useCallback(async () => {
     setMsStatsLoading(true);
@@ -499,7 +518,7 @@ export function Settings() {
   }, []);
 
   useEffect(() => {
-    if (activeNotifType === null) return;
+    if (activeNotifType === null || !mayViewNotifications) return;
     let cancelled = false;
     setNotifEvents([]);
     setNotifEventsLoading(true);
@@ -562,7 +581,7 @@ export function Settings() {
     return () => {
       cancelled = true;
     };
-  }, [activeNotifType]);
+  }, [activeNotifType, mayViewNotifications]);
 
   function isNotifTypeDirty(typeId: number): boolean {
     const draft = notifDraftsRef.current[typeId];
@@ -861,7 +880,11 @@ export function Settings() {
   const isEngSyncing = engSyncPhase === "running";
 
   return (
-    <div className="max-w-3xl space-y-8">
+    <div
+      className={`max-w-3xl space-y-8 ${mayEditSettings ? "" : "[&_section_button]:hidden [&_section_input]:pointer-events-none [&_section_select]:pointer-events-none [&_section_textarea]:pointer-events-none"}`}
+      onSubmitCapture={mayEditSettings ? undefined : (event) => event.preventDefault()}
+      onChangeCapture={mayEditSettings ? undefined : (event) => event.stopPropagation()}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 tracking-tight">Settings</h1>
@@ -869,15 +892,20 @@ export function Settings() {
             Platform defaults and Metsights profile synchronization.
           </p>
         </div>
-        <button
+        {mayViewSystemMonitoring && <button
           type="button"
           onClick={() => setIntegrationLogsOpen(true)}
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-300 text-zinc-700 hover:bg-zinc-50 shrink-0"
         >
           <ScrollText className="w-4 h-4" />
           Integration logs
-        </button>
+        </button>}
       </div>
+      {!mayEditSettings && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+          Read-only access. Editing controls are hidden.
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-500 text-sm">
@@ -1190,10 +1218,16 @@ export function Settings() {
         </form>
       ) : null}
 
-      {!loading ? (
+      {!loading && mayViewNotifications ? (
         <form
           onSubmit={(e) => void handleSaveNotifDefaults(e)}
-          className="bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm"
+          onSubmitCapture={mayEditNotifications ? undefined : (event) => event.preventDefault()}
+          onChangeCapture={mayEditNotifications ? undefined : (event) => event.stopPropagation()}
+          className={`bg-white border border-zinc-200 rounded-xl p-5 space-y-4 shadow-sm ${
+            mayEditNotifications
+              ? ""
+              : "[&_button]:hidden [&_input]:pointer-events-none [&_select]:pointer-events-none"
+          }`}
         >
           <h2 className="text-sm font-semibold text-zinc-900">Engagement notification defaults</h2>
           <p className="text-xs text-zinc-500 -mt-2">
@@ -1644,7 +1678,7 @@ export function Settings() {
         ) : null}
       </section>
 
-      <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
+      {mayEditUsers && <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-zinc-900">User maintenance</h2>
         <p className="text-xs text-zinc-500 mt-1 max-w-lg">
           Find accounts that share the same phone number (e.g. with or without a +91 prefix) and remove
@@ -1658,9 +1692,9 @@ export function Settings() {
           <Users className="w-4 h-4" />
           Duplicated users
         </button>
-      </section>
+      </section>}
 
-      <DuplicatedUsersModal open={duplicatesModalOpen} onClose={() => setDuplicatesModalOpen(false)} />
+      {mayEditUsers && <DuplicatedUsersModal open={duplicatesModalOpen} onClose={() => setDuplicatesModalOpen(false)} />}
       <IntegrationSyncLogsModal
         open={integrationLogsOpen}
         onClose={() => setIntegrationLogsOpen(false)}

@@ -13,6 +13,7 @@ import {
   type ParticipantJourneyInstanceSummary,
   type UserDetail,
 } from "../../lib/api";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 function formatAnswer(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -171,6 +172,9 @@ function AnswerStateBadge({ state }: { state: string }) {
 }
 
 export function ParticipantJourneyPage() {
+  const { canEdit } = usePermissions();
+  const mayEditUsers = canEdit("users");
+  const mayEditAssessments = canEdit("assessments");
   const { userId: userIdParam } = useParams<{ userId: string }>();
   const userId = userIdParam ? Number(userIdParam) : NaN;
 
@@ -389,6 +393,7 @@ export function ParticipantJourneyPage() {
     (metsightsProfileInput.trim() || "") !== ((user?.metsights_profile_id ?? "").trim() || "");
 
   const renderImportButton = (row: ParticipantJourneyInstanceSummary, className = "") => {
+    if (!mayEditAssessments) return null;
     const hasRecord = Boolean((row.metsights_record_id ?? "").trim());
     const isImporting = importingInstanceId === row.assessment_instance_id;
 
@@ -418,6 +423,13 @@ export function ParticipantJourneyPage() {
 
   const renderStatusToggle = (row: ParticipantJourneyInstanceSummary) => {
     const isCompleted = (row.status ?? "").toLowerCase() === "completed";
+    if (!mayEditAssessments) {
+      return isCompleted ? (
+        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+      ) : (
+        <Circle className="w-4 h-4 text-zinc-400" />
+      );
+    }
     const isToggling = togglingStatusInstanceId === row.assessment_instance_id;
     const isBusy = togglingStatusInstanceId !== null || importingInstanceId !== null;
 
@@ -507,13 +519,14 @@ export function ParticipantJourneyPage() {
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900"
                 autoComplete="off"
                 spellCheck={false}
+                disabled={!mayEditUsers}
               />
               <p className="mt-1.5 text-xs text-zinc-500">
                 Links this user to Metsights for records, Bio AI reports, and imports. Leave empty and
                 save to clear.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
+            {mayEditUsers && <div className="flex flex-wrap gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => void handleSaveMetsightsProfileId()}
@@ -537,7 +550,7 @@ export function ParticipantJourneyPage() {
                   Remove
                 </button>
               ) : null}
-            </div>
+            </div>}
           </div>
           {metsightsProfileError && (
             <div className="mt-3 p-3 rounded-lg bg-red-50 text-red-700 text-sm">{metsightsProfileError}</div>

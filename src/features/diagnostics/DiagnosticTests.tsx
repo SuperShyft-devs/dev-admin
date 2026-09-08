@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import {
   diagnosticTestsApi,
   getApiError,
@@ -209,6 +210,8 @@ function RiskRangesPanel({
 }
 
 export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditDiagnostics = canEditTask("diagnostics", "tests_groups");
   const [rows, setRows] = useState<DiagnosticTestStandalone[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -447,14 +450,14 @@ export function DiagnosticTests({ onRequestCreate }: DiagnosticTestsProps) {
             placeholder="Search tests..."
           />
         </div>
-        <button
+        {mayEditDiagnostics && <button
           type="button"
           onClick={openCreate}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
         >
           <Plus className="w-4 h-4" />
           Add Test
-        </button>
+        </button>}
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">

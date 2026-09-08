@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePermissions } from "../../contexts/PermissionContext";
 import { Loader2, ListTree } from "lucide-react";
 import { Modal } from "./Modal";
 import { Engagements } from "../../features/engagements/Engagements";
@@ -94,6 +95,10 @@ export function UserDetailsModal({
   onSaved,
   zIndexClassName = "z-[60]",
 }: UserDetailsModalProps) {
+  const { canEditTask, canView, canViewTask } = usePermissions();
+  const mayEditUsers = canEditTask("users", "profiles");
+  const mayViewJourneys = canViewTask("users", "participant_journeys");
+  const mayViewEngagements = canView("engagements");
   const navigate = useNavigate();
   const [mode, setMode] = useState<ModalMode>("view");
   const [selected, setSelected] = useState<UserDetail | null>(null);
@@ -174,6 +179,7 @@ export function UserDetailsModal({
   };
 
   const openEdit = () => {
+    if (!mayEditUsers) return;
     if (!selected) return;
     setFormData(detailToForm(selected));
     setError(null);
@@ -314,13 +320,13 @@ export function UserDetailsModal({
                     <span className="text-zinc-500 text-xs uppercase tracking-wide">
                       Engagement
                     </span>
-                    <button
+                    {mayViewEngagements ? <button
                       type="button"
                       onClick={() => setEngagementDetailId(userEngagements[0].id)}
                       className="text-zinc-900 mt-0.5 hover:underline font-medium text-left block"
                     >
                       {userEngagements[0].name}
-                    </button>
+                    </button> : <span className="text-zinc-900 mt-0.5 font-medium block">{userEngagements[0].name}</span>}
                   </div>
                 ) : (
                   field("Engagement", "—")
@@ -328,7 +334,7 @@ export function UserDetailsModal({
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
-              <button
+              {mayViewJourneys && <button
                 type="button"
                 onClick={() => {
                   handleClose();
@@ -338,14 +344,14 @@ export function UserDetailsModal({
               >
                 <ListTree className="w-4 h-4 shrink-0" />
                 Participant journey
-              </button>
-              <button
+              </button>}
+              {mayEditUsers && <button
                 type="button"
                 onClick={openEdit}
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
               >
                 Edit
-              </button>
+              </button>}
               <button
                 type="button"
                 onClick={handleClose}

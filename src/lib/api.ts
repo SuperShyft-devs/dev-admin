@@ -1,5 +1,11 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { authStorage, loginPathWithRedirect } from "./authStorage";
+import type {
+  EmployeeRole,
+  PermissionCategory,
+} from "../auth/permissions";
+
+export const PERMISSIONS_STALE_EVENT = "dev-admin:permissions-stale";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -111,6 +117,10 @@ api.interceptors.response.use(
       );
     }
 
+    if (err.response?.status === 403) {
+      window.dispatchEvent(new CustomEvent(PERMISSIONS_STALE_EVENT));
+    }
+
     return Promise.reject(err);
   }
 );
@@ -132,7 +142,8 @@ export interface UserProfile {
   profile_photo?: string | null;
   employee?: {
     employee_id: number;
-    role: "admin" | "onboarding_assistant" | "organization_manager" | "expert";
+    role: EmployeeRole;
+    permissions?: unknown;
   } | null;
 }
 
@@ -494,7 +505,7 @@ export const usersApi = {
   get: (id: number) =>
     api.get<{ data: UserDetail }>(`/users/${id}`),
   create: (payload: UserCreate) =>
-    api.post<{ data: { user_id: number } }>("/users", payload),
+    api.post<{ data: { user_id: number } }>("/employees/users", payload),
   update: (id: number, payload: UserUpdate) =>
     api.put<{ data: { user_id: number; status: string } }>(`/users/${id}`, payload),
   updateMetsightsProfileId: (id: number, metsights_profile_id: string) =>
@@ -726,6 +737,7 @@ export const uploadsApi = {
 // Employees
 export type EmployeeRoleValue =
   | "admin"
+  | "inferior_admin"
   | "onboarding_assistant"
   | "organization_manager"
   | "expert";
@@ -735,6 +747,7 @@ export interface EmployeeListItem {
   user_id: number;
   role?: EmployeeRoleValue | string | null;
   status?: string | null;
+  permissions_version?: number;
   first_name?: string | null;
   last_name?: string | null;
 }
@@ -743,11 +756,57 @@ export interface EmployeeCreate {
   user_id: number;
   role: EmployeeRoleValue | string;
   status?: string | null;
+  permissions?: CategoryGrantPayload[];
 }
 
 export interface EmployeeUpdate {
   user_id: number;
   role: EmployeeRoleValue | string;
+  expected_version?: number;
+  permissions?: CategoryGrantPayload[];
+}
+
+export interface PermissionCatalogItem {
+  category_key: PermissionCategory;
+  display_name?: string;
+  description?: string;
+  display_order?: number;
+  tasks: Array<{
+    task_key: string;
+    display_name: string;
+    description?: string;
+    display_order?: number;
+  }>;
+}
+
+export interface EmployeePermissions {
+  employee_id: number;
+  role?: EmployeeRoleValue | string | null;
+  version: number;
+  permissions: Array<{
+    category_key: PermissionCategory;
+    can_view: boolean;
+    can_edit: boolean;
+    tasks?: TaskGrantPayload[] | null;
+  }>;
+}
+
+export interface TaskGrantPayload {
+  task_key: string;
+  can_view: boolean;
+  can_edit: boolean;
+}
+
+export interface CategoryGrantPayload {
+  category_key: PermissionCategory;
+  can_view: boolean;
+  can_edit: boolean;
+  tasks?: TaskGrantPayload[];
+}
+
+export interface EmployeePermissionsUpdate {
+  expected_version: number;
+  permissions: CategoryGrantPayload[];
 }
 
 export const employeesApi = {
@@ -774,6 +833,15 @@ export const employeesApi = {
     api.patch<{ data: { employee_id: number; status: string } }>(
       `/employees/${id}/status`,
       { status }
+    ),
+  permissionCatalog: () =>
+    api.get<{ data: PermissionCatalogItem[] }>("/employees/permission-categories"),
+  getPermissions: (id: number) =>
+    api.get<{ data: EmployeePermissions }>(`/employees/${id}/permissions`),
+  updatePermissions: (id: number, payload: EmployeePermissionsUpdate) =>
+    api.put<{ data: { employee_id: number; version: number } }>(
+      `/employees/${id}/permissions`,
+      payload
     ),
 };
 

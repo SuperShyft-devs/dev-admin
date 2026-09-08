@@ -37,6 +37,7 @@ import {
 } from "../../lib/api";
 import { SortableItem } from "../../components/SortableItem";
 import { Modal } from "../../shared/ui/Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import { HealthiansMapModal, type MapModalTest } from "./HealthiansMapModal";
 
 interface DiagnosticPackageDrawerProps {
@@ -49,6 +50,8 @@ interface DiagnosticPackageDrawerProps {
 type DrawerTab = "overview" | "reasons" | "tests" | "samples-prep";
 
 export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }: DiagnosticPackageDrawerProps) {
+  const { canEdit } = usePermissions();
+  const mayEditDiagnostics = canEdit("diagnostics");
   const [activeTab, setActiveTab] = useState<DrawerTab>("overview");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -494,7 +497,11 @@ export function DiagnosticPackageDrawer({ open, packageId, onClose, onUpdated }:
         </div>
 
         <div
-          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 [&::-webkit-scrollbar]:hidden"
+          className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 [&::-webkit-scrollbar]:hidden ${
+            mayEditDiagnostics
+              ? ""
+              : "[&_button]:hidden [&_input]:hidden [&_textarea]:hidden [&_select]:hidden"
+          }`}
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >
           {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}

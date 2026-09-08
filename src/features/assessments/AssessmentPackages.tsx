@@ -23,6 +23,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import {
   assessmentPackagesApi,
@@ -64,11 +65,18 @@ const BLANK_CATEGORY: QuestionnaireCategoryCreate = {
 };
 
 export function AssessmentPackages() {
+  const { canEditTask, canViewTask } = usePermissions();
   const navigate = useNavigate();
   const { tab: tabParam } = useParams<{ tab?: string }>();
   const activeTab: TabKey = TAB_KEYS.includes((tabParam ?? "") as TabKey)
     ? (tabParam as TabKey)
     : "packages";
+  const mayEditAssessments = canEditTask(
+    "assessments",
+    activeTab === "packages" ? "packages" : activeTab === "categories" ? "categories" : "questions"
+  );
+  const mayEditIntegrations = canEditTask("assessments", "integrations");
+  const mayViewSystemMonitoring = canViewTask("system_monitoring", "audit_logs");
 
   useEffect(() => {
     if (tabParam !== activeTab) {
@@ -991,6 +999,15 @@ export function AssessmentPackages() {
       sortable: true,
       render: (row) => {
         const isActive = row.status === "active";
+        if (!mayEditAssessments) {
+          return (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+            }`}>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+          );
+        }
         return (
           <button
             type="button"
@@ -1042,6 +1059,15 @@ export function AssessmentPackages() {
       sortable: true,
       render: (row) => {
         const isActive = row.status === "active";
+        if (!mayEditAssessments) {
+          return (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+            }`}>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+          );
+        }
         return (
           <button
             type="button"
@@ -1164,7 +1190,7 @@ export function AssessmentPackages() {
               )}
             </div>
           )}
-          {activeTab === "questions" && (
+          {mayEditIntegrations && activeTab === "questions" && (
             <button
               type="button"
               onClick={() => {
@@ -1179,7 +1205,7 @@ export function AssessmentPackages() {
               <span className="hidden sm:inline">Reload Blood Parameters</span>
             </button>
           )}
-          {activeTab === "questions" && (
+          {mayEditIntegrations && activeTab === "questions" && (
             <button
               type="button"
               onClick={() => {
@@ -1194,7 +1220,7 @@ export function AssessmentPackages() {
               <span className="hidden sm:inline">Reset Metsights Sync</span>
             </button>
           )}
-          <button
+          {mayViewSystemMonitoring && <button
             type="button"
             onClick={() => setSyncLogsOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 transition-colors"
@@ -1202,8 +1228,8 @@ export function AssessmentPackages() {
           >
             <ScrollText className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Sync Logs</span>
-          </button>
-        {activeTab === "packages" && (
+          </button>}
+        {mayEditAssessments && activeTab === "packages" && (
           <button
             onClick={openAddPackage}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0"
@@ -1212,7 +1238,7 @@ export function AssessmentPackages() {
             <span className="hidden sm:inline">Add Package</span>
           </button>
         )}
-        {activeTab === "categories" && (
+        {mayEditAssessments && activeTab === "categories" && (
           <button
             onClick={openAddCategory}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0"
@@ -1221,7 +1247,7 @@ export function AssessmentPackages() {
             <span className="hidden sm:inline">Add Category</span>
           </button>
         )}
-        {activeTab === "questions" && (
+        {mayEditAssessments && activeTab === "questions" && (
           <button
             onClick={openAddQuestion}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors shrink-0"
@@ -1596,7 +1622,7 @@ export function AssessmentPackages() {
                       </span>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center gap-2">
+                  {mayEditAssessments && <div className="mt-4 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={(event) => {
@@ -1618,10 +1644,10 @@ export function AssessmentPackages() {
                       <ListChecks className="w-3.5 h-3.5" />
                       Manage Questions
                     </button>
-                  </div>
+                  </div>}
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-xs text-zinc-500">Active / Inactive</span>
-                    <button
+                    {mayEditAssessments && <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
@@ -1632,7 +1658,7 @@ export function AssessmentPackages() {
                       aria-label={`Set ${category.display_name} ${category.status === "active" ? "inactive" : "active"}`}
                     >
                       <span className={`h-5 w-5 bg-white rounded-full shadow transform transition-transform ${category.status === "active" ? "translate-x-5" : "translate-x-0.5"}`} />
-                    </button>
+                    </button>}
                   </div>
                 </button>
               ))}
@@ -1767,7 +1793,7 @@ export function AssessmentPackages() {
                 <dd className="font-medium text-zinc-900">{selectedPkg.assessment_type_code ?? "—"}</dd>
               </div>
             </dl>
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            {mayEditAssessments && <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => {
                   setPkgModalOpen(false);
@@ -1783,7 +1809,7 @@ export function AssessmentPackages() {
               >
                 Edit Package
               </button>
-            </div>
+            </div>}
           </div>
         ) : (
           <form
@@ -2067,7 +2093,7 @@ export function AssessmentPackages() {
                 </dd>
               </div>
             </dl>
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            {mayEditAssessments && <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => openEditCategory(selectedCat)}
                 className="px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 transition-colors"
@@ -2080,7 +2106,7 @@ export function AssessmentPackages() {
               >
                 Manage Questions
               </button>
-            </div>
+            </div>}
           </div>
         ) : (
           <form
@@ -2174,7 +2200,7 @@ export function AssessmentPackages() {
                   <StatusBadge status={catDetailsCategory.status} />
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              {mayEditAssessments && <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={() => openEditCategory(catDetailsCategory)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-100"
@@ -2189,7 +2215,7 @@ export function AssessmentPackages() {
                   <ListChecks className="w-4 h-4" />
                   Manage Questions
                 </button>
-              </div>
+              </div>}
             </div>
           )}
 

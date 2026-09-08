@@ -12,6 +12,7 @@ import { GripVertical, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { SortableItem } from "../../components/SortableItem";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import {
   diagnosticFilterChipsApi,
   diagnosticTestGroupsApi,
@@ -54,6 +55,8 @@ const EMPTY_FORM = {
 };
 
 export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditDiagnostics = canEditTask("diagnostics", "tests_groups");
   const [rows, setRows] = useState<DiagnosticTestGroupStandalone[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -495,14 +498,14 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
             placeholder="Search test groups..."
           />
         </div>
-        <button
+        {mayEditDiagnostics && <button
           type="button"
           onClick={openCreate}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
         >
           <Plus className="w-4 h-4" />
           Add Test Group
-        </button>
+        </button>}
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
@@ -668,7 +671,11 @@ export function DiagnosticTestGroups({ onRequestCreate }: DiagnosticTestGroupsPr
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 space-y-4">
+            <div className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50 space-y-4 ${
+              mayEditDiagnostics
+                ? ""
+                : "[&_button]:hidden [&_input]:hidden [&_select]:hidden"
+            }`}>
               {assignNote && (
                 <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
                   {assignNote}

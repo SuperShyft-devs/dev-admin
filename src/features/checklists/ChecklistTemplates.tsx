@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { SortableItem } from "../../components/SortableItem";
 import {
@@ -57,6 +58,8 @@ function truncate(s: string | null | undefined, max: number) {
 }
 
 export function ChecklistTemplates() {
+  const { canEditTask } = usePermissions();
+  const mayEditChecklists = canEditTask("checklists_tasks", "templates");
   const [rows, setRows] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -408,7 +411,7 @@ export function ChecklistTemplates() {
             >
               {r.status ?? "—"}
             </span>
-            <button
+            {mayEditChecklists && <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -417,7 +420,7 @@ export function ChecklistTemplates() {
               className="text-xs font-medium text-zinc-600 hover:text-zinc-900 underline"
             >
               Toggle
-            </button>
+            </button>}
           </div>
         );
       },
@@ -435,14 +438,14 @@ export function ChecklistTemplates() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Checklist Templates</h1>
-        <button
+        <PermissionGate category="checklists_tasks" taskKey="templates" action="edit"><button
           type="button"
           onClick={openAddModal}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4 shrink-0" />
           Add Template
-        </button>
+        </button></PermissionGate>
       </div>
 
       {error && (
@@ -633,7 +636,13 @@ export function ChecklistTemplates() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div
+              className={`flex-1 overflow-y-auto p-4 ${
+                mayEditChecklists
+                  ? ""
+                  : "[&_button]:hidden [&_input]:hidden [&_textarea]:hidden"
+              }`}
+            >
               {drawerError && (
                 <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                   {drawerError}

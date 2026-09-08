@@ -6,15 +6,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { authApi, usersApi, type UserProfile } from "../lib/api";
+import {
+  authApi,
+  usersApi,
+  PERMISSIONS_STALE_EVENT,
+  type UserProfile,
+} from "../lib/api";
 import { authStorage } from "../lib/authStorage";
+import type { EmployeeRole } from "../auth/permissions";
 
 interface AuthState {
   isAuthenticated: boolean;
   userId: number | null;
   userProfile: UserProfile | null;
   employeeId: number | null;
-  employeeRole: "admin" | "onboarding_assistant" | "organization_manager" | "expert" | null;
+  employeeRole: EmployeeRole | null;
   isLoading: boolean;
 }
 
@@ -22,8 +28,9 @@ interface AuthContextValue extends AuthState {
   login: (
     phone: string,
     otp: string
-  ) => Promise<"admin" | "onboarding_assistant" | "organization_manager" | "expert" | null>;
+  ) => Promise<EmployeeRole | null>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   sendOtp: (phone: string) => Promise<{ session_id: number }>;
   error: string | null;
   clearError: () => void;
@@ -82,6 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ isAuthenticated: false, userId: null, userProfile: null, employeeId: null, employeeRole: null, isLoading: false });
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!authStorage.hasAccessToken()) return;
+    const profileRes = await usersApi.me();
+    const profile = profileRes.data.data;
+    setState((current) => ({
+      ...current,
+      isAuthenticated: true,
+      userId: profile.user_id,
+      userProfile: profile,
+      employeeId: profile.employee?.employee_id ?? null,
+      employeeRole: profile.employee?.role ?? null,
+      isLoading: false,
+    }));
+  }, []);
+
   useEffect(() => {
     const token = authStorage.getAccessToken();
     if (!token) {
@@ -98,17 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loadProfile = async () => {
       try {
-        const profileRes = await usersApi.me();
-        const profile = profileRes.data.data;
-        setState((s) => ({
-          ...s,
-          isAuthenticated: true,
-          userId: profile.user_id,
-          userProfile: profile,
-          employeeId: profile.employee?.employee_id ?? null,
-          employeeRole: profile.employee?.role ?? null,
-          isLoading: false,
-        }));
+        await refreshProfile();
       } catch {
         authStorage.clearTokens();
         setState((s) => ({
@@ -124,12 +136,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     loadProfile();
-  }, []);
+  }, [refreshProfile]);
+
+  useEffect(() => {
+    let refreshing = false;
+    const handlePermissionsStale = () => {
+      if (refreshing) return;
+      refreshing = true;
+      void refreshProfile().finally(() => {
+        refreshing = false;
+      });
+    };
+    window.addEventListener(PERMISSIONS_STALE_EVENT, handlePermissionsStale);
+    return () => window.removeEventListener(PERMISSIONS_STALE_EVENT, handlePermissionsStale);
+  }, [refreshProfile]);
 
   const value: AuthContextValue = {
     ...state,
     login,
     logout,
+    refreshProfile,
     sendOtp,
     error,
     clearError,

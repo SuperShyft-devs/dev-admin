@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Plus, Loader2, ListTree, Info, AlertTriangle } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { Engagements } from "../engagements/Engagements";
 import {
@@ -155,6 +156,11 @@ const EMPTY_FORM: UserCreate = {
 };
 
 export function Users() {
+  const { canEdit, canEditTask, canView, canViewTask } = usePermissions();
+  const mayEditUsers = canEditTask("users", "profiles");
+  const mayViewJourneys = canViewTask("users", "participant_journeys");
+  const maySendNotifications = canEdit("notifications");
+  const mayViewEngagements = canView("engagements");
   const navigate = useNavigate();
   const [data, setData] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -732,6 +738,15 @@ export function Users() {
       render: (row) => {
         const isProtectedUser = alwaysActiveUserId === row.user_id;
         const isActive = isProtectedUser || (row.status ?? "").toLowerCase() === "active";
+        if (!mayEditUsers) {
+          return (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+            }`}>
+              {isActive ? "Active" : "Inactive"}
+            </span>
+          );
+        }
         return (
           <button
             type="button"
@@ -848,13 +863,13 @@ export function Users() {
               have a metsights_profile_id
             </span>
           </span>
-          <button
+          <PermissionGate category="users" taskKey="profiles" action="edit"><button
             onClick={openAdd}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
           >
             <Plus className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Add User</span>
-          </button>
+          </button></PermissionGate>
         </div>
       </div>
 
@@ -912,7 +927,7 @@ export function Users() {
               }
               setDeleteConfirm(r);
             }}
-            onSendMessage={openSendMessage}
+            onSendMessage={maySendNotifications ? openSendMessage : undefined}
             pagination={{ page, limit, total, onPageChange: setPage }}
           />
         )}
@@ -976,13 +991,19 @@ export function Users() {
                 {userEngagements.length > 0 ? (
                   <div>
                     <span className="text-zinc-500 text-xs uppercase tracking-wide">Engagement</span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEngagement(userEngagements[0].id)}
-                      className="text-zinc-900 mt-0.5 hover:underline font-medium text-left block"
-                    >
-                      {userEngagements[0].name}
-                    </button>
+                    {mayViewEngagements ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEngagement(userEngagements[0].id)}
+                        className="text-zinc-900 mt-0.5 hover:underline font-medium text-left block"
+                      >
+                        {userEngagements[0].name}
+                      </button>
+                    ) : (
+                      <span className="text-zinc-900 mt-0.5 font-medium block">
+                        {userEngagements[0].name}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   field("Engagement", "—")
@@ -991,7 +1012,7 @@ export function Users() {
             </div>
             {/* Actions in view */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-zinc-100">
-              <button
+              {mayViewJourneys && <button
                 type="button"
                 onClick={() => {
                   setModalOpen(false);
@@ -1001,8 +1022,8 @@ export function Users() {
               >
                 <ListTree className="w-4 h-4 shrink-0" />
                 Participant journey
-              </button>
-              <button
+              </button>}
+              {mayEditUsers && <button
                 onClick={() => {
                   setModalOpen(false);
                   setTimeout(() => openEdit({ user_id: selected.user_id, first_name: selected.first_name, last_name: selected.last_name, phone: selected.phone, email: selected.email, status: selected.status }), 100);
@@ -1010,7 +1031,7 @@ export function Users() {
                 className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800"
               >
                 Edit
-              </button>
+              </button>}
               <button
                 onClick={() => setModalOpen(false)}
                 className="w-full sm:w-auto px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50"

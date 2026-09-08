@@ -22,6 +22,7 @@ import { EngagementDataCompletenessSummaryModal } from "./EngagementDataComplete
 import { ConsoleUrlActions } from "./consoleUrlActions";
 import { computeCampNo } from "./campNo";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OccupiedSlotsModal } from "../../shared/ui/OccupiedSlotsModal";
@@ -941,6 +942,10 @@ export function Engagements({
   asModalForEngagementId?: number;
   onCloseModal?: () => void;
 } = {}) {
+  const { canEditTask } = usePermissions();
+  const mayEditEngagements = canEditTask("engagements", "records");
+  const mayEditParticipants = canEditTask("engagements", "participants");
+  const mayEditChecklists = canEditTask("checklists_tasks", "assignments");
   const location = useLocation();
   const [data, setData] = useState<EngagementListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -1885,20 +1890,20 @@ export function Engagements({
         <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Engagements</h1>
         <div className="flex items-center gap-2">
-          <button
+          <PermissionGate category="engagements" taskKey="participants" action="edit"><button
             onClick={() => setManageParticipantsOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
           >
             <ArrowRightLeft className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Manage Engagement Participants</span>
-          </button>
-          <button
+          </button></PermissionGate>
+          <PermissionGate category="platform_settings" taskKey="engagement_types" action="edit"><button
             onClick={() => setTypesModalOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
           >
             <Settings className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Manage Types</span>
-          </button>
+          </button></PermissionGate>
           <button
             onClick={() => setCompletenessSummaryOpen(true)}
             className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg border border-zinc-300 text-zinc-700 text-sm font-medium hover:bg-zinc-50 shrink-0"
@@ -1906,7 +1911,7 @@ export function Engagements({
             <Database className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Data Completeness</span>
           </button>
-          {listTab === "organizations" ? (
+          <PermissionGate category="engagements" taskKey="records" action="edit">{listTab === "organizations" ? (
             <button
               onClick={() => void openAdd()}
               className="inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
@@ -1914,7 +1919,7 @@ export function Engagements({
               <Plus className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">Add Engagement</span>
             </button>
-          ) : null}
+          ) : null}</PermissionGate>
         </div>
       </div>
 
@@ -2045,17 +2050,18 @@ export function Engagements({
             columns={columns}
             data={data}
             keyExtractor={(r) => r.engagement_id}
+            manageActionPermissions
             sortKey={sortKey}
             sortDir={sortDir}
             onSort={handleSort}
             onView={openView}
-            onEdit={openEdit}
-            onParticipants={openParticipants}
+            onEdit={mayEditEngagements ? openEdit : undefined}
+            onParticipants={mayEditParticipants ? openParticipants : undefined}
             onOccupiedSlots={openOccupiedSlots}
-            onAssistants={openAssistantsModal}
-            onManageChecklists={(r) => openChecklistModal(r)}
-            onDelete={(r) => setDeleteConfirm(r)}
-            renderExtraMenuItems={(row, closeMenu) => (
+            onAssistants={mayEditParticipants ? openAssistantsModal : undefined}
+            onManageChecklists={mayEditChecklists ? (r) => openChecklistModal(r) : undefined}
+            onDelete={mayEditEngagements ? (r) => setDeleteConfirm(r) : undefined}
+            renderExtraMenuItems={mayEditEngagements ? (row, closeMenu) => (
               <button
                 type="button"
                 onClick={() => {
@@ -2066,7 +2072,7 @@ export function Engagements({
               >
                 <ArrowRightLeft className="w-4 h-4" /> Change status
               </button>
-            )}
+            ) : undefined}
             pagination={{
               page,
               limit,

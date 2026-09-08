@@ -25,6 +25,7 @@ import {
   type CampReportSectionPayload,
 } from "../../lib/api";
 import { Modal } from "../../shared/ui/Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 function getReportMeta(report: CampReportRow): Record<string, unknown> | null {
   const payload = report.report;
@@ -2837,6 +2838,8 @@ function BtsModalBody({
 }
 
 export function CampReportsPage() {
+  const { canEditTask } = usePermissions();
+  const mayEditReports = canEditTask("reports", "camp_reports");
   const { campNo: campNoParam } = useParams<{ campNo: string }>();
   const campNo = campNoParam ? Number(campNoParam) : NaN;
 
@@ -3315,7 +3318,7 @@ export function CampReportsPage() {
           <h1 className="text-xl sm:text-2xl font-semibold text-zinc-900">Manage Reports</h1>
           <p className="text-sm text-zinc-500 mt-1">Camp no. {campNo}</p>
         </div>
-        {!loading && !error && sortedReports.length > 0 && sections.length > 0 && (
+        {mayEditReports && !loading && !error && sortedReports.length > 0 && sections.length > 0 && (
           <button
             type="button"
             onClick={() => requestRefreshAllSections()}
@@ -3435,7 +3438,7 @@ export function CampReportsPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-0.5 shrink-0">
-                                  <button
+                                  {mayEditReports && <button
                                     type="button"
                                     onClick={() => requestValidate(report, section)}
                                     disabled={isSectionBusy || confirmModal.open}
@@ -3447,7 +3450,7 @@ export function CampReportsPage() {
                                     ) : (
                                       <ShieldCheck className="w-4 h-4" />
                                     )}
-                                  </button>
+                                  </button>}
                                   <button
                                     type="button"
                                     onClick={() => void handleLoadSection(report, section)}
@@ -3461,7 +3464,7 @@ export function CampReportsPage() {
                                       <Eye className="w-4 h-4" />
                                     )}
                                   </button>
-                                  <button
+                                  {mayEditReports && <button
                                     type="button"
                                     onClick={() => requestRefreshSection(report, section)}
                                     disabled={isSectionBusy || confirmModal.open}
@@ -3473,7 +3476,7 @@ export function CampReportsPage() {
                                     ) : (
                                       <RefreshCw className="w-4 h-4" />
                                     )}
-                                  </button>
+                                  </button>}
                                 </div>
                               </div>
 
@@ -3672,7 +3675,7 @@ export function CampReportsPage() {
         title={dashboardModal?.title ?? "Section data"}
         maxWidthClassName="max-w-3xl"
         headerActions={
-          dashboardModal && !dashboardEditMode ? (
+          dashboardModal && !dashboardEditMode && mayEditReports ? (
             <button
               type="button"
               onClick={startDashboardEdit}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
+import { PermissionGate } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
 import {
   diagnosticTestsApi,
@@ -261,14 +262,14 @@ export function HealthMetrics() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Health Metrics</h1>
-        <button
+        <PermissionGate category="diagnostics" action="edit"><button
           type="button"
           onClick={openCreate}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 shrink-0"
         >
           <Plus className="w-4 h-4" />
           Add Health Metric
-        </button>
+        </button></PermissionGate>
       </div>
 
       {successMessage ? (

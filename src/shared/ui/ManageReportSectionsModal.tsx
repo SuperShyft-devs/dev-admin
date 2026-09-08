@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Modal } from "./Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import { fetchAllPages } from "../../lib/fetchAllPages";
 import {
   campReportSectionsApi,
@@ -22,6 +23,8 @@ const EMPTY_FORM = {
 };
 
 export function ManageReportSectionsModal({ open, onClose }: ManageReportSectionsModalProps) {
+  const { canEditTask } = usePermissions();
+  const mayEditReports = canEditTask("reports", "report_sections");
   const [sections, setSections] = useState<CampReportSection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +41,7 @@ export function ManageReportSectionsModal({ open, onClose }: ManageReportSection
   const [deleting, setDeleting] = useState(false);
 
   const fetchSections = useCallback(async () => {
+    if (!mayEditReports) return;
     setLoading(true);
     setError(null);
     try {
@@ -50,7 +54,7 @@ export function ManageReportSectionsModal({ open, onClose }: ManageReportSection
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mayEditReports]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,6 +135,8 @@ export function ManageReportSectionsModal({ open, onClose }: ManageReportSection
       setDeleting(false);
     }
   };
+
+  if (!mayEditReports) return null;
 
   return (
     <>

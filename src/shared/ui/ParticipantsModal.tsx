@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Search, Loader2, Users, Download, Trash2, AlertTriangle, Bell, X, Pencil, TestTubes, Brain, Send, Clock, ChevronDown, FileX, MousePointerClick } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Modal } from "./Modal";
+import { usePermissions } from "../../contexts/PermissionContext";
 import { UserDetailsModal } from "./UserDetailsModal";
 import {
   participantsApi,
@@ -659,6 +660,12 @@ const filterSelectClass =
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ParticipantsModal({ open, onClose, source }: ParticipantsModalProps) {
+  const { canEditTask, canView } = usePermissions();
+  const mayEditEngagements = canEditTask("engagements", "participants");
+  const mayEditNotifications = canEditTask("notifications", "messages");
+  const mayEditReports = canEditTask("reports", "participant_reports");
+  const mayEditAssessments = canEditTask("engagements", "integrations");
+  const mayViewExperts = canView("experts");
   const useServerPagination = source.kind === "engagement-id";
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [page, setPage] = useState(1);
@@ -928,8 +935,12 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [source]);
 
   useEffect(() => {
+    if (!mayViewExperts) {
+      setExpertTypes([]);
+      return;
+    }
     expertTypesApi.list().then((res) => setExpertTypes(res.data.data)).catch(() => {});
-  }, []);
+  }, [mayViewExperts]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -1063,11 +1074,15 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
   }, [participants, orgDepartments]);
 
   const canEditDepartment =
-    source.kind === "engagement-id" && organizationId != null && orgDepartments.length > 0;
+    mayEditEngagements &&
+    source.kind === "engagement-id" &&
+    organizationId != null &&
+    orgDepartments.length > 0;
 
-  const canEditConsultation = source.kind === "engagement-id";
-  const canEditBookingId = source.kind === "engagement-id";
+  const canEditConsultation = mayEditEngagements && source.kind === "engagement-id";
+  const canEditBookingId = mayEditEngagements && source.kind === "engagement-id";
   const canEditSchedule =
+    mayEditEngagements &&
     source.kind === "engagement-id" &&
     engagementBloodCollectionType !== "home_collection" &&
     hasConfiguredBloodCollectionSchedule(engagementPublicSlotDetail);
@@ -1119,12 +1134,14 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
     [debouncedSearch, columnFilters]
   );
 
-  const canDeleteRows = source.kind === "engagement-code" || source.kind === "engagement-id";
-  const canNotify = source.kind === "engagement-id";
-  const canLoadBloodReports = source.kind === "engagement-id";
-  const canLoadBioaiReports = source.kind === "engagement-id";
-  const canPushAnswers = source.kind === "engagement-id";
-  const canRemoveReports = source.kind === "engagement-id";
+  const canDeleteRows =
+    mayEditEngagements &&
+    (source.kind === "engagement-code" || source.kind === "engagement-id");
+  const canNotify = mayEditNotifications && source.kind === "engagement-id";
+  const canLoadBloodReports = mayEditReports && source.kind === "engagement-id";
+  const canLoadBioaiReports = mayEditReports && source.kind === "engagement-id";
+  const canPushAnswers = mayEditAssessments && source.kind === "engagement-id";
+  const canRemoveReports = mayEditReports && source.kind === "engagement-id";
   const pushEstimatedSeconds = useMemo(
     () => estimatePushSeconds(selectedCount, pushSelectedCategories.length),
     [selectedCount, pushSelectedCategories.length]
@@ -2132,7 +2149,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
               </button>
               {bulkActionsOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
-                  <button
+                  {mayEditReports && <button
                     type="button"
                     onClick={handleExportSelected}
                     disabled={resolvingSelection}
@@ -2140,7 +2157,7 @@ export function ParticipantsModal({ open, onClose, source }: ParticipantsModalPr
                   >
                     <Download className="w-4 h-4" />
                     Export
-                  </button>
+                  </button>}
                   {canNotify && (
                     <button
                       type="button"

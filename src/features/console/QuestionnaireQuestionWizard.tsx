@@ -13,6 +13,7 @@ import {
   validateAnthropometryScaleAnswer,
 } from "./consoleQuestionnaireUtils";
 import { QuestionInput } from "./QuestionInput";
+import { usePermissions } from "../../contexts/PermissionContext";
 
 type QuestionnaireQuestionWizardProps = {
   engagementId: number;
@@ -43,10 +44,13 @@ export function QuestionnaireQuestionWizard({
   userId,
   assessmentInstanceId,
   category,
-  readOnly,
+  readOnly: requestedReadOnly,
   onBack,
   onSubmitted,
 }: QuestionnaireQuestionWizardProps) {
+  const { canEditTask } = usePermissions();
+  const readOnly =
+    requestedReadOnly || !canEditTask("engagement_console", "questionnaires");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
