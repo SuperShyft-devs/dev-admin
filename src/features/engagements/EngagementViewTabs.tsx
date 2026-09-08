@@ -66,6 +66,8 @@ export function EngagementOverviewTab({
 
   useEffect(() => {
     let cancelled = false;
+    // Reset the previous engagement snapshot before loading the new one.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCompleteness(null);
     setCompletenessError(null);
     setCompletenessLoading(true);

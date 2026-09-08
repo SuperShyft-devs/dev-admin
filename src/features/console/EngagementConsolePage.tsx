@@ -110,8 +110,7 @@ export function EngagementConsolePage() {
       const [engRes, parts] = await Promise.all([
         consoleApi.getEngagement(engId),
         fetchAllPages<Participant>(
-          (page, limit) =>
-            consoleApi.listParticipants(engId, { page, limit }) as any,
+          (page, limit) => consoleApi.listParticipants(engId, { page, limit }),
           100
         ),
       ]);
@@ -305,7 +304,7 @@ export function EngagementConsolePage() {
       setModalMode("detail");
 
       void fetchAllPages<Participant>(
-        (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+        (page, limit) => consoleApi.listParticipants(engId, { page, limit }),
         100
       ).then((parts) => {
         setParticipants(parts);
@@ -345,7 +344,7 @@ export function EngagementConsolePage() {
       setModalMode("detail");
 
       void fetchAllPages<Participant>(
-        (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+        (page, limit) => consoleApi.listParticipants(engId, { page, limit }),
         100
       ).then((parts) => {
         setParticipants(parts);
@@ -849,7 +848,7 @@ export function EngagementConsolePage() {
               prev ? { ...prev, booking_id: bid } : prev
             );
             void fetchAllPages<Participant>(
-              (page, limit) => consoleApi.listParticipants(engId, { page, limit }) as any,
+              (page, limit) => consoleApi.listParticipants(engId, { page, limit }),
               100
             ).then((parts) => {
               setParticipants(parts);

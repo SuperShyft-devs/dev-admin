@@ -153,12 +153,14 @@ function buildParticipantStatsParams(
   search: string,
   columnFilters: ColumnFilters
 ): Omit<ParticipantListQueryParams, "page" | "limit"> {
-  const { page: _page, limit: _limit, ...params } = buildParticipantQueryParams(
+  const params = buildParticipantQueryParams(
     1,
     search,
     columnFilters
   );
-  return params;
+  return Object.fromEntries(
+    Object.entries(params).filter(([key]) => key !== "page" && key !== "limit")
+  ) as Omit<ParticipantListQueryParams, "page" | "limit">;
 }
 
 async function resolveSelectedParticipants(

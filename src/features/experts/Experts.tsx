@@ -969,11 +969,15 @@ export function Experts() {
   }, []);
 
   useEffect(() => {
+    // Initial remote data load for this tab.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchExpertTypes();
   }, [fetchExpertTypes]);
 
   useEffect(() => {
     if (activeTab === "experts") {
+      // Refresh dependent type options when returning to the experts tab.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchExpertTypes();
     }
   }, [activeTab, fetchExpertTypes]);

@@ -464,9 +464,16 @@ export function Organisations() {
       void loadEngagementCitiesForOrg(o.organization_id);
       setDepartmentNames(
         (o.departments ?? [])
-          .map((d: any) => {
+          .map((d: unknown) => {
             if (typeof d === "string") return d;
-            if (d && typeof d === "object" && typeof d.department === "string") return d.department;
+            if (
+              d &&
+              typeof d === "object" &&
+              "department" in d &&
+              typeof d.department === "string"
+            ) {
+              return d.department;
+            }
             return "";
           })
           .filter(Boolean)

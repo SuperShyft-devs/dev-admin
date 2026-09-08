@@ -225,6 +225,7 @@ export function Employees() {
     setConfigureEmployee(row);
     setPermissionEditorForForm(false);
     setPermissionEditorOpen(true);
+    setExpandedTaskCategory(null);
     setPermissionsLoading(true);
     setError(null);
     try {
@@ -695,6 +696,11 @@ export function Employees() {
                     </button>
                     {expanded && (
                       <div className="col-span-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-2">
+                        {tasks.length === 0 && (
+                          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Task catalog unavailable. Restart the backend and reopen Manage access.
+                          </p>
+                        )}
                         {tasks.map((task) => {
                           const taskLevel =
                             taskPermissionDraft[metadata.key]?.[task.task_key] ?? level;
