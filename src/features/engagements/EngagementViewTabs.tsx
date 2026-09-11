@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "../../contexts/PermissionContext";
 import {
   Bell,
+  Check,
   ExternalLink,
   Loader2,
   MapPin,
@@ -44,6 +45,7 @@ type SharedProps = {
 };
 
 type OverviewProps = SharedProps & {
+  typeLabel?: string;
   onEdit: () => void;
   onViewParticipants: () => void;
   onNotify: () => void;
@@ -53,13 +55,13 @@ type OverviewProps = SharedProps & {
 export function EngagementOverviewTab({
   engagement,
   orgName,
+  typeLabel,
   onEdit,
   onViewParticipants,
   onNotify,
   onSyncLogs,
 }: OverviewProps) {
   const b2b = isB2BEngagement(engagement.organization_id);
-  const rd = (engagement as Engagement & { readiness?: ChecklistReadiness | null }).readiness;
   const [completeness, setCompleteness] = useState<EngagementDataCompletenessResponse | null>(null);
   const [completenessLoading, setCompletenessLoading] = useState(false);
   const [completenessError, setCompletenessError] = useState<string | null>(null);
@@ -107,9 +109,6 @@ export function EngagementOverviewTab({
           <span className="inline-flex px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 font-medium">
             {engagement.engagement_code ?? "—"}
           </span>
-          <span className="inline-flex px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 font-medium">
-            {engagement.engagement_type ?? "—"}
-          </span>
           <span
             className={`inline-flex px-2 py-0.5 rounded-full font-medium ${
               b2b ? "bg-blue-100 text-blue-700" : "bg-violet-100 text-violet-700"
@@ -130,6 +129,7 @@ export function EngagementOverviewTab({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <Field label="Audience">{b2b ? orgName : "Public user engagement"}</Field>
+          <Field label="Type">{typeLabel || engagement.engagement_type || "—"}</Field>
           <Field label="City">{engagement.city ?? "—"}</Field>
           <Field label="Start">{String(engagement.start_date ?? "—")}</Field>
           <Field label="End">{String(engagement.end_date ?? "—")}</Field>
@@ -138,21 +138,6 @@ export function EngagementOverviewTab({
             <Field label="Camp no">{String(engagement.camp_no)}</Field>
           ) : null}
         </div>
-
-        {rd && rd.total > 0 ? (
-          <div>
-            <div className="text-xs font-medium text-zinc-500 mb-1">Readiness</div>
-            <div className="text-sm font-medium text-zinc-900">
-              {rd.done}/{rd.total} ({rd.percent}%)
-            </div>
-            <div className="mt-1 h-2 w-full bg-zinc-100 rounded overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded transition-all"
-                style={{ width: `${rd.percent}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
 
         <div>
           <div className="text-xs font-medium text-zinc-500 mb-1">Data completeness</div>
@@ -242,13 +227,19 @@ export function EngagementOverviewTab({
   );
 }
 
+type DetailsProps = SharedProps & {
+  onManageChecklists?: () => void;
+};
+
 export function EngagementDetailsTab({
   engagement,
   orgName,
   assessmentPackages,
   diagnosticPackages,
-}: SharedProps) {
+  onManageChecklists,
+}: DetailsProps) {
   const b2b = isB2BEngagement(engagement.organization_id);
+  const rd = (engagement as Engagement & { readiness?: ChecklistReadiness | null }).readiness;
 
   const assessmentName =
     assessmentPackages.find((p) => p.package_id === engagement.assessment_package_id)
@@ -286,8 +277,46 @@ export function EngagementDetailsTab({
     }
   };
 
+  const readinessEmpty = !rd || rd.total === 0;
+  const readinessBody = readinessEmpty ? (
+    <p className="text-sm text-zinc-500">—</p>
+  ) : (
+    <>
+      <div className="text-sm font-medium text-zinc-900">
+        {rd.done}/{rd.total} ({rd.percent}%)
+      </div>
+      <div className="mt-1 h-2 w-full bg-zinc-100 rounded overflow-hidden">
+        <div
+          className="h-full bg-emerald-500 rounded transition-all"
+          style={{ width: `${rd.percent}%` }}
+        />
+      </div>
+      {rd.percent === 100 ? (
+        <span className="inline-flex items-center gap-0.5 mt-1 text-[10px] font-medium bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
+          <Check className="w-3 h-3 shrink-0" />
+          Ready
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="space-y-4">
+      <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-zinc-800">Readiness</h3>
+        {onManageChecklists ? (
+          <button
+            type="button"
+            onClick={onManageChecklists}
+            className="w-full text-left rounded-lg hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            {readinessBody}
+          </button>
+        ) : (
+          readinessBody
+        )}
+      </div>
+
       <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
         <h3 className="text-sm font-semibold text-zinc-800">Location</h3>
         <div className="flex items-start gap-2">

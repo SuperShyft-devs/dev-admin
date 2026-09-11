@@ -29,6 +29,8 @@ type Props = {
   notificationServiceLabel: (serviceKey: string | null | undefined) => string;
   onEdit: (engagement: Engagement) => void;
   onViewParticipants: (engagement: Engagement) => void;
+  getTypeDisplayName?: (type: string | number | null | undefined) => string;
+  onManageChecklists?: (engagement: Engagement) => void;
 };
 
 export function EngagementDrawer({
@@ -42,6 +44,8 @@ export function EngagementDrawer({
   notificationServiceLabel,
   onEdit,
   onViewParticipants,
+  getTypeDisplayName,
+  onManageChecklists,
 }: Props) {
   const [activeTab, setActiveTab] = useState<DrawerTab>("overview");
   const [loading, setLoading] = useState(false);
@@ -199,6 +203,7 @@ export function EngagementDrawer({
                     assessmentPackages={assessmentPackages}
                     diagnosticPackages={diagnosticPackages}
                     notificationServiceLabel={notificationServiceLabel}
+                    typeLabel={getTypeDisplayName?.(engagement.engagement_type)}
                     onEdit={() => onEdit(engagement)}
                     onViewParticipants={() => onViewParticipants(engagement)}
                     onNotify={() => setNotifyOpen(true)}
@@ -212,6 +217,9 @@ export function EngagementDrawer({
                     assessmentPackages={assessmentPackages}
                     diagnosticPackages={diagnosticPackages}
                     notificationServiceLabel={notificationServiceLabel}
+                    onManageChecklists={
+                      onManageChecklists ? () => onManageChecklists(engagement) : undefined
+                    }
                   />
                 ) : null}
                 {activeTab === "notifications" ? (

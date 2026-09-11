@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Eye,
   Pencil,
   ArrowRightLeft,
   Settings,
@@ -1792,58 +1793,8 @@ export function Engagements({
     }
 
     base.push(
-      {
-        key: "engagement_type",
-        label: "Type",
-        sortable: true,
-        hideOnTablet: true,
-        render: (r) => getTypeDisplayName(r.engagement_type as string | number | null | undefined),
-      },
-      { key: "city", label: "City", sortable: true, hideOnTablet: true },
       { key: "start_date", label: "Start", sortable: true, hideOnMobile: true, render: (r) => formatDate(r.start_date) },
       { key: "end_date", label: "End", sortable: true, hideOnTablet: true, render: (r) => formatDate(r.end_date) },
-      {
-        key: "readiness",
-        label: "Readiness",
-        sortable: false,
-        hideOnMobile: true,
-        render: (r) => {
-          const rd = r.readiness;
-          const empty = !rd || rd.total === 0;
-          return (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openChecklistModal(r);
-              }}
-              className="text-left w-full max-w-[140px] rounded-lg p-1 -m-1 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            >
-              {empty ? (
-                <span className="text-zinc-500">—</span>
-              ) : (
-                <>
-                  <div className="text-xs font-medium text-zinc-900">
-                    {rd.done}/{rd.total}
-                  </div>
-                  <div className="mt-1 h-1.5 w-full bg-zinc-100 rounded overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded transition-all"
-                      style={{ width: `${rd.percent}%` }}
-                    />
-                  </div>
-                  {rd.percent === 100 ? (
-                    <span className="inline-flex items-center gap-0.5 mt-1 text-[10px] font-medium bg-green-50 text-green-700 px-1.5 py-0.5 rounded">
-                      <Check className="w-3 h-3 shrink-0" />
-                      Ready
-                    </span>
-                  ) : null}
-                </>
-              )}
-            </button>
-          );
-        },
-      },
       {
         key: "status",
         label: "Status",
@@ -1872,11 +1823,50 @@ export function Engagements({
             </button>
           );
         },
+      },
+      {
+        key: "view_action",
+        label: "View",
+        sortable: false,
+        render: (r) => (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              openView(r);
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            View
+          </button>
+        ),
+      },
+      {
+        key: "edit_action",
+        label: "Edit",
+        sortable: false,
+        render: (r) =>
+          mayEditEngagements ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                openEdit(r);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          ) : (
+            <span className="text-zinc-400">—</span>
+          ),
       }
     );
 
     return base;
-  }, [listTab, organizations, fetchList, openStatusChange, getTypeDisplayName, openOrgView]);
+  }, [listTab, organizations, openStatusChange, openOrgView, openView, openEdit, mayEditEngagements]);
 
   const handleSort = (key: string) => {
     setSortDir((d) => (sortKey === key ? (d === "asc" ? "desc" : "asc") : "asc"));
@@ -2054,8 +2044,6 @@ export function Engagements({
             sortKey={sortKey}
             sortDir={sortDir}
             onSort={handleSort}
-            onView={openView}
-            onEdit={mayEditEngagements ? openEdit : undefined}
             onParticipants={mayEditParticipants ? openParticipants : undefined}
             onOccupiedSlots={openOccupiedSlots}
             onAssistants={mayEditParticipants ? openAssistantsModal : undefined}
@@ -2173,6 +2161,20 @@ export function Engagements({
         assessmentPackages={assessmentPackages}
         diagnosticPackages={diagnosticPackages}
         notificationServiceLabel={notificationServiceLabel}
+        getTypeDisplayName={getTypeDisplayName}
+        onManageChecklists={
+          mayEditChecklists
+            ? (engagement) =>
+                openChecklistModal({
+                  engagement_id: engagement.engagement_id,
+                  engagement_name: engagement.engagement_name,
+                  engagement_code: engagement.engagement_code,
+                  organization_id: engagement.organization_id,
+                  readiness:
+                    (engagement as Engagement & { readiness?: ChecklistReadiness | null }).readiness,
+                })
+            : undefined
+        }
         onEdit={(engagement) => {
           closeDrawer();
           void openEdit(engagement);
