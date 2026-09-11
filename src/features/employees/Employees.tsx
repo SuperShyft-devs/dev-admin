@@ -4,11 +4,9 @@ import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { Modal } from "../../shared/ui/Modal";
 import {
   employeesApi,
-  usersApi,
   type EmployeeListItem,
   type EmployeeCreate,
   type EmployeeUpdate,
-  type UserListItem,
   getApiError,
 } from "../../lib/api";
 import { usePermissions } from "../../contexts/PermissionContext";
@@ -26,8 +24,26 @@ import {
 const STATUS_OPTIONS = ["active", "inactive", "archived"];
 const ALWAYS_ACTIVE_EMPLOYEE_ID = 1;
 const SEARCH_DEBOUNCE_MS = 300;
+const STAFF_ROLES = [
+  { value: "admin", label: "Admin" },
+  { value: "inferior_admin", label: "Employee" },
+] as const;
+
+function staffRoleLabel(role: string | null | undefined): string {
+  if (!role) return "—";
+  const match = STAFF_ROLES.find((r) => r.value === role);
+  if (match) return match.label;
+  if (role === "organization_manager") return "Organization Manager";
+  return role;
+}
 
 type ModalMode = "add" | "edit";
+
+function employeeDisplayName(row: EmployeeListItem): string {
+  if (row.name?.trim()) return row.name.trim();
+  const legacy = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
+  return legacy || `Employee ${row.employee_id}`;
+}
 
 export function Employees() {
   const { canEditTask, isFullAdmin } = usePermissions();
@@ -44,15 +60,13 @@ export function Employees() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [userPickerSearch, setUserPickerSearch] = useState("");
-  const [usersLoading, setUsersLoading] = useState(false);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("add");
   const [selected, setSelected] = useState<EmployeeListItem | null>(null);
   const [formData, setFormData] = useState<EmployeeCreate>({
-    user_id: 0,
+    name: "",
+    phone: "",
+    email: "",
     role: "admin",
     status: "active",
   });
@@ -74,31 +88,6 @@ export function Employees() {
   const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [permissionsSaving, setPermissionsSaving] = useState(false);
 
-  const getUserName = useCallback((row: EmployeeListItem) => {
-    const name = [row.first_name, row.last_name].filter(Boolean).join(" ");
-    return name || `User ${row.user_id}`;
-  }, []);
-
-  const fetchUsersForPicker = useCallback(async (searchQuery: string) => {
-    setUsersLoading(true);
-    setError(null);
-    try {
-      const res = await usersApi.list({
-        page: 1,
-        limit: 50,
-        status: "active",
-        search: searchQuery.trim() || undefined,
-        sort_by: "name",
-        sort_dir: "asc",
-      });
-      setUsers(res.data.data);
-    } catch (err) {
-      setError(getApiError(err));
-    } finally {
-      setUsersLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
@@ -108,8 +97,9 @@ export function Employees() {
     setLoading(true);
     setError(null);
     try {
-      const sortBy =
-        sortKey === "name" ? "first_name" : sortKey === "role" || sortKey === "status" ? sortKey : sortKey;
+      const sortBy = sortKey === "name" || sortKey === "role" || sortKey === "status" || sortKey === "phone" || sortKey === "email"
+        ? sortKey
+        : sortKey;
       const res = await employeesApi.list({
         page,
         limit,
@@ -137,9 +127,10 @@ export function Employees() {
 
   const openAdd = () => {
     setSelected(null);
-    setUserPickerSearch("");
     setFormData({
-      user_id: 0,
+      name: "",
+      phone: "",
+      email: "",
       role: "admin",
       status: "active",
     });
@@ -151,14 +142,15 @@ export function Employees() {
     setPermissionsVersion(1);
     setModalMode("add");
     setModalOpen(true);
-    void fetchUsersForPicker("");
   };
 
   const openEdit = (row: EmployeeListItem) => {
     setSelected(row);
     setFormData({
-      user_id: row.user_id,
-      role: row.role ?? "",
+      name: row.name ?? employeeDisplayName(row),
+      phone: row.phone ?? "",
+      email: row.email ?? "",
+      role: row.role ?? "admin",
       status: row.status ?? "active",
     });
     setPermissionDraft({ ...EMPTY_PERMISSIONS });
@@ -185,8 +177,15 @@ export function Employees() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.user_id || !formData.role) {
-      setError("Please select a user and a role");
+    const name = formData.name.trim();
+    const phone = (formData.phone ?? "").trim();
+    const email = (formData.email ?? "").trim();
+    if (!name || !formData.role) {
+      setError("Name and role are required");
+      return;
+    }
+    if (!phone && !email) {
+      setError("Provide at least one of phone or email");
       return;
     }
     if (formData.role === "inferior_admin" && !permissionDraftLoaded) {
@@ -199,12 +198,18 @@ export function Employees() {
       const grants = buildPermissionPayload();
       if (modalMode === "add") {
         await employeesApi.create({
-          ...formData,
+          name,
+          phone: phone || null,
+          email: email || null,
+          role: formData.role,
+          status: formData.status ?? "active",
           permissions: formData.role === "inferior_admin" ? grants : undefined,
         });
       } else if (selected) {
         const payload: EmployeeUpdate = {
-          user_id: formData.user_id,
+          name,
+          phone: phone || null,
+          email: email || null,
           role: formData.role,
           expected_version:
             formData.role === "inferior_admin" ? permissionsVersion : undefined,
@@ -382,11 +387,23 @@ export function Employees() {
       sortable: true,
       render: (row) => (
         <div className="flex flex-col">
-          <span className="font-medium text-zinc-900">{getUserName(row)}</span>
+          <span className="font-medium text-zinc-900">{employeeDisplayName(row)}</span>
         </div>
       ),
     },
-    { key: "role", label: "Role", sortable: true, hideOnMobile: true },
+    {
+      key: "phone",
+      label: "Phone",
+      hideOnMobile: true,
+      render: (row) => row.phone || "—",
+    },
+    {
+      key: "email",
+      label: "Email",
+      hideOnTablet: true,
+      render: (row) => row.email || "—",
+    },
+    { key: "role", label: "Role", sortable: true, hideOnMobile: true, render: (row) => staffRoleLabel(row.role) },
     {
       key: "status",
       label: "Status",
@@ -415,8 +432,8 @@ export function Employees() {
             aria-pressed={isActive}
             aria-label={
               isProtectedEmployee
-                ? `${getUserName(row)} is always active`
-                : `Set ${getUserName(row)} ${isActive ? "inactive" : "active"}`
+                ? `${employeeDisplayName(row)} is always active`
+                : `Set ${employeeDisplayName(row)} ${isActive ? "inactive" : "active"}`
             }
           >
             <span
@@ -460,7 +477,7 @@ export function Employees() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
           <input
             type="search"
-            placeholder="Search by name or role..."
+            placeholder="Search by name, phone, email, or role..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
@@ -530,41 +547,36 @@ export function Employees() {
           className="space-y-4"
         >
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">User *</label>
-            {modalMode === "add" && (
-              <input
-                type="search"
-                value={userPickerSearch}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setUserPickerSearch(value);
-                  void fetchUsersForPicker(value);
-                }}
-                placeholder="Search users by name, phone, or email..."
-                className="w-full mb-2 px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            )}
-            <select
-              value={formData.user_id}
-              onChange={(e) => setFormData({ ...formData, user_id: Number(e.target.value) })}
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Name *</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               required
-              disabled={modalMode === "edit" || usersLoading}
-            >
-              <option value={0}>Select user</option>
-              {users.map((user) => {
-                const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
-                return (
-                  <option key={user.user_id} value={user.user_id}>
-                    {name || user.email || `User ${user.user_id}`} (#{user.user_id})
-                  </option>
-                );
-              })}
-            </select>
-            {usersLoading && (
-              <p className="mt-1 text-xs text-zinc-500">Loading users...</p>
-            )}
+            />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Phone</label>
+            <input
+              type="tel"
+              value={formData.phone ?? ""}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              placeholder="e.g. 9876543210"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Email</label>
+            <input
+              type="email"
+              value={formData.email ?? ""}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              placeholder="name@example.com"
+            />
+          </div>
+          <p className="text-xs text-zinc-500">Provide at least one of phone or email.</p>
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">Role *</label>
             <select
@@ -587,11 +599,11 @@ export function Employees() {
               className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
               required
             >
-              <option value="admin">Admin</option>
-              <option value="inferior_admin">Inferior Admin</option>
-              <option value="onboarding_assistant">Onboarding Assistant</option>
-              <option value="organization_manager">Organization Manager</option>
-              <option value="expert">Expert</option>
+              {STAFF_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
             </select>
           </div>
           {formData.role === "inferior_admin" && (
@@ -639,7 +651,7 @@ export function Employees() {
             setConfigureEmployee(null);
           }
         }}
-        title={`Manage access${configureEmployee ? ` — ${getUserName(configureEmployee)}` : ""}`}
+        title={`Manage access${configureEmployee ? ` — ${employeeDisplayName(configureEmployee)}` : ""}`}
         maxWidthClassName="max-w-3xl"
       >
         {permissionsLoading ? (

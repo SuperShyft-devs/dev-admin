@@ -10,6 +10,7 @@ import { Organisations } from "./features/organisations/Organisations";
 import { CampReportsPage } from "./features/organisations/CampReportsPage";
 import { Engagements } from "./features/engagements/Engagements";
 import { Employees } from "./features/employees/Employees";
+import { Partners } from "./features/partners/Partners";
 import { AssessmentPackages } from "./features/assessments/AssessmentPackages";
 import { Users } from "./features/users/Users";
 import { ParticipantJourneyPage } from "./features/users/ParticipantJourneyPage";
@@ -59,7 +60,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { employeeRole, isLoading } = useAuth();
+  const { employeeRole, authKind, isLoading } = useAuth();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -67,8 +68,15 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (employeeRole === "expert") {
-    return <Navigate to="/experts/portal" replace />;
+  // Partner org managers use AdminLayout (Organisations + Console nav) — not phlebo/expert bounce.
+  if (authKind === "partner" && employeeRole === "organization_manager") {
+    return <>{children}</>;
+  }
+  if (authKind === "partner" || employeeRole === "expert" || employeeRole === "phlebo") {
+    if (employeeRole === "expert") {
+      return <Navigate to="/experts/portal" replace />;
+    }
+    return <Navigate to="/engagements/console" replace />;
   }
   if (employeeRole === "onboarding_assistant") {
     return <Navigate to="/engagements/console" replace />;
@@ -77,7 +85,7 @@ function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
 }
 
 function EmployeeRequiredRoute({ children }: { children: React.ReactNode }) {
-  const { employeeRole, isLoading } = useAuth();
+  const { employeeRole, authKind, isLoading } = useAuth();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -85,17 +93,28 @@ function EmployeeRequiredRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+  const isPhlebo =
+    employeeRole === "phlebo" ||
+    employeeRole === "onboarding_assistant" ||
+    (authKind === "partner" && employeeRole === "phlebo");
+  const isStaffAdmin =
+    (authKind === "employee" &&
+      (employeeRole === "admin" || employeeRole === "inferior_admin")) ||
+    employeeRole === "organization_manager";
   if (!employeeRole) {
     return <Navigate to="/login" replace />;
   }
-  if (employeeRole === "expert") {
+  if (employeeRole === "expert" || (authKind === "partner" && employeeRole === "expert")) {
     return <Navigate to="/experts/portal" replace />;
+  }
+  if (!isPhlebo && !isStaffAdmin && employeeRole !== "onboarding_assistant") {
+    return <Navigate to="/" replace />;
   }
   return <>{children}</>;
 }
 
 function ExpertPortalRoute({ children }: { children: React.ReactNode }) {
-  const { employeeRole, isLoading } = useAuth();
+  const { employeeRole, authKind, isLoading } = useAuth();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -103,15 +122,22 @@ function ExpertPortalRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (employeeRole !== "expert" && employeeRole !== "admin") {
+  const isExpert =
+    employeeRole === "expert" || (authKind === "partner" && employeeRole === "expert");
+  const isAdmin = authKind === "employee" && employeeRole === "admin";
+  if (!isExpert && !isAdmin) {
     if (!employeeRole) {
       return <Navigate to="/login" replace />;
     }
-    if (employeeRole === "onboarding_assistant") {
-      return <Navigate to="/engagements/console" replace />;
-    }
     if (employeeRole === "organization_manager") {
       return <Navigate to="/organisations" replace />;
+    }
+    if (
+      employeeRole === "onboarding_assistant" ||
+      employeeRole === "phlebo" ||
+      authKind === "partner"
+    ) {
+      return <Navigate to="/engagements/console" replace />;
     }
     return <Navigate to="/" replace />;
   }
@@ -170,6 +196,7 @@ function AppRoutes() {
         <Route path="organisations/:tab" element={<PermissionRoute category="organizations"><Organisations /></PermissionRoute>} />
         <Route path="engagements" element={<PermissionRoute category="engagements"><Engagements /></PermissionRoute>} />
         <Route path="employees" element={<PermissionRoute category="employees"><Employees /></PermissionRoute>} />
+        <Route path="partners" element={<PermissionRoute category="partners"><Partners /></PermissionRoute>} />
         <Route
           path="assessments"
           element={<Navigate to="/assessments/packages" replace />}

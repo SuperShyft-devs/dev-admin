@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import {
   getApiError,
   onboardingAssistantsApi,
-  type CreatePhleboExistingUser,
+  type CreatePhleboExistingPartner,
 } from "../../lib/api";
 import { Modal } from "../../shared/ui/Modal";
 
@@ -13,11 +13,6 @@ type CreatePhleboModalProps = {
   engagementId: number;
   onSuccess: () => void | Promise<void>;
 };
-
-function formatUserName(user: CreatePhleboExistingUser): string {
-  const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
-  return name || `User ${user.user_id}`;
-}
 
 export function CreatePhleboModal({
   open,
@@ -29,7 +24,7 @@ export function CreatePhleboModal({
   const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingUser, setPendingUser] = useState<CreatePhleboExistingUser | null>(null);
+  const [pendingPartner, setPendingPartner] = useState<CreatePhleboExistingPartner | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -37,7 +32,7 @@ export function CreatePhleboModal({
       setPhone("");
       setSubmitting(false);
       setError(null);
-      setPendingUser(null);
+      setPendingPartner(null);
     }
   }, [open]);
 
@@ -45,7 +40,7 @@ export function CreatePhleboModal({
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
     if (!trimmedName || !trimmedPhone) {
-      setError("First name and phone are required.");
+      setError("Name and phone are required.");
       return;
     }
 
@@ -60,7 +55,7 @@ export function CreatePhleboModal({
       const data = res.data.data;
 
       if (data.status === "confirmation_required") {
-        setPendingUser(data.existing_user);
+        setPendingPartner(data.existing_partner);
         return;
       }
 
@@ -106,16 +101,16 @@ export function CreatePhleboModal({
           </div>
         )}
 
-        {pendingUser ? (
+        {pendingPartner ? (
           <div className="space-y-4">
             <p className="text-sm text-zinc-600">
-              Already a user. Add this phlebo to this engagement?
+              A partner with this phone already exists. Add this phlebo to this engagement?
             </p>
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 space-y-2">
-              <p className="text-sm font-medium text-zinc-900">{formatUserName(pendingUser)}</p>
-              <p className="text-sm text-zinc-600">{pendingUser.phone ?? "—"}</p>
-              {pendingUser.employee?.role && (
-                <p className="text-xs text-zinc-500">Role: {pendingUser.employee.role}</p>
+              <p className="text-sm font-medium text-zinc-900">{pendingPartner.name}</p>
+              <p className="text-sm text-zinc-600">{pendingPartner.phone ?? "—"}</p>
+              {pendingPartner.role && (
+                <p className="text-xs text-zinc-500">Role: {pendingPartner.role}</p>
               )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row gap-2">
@@ -130,7 +125,7 @@ export function CreatePhleboModal({
               <button
                 type="button"
                 onClick={() => {
-                  setPendingUser(null);
+                  setPendingPartner(null);
                   setError(null);
                 }}
                 disabled={submitting}
@@ -150,7 +145,7 @@ export function CreatePhleboModal({
           >
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1" htmlFor="phlebo-name">
-                First Name *
+                Name *
               </label>
               <input
                 id="phlebo-name"
@@ -158,7 +153,7 @@ export function CreatePhleboModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
-                placeholder="First name"
+                placeholder="Full name"
                 required
               />
             </div>

@@ -3,38 +3,31 @@ import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
 import { Modal } from "../../shared/ui/Modal";
-import { UserSearchPicker } from "../../shared/ui/UserSearchPicker";
 import {
   expertsApi,
   expertTypesApi,
   getApiError,
+  partnersApi,
   uploadsApi,
-  usersApi,
   type ExpertConsultationMode,
   type ExpertDetail,
   type ExpertListItem,
   type ExpertPayload,
   type ExpertTag,
   type ExpertTypeItem,
-  type UserListItem,
+  type PartnerListItem,
 } from "../../lib/api";
 
 const MODES: ExpertConsultationMode[] = ["video", "voice", "chat"];
 
-function formatUserDropdownLabel(u: UserListItem): string {
-  const first = (u.first_name ?? "").trim();
-  const last = (u.last_name ?? "").trim();
-  const name = [first, last].filter(Boolean).join(" ").trim();
-  return name || `User #${u.user_id}`;
-}
-
-function formatViewUserId(userId: number | null | undefined, user: UserListItem | null): string {
-  if (userId == null || userId <= 0) return "—";
-  return user ? `${userId} — ${formatUserDropdownLabel(user)}` : String(userId);
+function formatPartnerLabel(p: PartnerListItem): string {
+  const bits = [p.name?.trim() || `Partner #${p.partner_id}`];
+  if (p.phone) bits.push(p.phone);
+  return bits.join(" · ");
 }
 
 const emptyPayload = (): ExpertPayload => ({
-  user_id: 0,
+  partner_id: 0,
   expert_type: "",
   specialization: "",
   profile_photo: "",
@@ -271,7 +264,9 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
   const [newTagName, setNewTagName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [viewUser, setViewUser] = useState<UserListItem | null>(null);
+  const [viewPartner, setViewPartner] = useState<PartnerListItem | null>(null);
+  const [expertPartners, setExpertPartners] = useState<PartnerListItem[]>([]);
+  const [partnersLoading, setPartnersLoading] = useState(false);
 
   const syncModesFromPayload = (modes: ExpertConsultationMode[] | string[] | null | undefined) => {
     const set = new Set((modes ?? []).map((m) => String(m).toLowerCase()));
@@ -326,38 +321,37 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
     setPage(1);
   }, [search, expertTypeFilter, statusFilter]);
 
+  const loadExpertPartners = useCallback(async () => {
+    setPartnersLoading(true);
+    try {
+      const res = await partnersApi.list({ role: "expert", status: "active", limit: 100 });
+      setExpertPartners(res.data.data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setPartnersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const userId = selected?.user_id;
-    if (modalMode !== "view" || userId == null || userId <= 0) {
-      setViewUser(null);
+    const partnerId = selected?.partner_id;
+    if (modalMode !== "view" || partnerId == null || partnerId <= 0) {
+      setViewPartner(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const res = await usersApi.get(userId);
-        if (!cancelled) {
-          const u = res.data.data;
-          setViewUser({
-            user_id: u.user_id,
-            first_name: u.first_name,
-            last_name: u.last_name,
-            phone: u.phone,
-            email: u.email,
-            age: u.age,
-            profile_photo: u.profile_photo,
-            is_participant: u.is_participant,
-            status: u.status,
-          });
-        }
+        const res = await partnersApi.get(partnerId);
+        if (!cancelled) setViewPartner(res.data.data);
       } catch {
-        if (!cancelled) setViewUser(null);
+        if (!cancelled) setViewPartner(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [modalMode, selected?.user_id]);
+  }, [modalMode, selected?.partner_id]);
 
   const openView = (row: ExpertListItem) => {
     expertsApi
@@ -383,6 +377,7 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
     setNewTagName("");
     setModalMode("add");
     setModalOpen(true);
+    void loadExpertPartners();
   };
 
   const openEdit = (row: ExpertListItem) => {
@@ -393,7 +388,7 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
         const e = res.data.data;
         setSelected(e);
         setFormData({
-          user_id: e.user_id && e.user_id > 0 ? e.user_id : 0,
+          partner_id: e.partner_id && e.partner_id > 0 ? e.partner_id : 0,
           expert_type: e.expert_type || expertTypes[0]?.type_key || "",
           specialization: e.specialization ?? "",
           profile_photo: e.profile_photo ?? "",
@@ -415,14 +410,15 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
         setNewTagName("");
         setModalMode("edit");
         setModalOpen(true);
+        void loadExpertPartners();
       })
       .catch((err) => setError(getApiError(err)));
   };
 
   const handleSubmit = async () => {
     if (!formData.specialization.trim()) return;
-    if (!formData.user_id || formData.user_id <= 0) {
-      setError("User Id is required");
+    if (!formData.partner_id || formData.partner_id <= 0) {
+      setError("Partner is required");
       return;
     }
     setSubmitting(true);
@@ -639,8 +635,12 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
           <div className="space-y-3 text-sm">
             <div className="font-medium text-zinc-900">{selected.specialization}</div>
             <div className="text-zinc-600">
-              <span className="text-zinc-500">User Id:</span>{" "}
-              {formatViewUserId(selected.user_id, viewUser)}
+              <span className="text-zinc-500">Partner:</span>{" "}
+              {viewPartner
+                ? formatPartnerLabel(viewPartner)
+                : selected.partner_id
+                  ? `#${selected.partner_id}`
+                  : "—"}
             </div>
             <div className="text-zinc-600">
               <span className="text-zinc-500">Type:</span> {selected.expert_type}
@@ -683,14 +683,27 @@ function ExpertsListTab({ expertTypes }: { expertTypes: ExpertTypeItem[] }) {
         ) : (
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <UserSearchPicker
-                key={modalMode === "add" ? "add" : `edit-${selected?.expert_id ?? 0}`}
-                className="sm:col-span-2"
-                label="User"
-                required
-                value={formData.user_id}
-                onChange={(userId) => setFormData((p) => ({ ...p, user_id: userId }))}
-              />
+              <label className="block sm:col-span-2">
+                <span className="text-zinc-600 text-xs">Partner (expert) *</span>
+                <select
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-zinc-300"
+                  value={formData.partner_id}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, partner_id: Number(e.target.value) }))
+                  }
+                  required
+                  disabled={partnersLoading}
+                >
+                  <option value={0}>
+                    {partnersLoading ? "Loading partners…" : "Select partner"}
+                  </option>
+                  {expertPartners.map((p) => (
+                    <option key={p.partner_id} value={p.partner_id}>
+                      {formatPartnerLabel(p)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="block">
                 <span className="text-zinc-600 text-xs">Specialization *</span>
                 <input

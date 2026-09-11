@@ -37,17 +37,18 @@ export function ExpertPortalLayout({
   headerBackLabel,
   contextTitle,
 }: ExpertPortalLayoutProps) {
-  const { logout, userProfile, userId } = useAuth();
+  const { logout, userProfile, userId, displayName: authDisplayName } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const displayName =
-    userProfile?.first_name || userProfile?.last_name
+    authDisplayName ||
+    (userProfile?.first_name || userProfile?.last_name
       ? `${userProfile?.first_name ?? ""} ${userProfile?.last_name ?? ""}`.trim()
       : userId != null
         ? String(userId)
-        : "—";
+        : "—");
 
   const handleLogout = async () => {
     await logout();

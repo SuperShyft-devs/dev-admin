@@ -22,6 +22,7 @@ import {
   Bell,
   Settings,
   Server,
+  Handshake,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { usePendingTaskCount } from "../hooks/usePendingTaskCount";
@@ -38,6 +39,7 @@ const primaryNavItems = [
   { to: "/server", icon: Server, label: "Server", category: "system_monitoring" },
   { to: "/settings", icon: Settings, label: "Settings", category: "platform_settings" },
   { to: "/employees", icon: Users, label: "Employees", category: "employees" },
+  { to: "/partners", icon: Handshake, label: "Partners", category: "partners" },
 ];
 
 const libraryNavItems = [
@@ -68,7 +70,7 @@ function isLibraryPath(pathname: string) {
 export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout, userProfile, userId, employeeRole } = useAuth();
+  const { logout, userProfile, userId, displayName, employeeRole } = useAuth();
   const { canView } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -296,9 +298,10 @@ export function AdminLayout() {
           )}
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="text-sm text-zinc-600 truncate max-w-[120px] sm:max-w-none">
-              {userProfile?.first_name || userProfile?.last_name
-                ? `${userProfile?.first_name ?? ""} ${userProfile?.last_name ?? ""}`.trim()
-                : userId ?? "—"}
+              {displayName ||
+                (userProfile?.first_name || userProfile?.last_name
+                  ? `${userProfile?.first_name ?? ""} ${userProfile?.last_name ?? ""}`.trim()
+                  : userId ?? "—")}
             </span>
             <button
               onClick={handleLogout}

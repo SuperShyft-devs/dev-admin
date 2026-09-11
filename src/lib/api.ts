@@ -75,8 +75,15 @@ api.interceptors.response.use(
       const refreshToken = authStorage.getRefreshToken();
       if (refreshToken) {
         try {
+          const authKind = authStorage.getAuthKind();
+          const refreshPath =
+            authKind === "partner"
+              ? "/partners/auth/refresh-token"
+              : authKind === "employee"
+                ? "/employees/auth/refresh-token"
+                : "/auth/refresh-token";
           const res = await authHttp.post<{ data: { tokens: { access_token: string; refresh_token: string } } }>(
-            "/auth/refresh-token",
+            refreshPath,
             { refresh_token: refreshToken }
           );
 
@@ -99,24 +106,19 @@ api.interceptors.response.use(
         } finally {
           isRefreshing = false;
         }
-      } else {
-        authStorage.clearTokens();
-        window.location.href = loginPathWithRedirect(
-          window.location.pathname,
-          window.location.search
-        );
-        return Promise.reject(err);
       }
-    }
 
-    if (err.response?.status === 401) {
+      // No refresh token — session is unusable.
       authStorage.clearTokens();
       window.location.href = loginPathWithRedirect(
         window.location.pathname,
         window.location.search
       );
+      return Promise.reject(err);
     }
 
+    // Do not hard-reload on a lone endpoint 401 after a successful refresh
+    // (e.g. a route still wired to the wrong JWT subject). Let the caller handle it.
     if (err.response?.status === 403) {
       window.dispatchEvent(new CustomEvent(PERMISSIONS_STALE_EVENT));
     }
@@ -403,7 +405,7 @@ export const platformSettingsApi = {
     ),
 };
 
-// Auth
+// Auth (patient / legacy user OTP — not used by admin dashboard login)
 export interface AuthTokens {
   user_id: number;
   tokens: {
@@ -411,6 +413,58 @@ export interface AuthTokens {
     refresh_token: string;
     token_type: string;
   };
+}
+
+export interface StaffAuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export interface EmployeeAuthVerifyResponse {
+  employee_id: number;
+  name: string;
+  role: string;
+  permissions?: unknown;
+  tokens: StaffAuthTokens;
+}
+
+export interface EmployeeAuthMeResponse {
+  employee_id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: string;
+  status?: string | null;
+  permissions?: unknown;
+}
+
+export interface PartnerAuthVerifyResponse {
+  partner_id: number;
+  name: string;
+  role: string;
+  tokens: StaffAuthTokens;
+}
+
+export interface PartnerAuthMeResponse {
+  partner_id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: string;
+  status?: string | null;
+}
+
+function isNotFoundAuthError(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false;
+  const status = err.response?.status;
+  const code = (err.response?.data as { error_code?: string } | undefined)?.error_code;
+  return (
+    status === 404 &&
+    (code === "EMPLOYEE_NOT_FOUND" ||
+      code === "PARTNER_NOT_FOUND" ||
+      code === "USER_NOT_FOUND")
+  );
 }
 
 export const authApi = {
@@ -426,6 +480,80 @@ export const authApi = {
     }),
   logout: (refreshToken: string) =>
     authHttp.post("/auth/logout", { refresh_token: refreshToken }),
+};
+
+export const employeesAuthApi = {
+  sendOtp: (payload: { phone?: string; email?: string }) =>
+    authHttp.post<{ data: { session_id: number } }>("/employees/auth/send-otp", payload),
+  verifyOtp: (payload: { phone?: string; email?: string; otp: string }) =>
+    authHttp.post<{ data: EmployeeAuthVerifyResponse }>("/employees/auth/verify-otp", payload),
+  refreshToken: (refreshToken: string) =>
+    authHttp.post<{
+      data: { employee_id: number; role: string; tokens: StaffAuthTokens };
+    }>("/employees/auth/refresh-token", { refresh_token: refreshToken }),
+  logout: (refreshToken: string) =>
+    authHttp.post("/employees/auth/logout", { refresh_token: refreshToken }),
+  me: () => api.get<{ data: EmployeeAuthMeResponse }>("/employees/auth/me"),
+};
+
+export const partnersAuthApi = {
+  sendOtp: (payload: { phone?: string; email?: string }) =>
+    authHttp.post<{ data: { session_id: number } }>("/partners/auth/send-otp", payload),
+  verifyOtp: (payload: { phone?: string; email?: string; otp: string }) =>
+    authHttp.post<{ data: PartnerAuthVerifyResponse }>("/partners/auth/verify-otp", payload),
+  refreshToken: (refreshToken: string) =>
+    authHttp.post<{
+      data: { partner_id: number; role: string; tokens: StaffAuthTokens };
+    }>("/partners/auth/refresh-token", { refresh_token: refreshToken }),
+  logout: (refreshToken: string) =>
+    authHttp.post("/partners/auth/logout", { refresh_token: refreshToken }),
+  me: () => api.get<{ data: PartnerAuthMeResponse }>("/partners/auth/me"),
+};
+
+/** Unified admin login: try employee OTP first, then partner. */
+export const staffAuthApi = {
+  sendOtp: async (phone: string): Promise<{ session_id: number; authKind: "employee" | "partner" }> => {
+    try {
+      const res = await employeesAuthApi.sendOtp({ phone });
+      return { session_id: res.data.data.session_id, authKind: "employee" };
+    } catch (err) {
+      if (!isNotFoundAuthError(err)) throw err;
+      const res = await partnersAuthApi.sendOtp({ phone });
+      return { session_id: res.data.data.session_id, authKind: "partner" };
+    }
+  },
+  resendOtp: async (
+    phone: string,
+    authKind: "employee" | "partner"
+  ): Promise<{ session_id: number }> => {
+    const apiClient = authKind === "partner" ? partnersAuthApi : employeesAuthApi;
+    const res = await apiClient.sendOtp({ phone });
+    return res.data.data;
+  },
+  verifyOtp: async (
+    phone: string,
+    otp: string,
+    authKind: "employee" | "partner"
+  ): Promise<
+    | { authKind: "employee"; data: EmployeeAuthVerifyResponse }
+    | { authKind: "partner"; data: PartnerAuthVerifyResponse }
+  > => {
+    if (authKind === "partner") {
+      const res = await partnersAuthApi.verifyOtp({ phone, otp });
+      return { authKind: "partner", data: res.data.data };
+    }
+    const res = await employeesAuthApi.verifyOtp({ phone, otp });
+    return { authKind: "employee", data: res.data.data };
+  },
+  logout: async (refreshToken: string, authKind: "employee" | "partner" | null) => {
+    if (authKind === "partner") {
+      await partnersAuthApi.logout(refreshToken);
+    } else if (authKind === "employee") {
+      await employeesAuthApi.logout(refreshToken);
+    } else {
+      await authApi.logout(refreshToken);
+    }
+  },
 };
 
 // Full user detail (employee view)
@@ -744,26 +872,36 @@ export type EmployeeRoleValue =
   | "organization_manager"
   | "expert";
 
+export type StaffEmployeeRoleValue = "admin" | "inferior_admin";
+
 export interface EmployeeListItem {
   employee_id: number;
-  user_id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
   role?: EmployeeRoleValue | string | null;
   status?: string | null;
   permissions_version?: number;
+  /** @deprecated Legacy join fields — prefer `name` */
+  user_id?: number;
   first_name?: string | null;
   last_name?: string | null;
 }
 
 export interface EmployeeCreate {
-  user_id: number;
-  role: EmployeeRoleValue | string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: StaffEmployeeRoleValue | string;
   status?: string | null;
   permissions?: CategoryGrantPayload[];
 }
 
 export interface EmployeeUpdate {
-  user_id: number;
-  role: EmployeeRoleValue | string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: StaffEmployeeRoleValue | string;
   expected_version?: number;
   permissions?: CategoryGrantPayload[];
 }
@@ -952,6 +1090,18 @@ export const organizationsApi = {
   }) =>
     api.get<{ data: OrganizationListItem[]; meta: { page: number; limit: number; total: number } }>(
       "/organizations",
+      { params }
+    ),
+  /** Orgs the current actor manages (contact JSON). Org managers must use this, not `list`. */
+  listMine: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
+  }) =>
+    api.get<{ data: OrganizationListItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/organizations/we",
       { params }
     ),
   filterOptions: () =>
@@ -1277,6 +1427,8 @@ export interface ExpertTag {
 
 export interface ExpertListItem {
   expert_id: number;
+  partner_id?: number | null;
+  /** @deprecated Prefer partner_id */
   user_id?: number | null;
   expert_type: ExpertType | string;
   specialization: string;
@@ -1304,7 +1456,7 @@ export interface ExpertDetail extends ExpertListItem {
 }
 
 export interface ExpertPayload {
-  user_id: number;
+  partner_id: number;
   expert_type: string;
   specialization: string;
   profile_photo?: string | null;
@@ -2627,42 +2779,48 @@ export const engagementDataCompletenessApi = {
     ),
 };
 
-// Onboarding Assistants
+// Onboarding Assistants (partners + staff employees)
 export interface OnboardingAssistant {
-  employee_id: number;
-  user_id: number;
+  kind?: "partner" | "employee";
+  partner_id?: number | null;
+  employee_id?: number | null;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
   role?: string | null;
   status?: string | null;
   first_name?: string | null;
   last_name?: string | null;
+  /** @deprecated Prefer partner_id / employee_id */
+  user_id?: number;
 }
 
-export interface CreatePhleboExistingUser {
-  user_id: number;
-  first_name?: string | null;
-  last_name?: string | null;
+export interface CreatePhleboExistingPartner {
+  partner_id: number;
+  name: string;
   phone?: string | null;
-  employee?: {
-    employee_id: number;
-    role?: string | null;
-    status?: string | null;
-  } | null;
+  email?: string | null;
+  role?: string | null;
+  status?: string | null;
 }
 
 export type CreatePhleboResponse =
   | {
       status: "confirmation_required";
-      existing_user: CreatePhleboExistingUser;
+      existing_partner: CreatePhleboExistingPartner;
     }
   | {
       status: "created" | "assigned";
-      user_id: number;
-      employee_id: number;
-      user_created: boolean;
-      employee_created: boolean;
+      partner_id: number;
+      partner_created: boolean;
       engagement_id: number;
-      added_employee_ids: number[];
-      skipped_employee_ids: number[];
+      added_partner_ids: number[];
+      skipped_partner_ids: number[];
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      role?: string | null;
+      status?: string | null;
     };
 
 // Occupied Slots
@@ -2867,13 +3025,26 @@ export const onboardingAssistantsApi = {
     api.get<{ data: OnboardingAssistant[] }>(
       `/engagements/${engagementId}/onboarding-assistants`
     ),
-  assign: (engagementId: number, employee_ids: number[]) =>
-    api.post<{ data: { engagement_id: number; added_employee_ids: number[]; skipped_employee_ids: number[] } }>(
-      `/engagements/${engagementId}/onboarding-assistants`,
-      { employee_ids }
-    ),
-  remove: (engagementId: number, employeeId: number) =>
-    api.delete(`/engagements/${engagementId}/onboarding-assistants/${employeeId}`),
+  assign: (
+    engagementId: number,
+    payload: { partner_ids?: number[]; employee_ids?: number[] }
+  ) =>
+    api.post<{
+      data: {
+        engagement_id: number;
+        added_partner_ids: number[];
+        skipped_partner_ids: number[];
+        added_employee_ids: number[];
+        skipped_employee_ids: number[];
+      };
+    }>(`/engagements/${engagementId}/onboarding-assistants`, payload),
+  removePartner: (engagementId: number, partnerId: number) =>
+    api.delete(`/engagements/${engagementId}/onboarding-assistants/partners/${partnerId}`),
+  removeEmployee: (engagementId: number, employeeId: number) =>
+    api.delete(`/engagements/${engagementId}/onboarding-assistants/employees/${employeeId}`),
+  /** @deprecated Prefer removePartner */
+  remove: (engagementId: number, partnerId: number) =>
+    api.delete(`/engagements/${engagementId}/onboarding-assistants/${partnerId}`),
   createPhlebo: (
     engagementId: number,
     payload: { name: string; phone: string; confirm_existing?: boolean }
@@ -2882,6 +3053,60 @@ export const onboardingAssistantsApi = {
       `/engagements/${engagementId}/onboarding-assistants/create-phlebo`,
       payload
     ),
+};
+
+// Partners
+export type PartnerRoleValue = "phlebo" | "expert" | "organization_manager";
+
+export interface PartnerListItem {
+  partner_id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: PartnerRoleValue | string;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PartnerCreate {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: PartnerRoleValue | string;
+  status?: string | null;
+}
+
+export interface PartnerUpdate {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  role: PartnerRoleValue | string;
+}
+
+export const partnersApi = {
+  list: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    role?: string;
+    search?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
+  }) =>
+    api.get<{ data: PartnerListItem[]; meta: { page: number; limit: number; total: number } }>(
+      "/partners",
+      { params }
+    ),
+  get: (id: number) => api.get<{ data: PartnerListItem }>(`/partners/${id}`),
+  create: (payload: PartnerCreate) =>
+    api.post<{ data: { partner_id: number } }>("/partners", payload),
+  update: (id: number, payload: PartnerUpdate) =>
+    api.put<{ data: { partner_id: number } }>(`/partners/${id}`, payload),
+  updateStatus: (id: number, status: string) =>
+    api.patch<{ data: { partner_id: number; status: string } }>(`/partners/${id}/status`, {
+      status,
+    }),
 };
 
 export const questionnaireQuestionsApi = {

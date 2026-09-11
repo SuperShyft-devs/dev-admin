@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
-import { UserMultiSearchPicker } from "./UserMultiSearchPicker";
+import { PartnerMultiSearchPicker } from "./PartnerMultiSearchPicker";
 import type { CityContactAssignments, ContactPersonUserIds } from "../../lib/api";
 
 type DepartmentOption = {
@@ -142,12 +142,13 @@ export function OrganizationContactPersonsEditor({
           These users can see every camp, city, and department in this organization.
         </p>
         <div className="mt-3">
-          <UserMultiSearchPicker
+          <PartnerMultiSearchPicker
             label="Organization managers"
             value={normalized.organization_managers}
             onChange={setOrgManagers}
             disabled={disabled}
-            placeholder="Search and add users…"
+            placeholder="Search organization manager partners…"
+            role="organization_manager"
           />
         </div>
       </div>
@@ -192,19 +193,20 @@ export function OrganizationContactPersonsEditor({
 
                   {expanded ? (
                     <div className="p-3 space-y-4 border-t border-zinc-200">
-                      <UserMultiSearchPicker
+                      <PartnerMultiSearchPicker
                         label={`All departments in ${city}`}
                         value={payload.managers ?? []}
                         onChange={(ids) => setCityManagers(city, ids)}
                         disabled={disabled}
-                        placeholder="Search and add users…"
+                        placeholder="Search organization manager partners…"
+                        role="organization_manager"
                       />
 
                       {departments.length > 0 ? (
                         <div className="space-y-3 pt-1 border-t border-dashed border-zinc-200">
                           <p className="text-xs font-medium text-zinc-600">Or limit to one department</p>
                           {departments.map((dept) => (
-                            <UserMultiSearchPicker
+                            <PartnerMultiSearchPicker
                               key={`${city}-${dept.slug}`}
                               label={`${dept.name} only (${city})`}
                               value={
@@ -214,7 +216,8 @@ export function OrganizationContactPersonsEditor({
                               }
                               onChange={(ids) => setDepartmentManagers(city, dept.slug, ids)}
                               disabled={disabled}
-                              placeholder="Search and add users…"
+                              placeholder="Search organization manager partners…"
+                              role="organization_manager"
                             />
                           ))}
                         </div>

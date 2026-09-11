@@ -7,47 +7,116 @@ import {
   type ReactNode,
 } from "react";
 import {
-  authApi,
-  usersApi,
+  employeesAuthApi,
+  partnersAuthApi,
+  staffAuthApi,
   PERMISSIONS_STALE_EVENT,
-  type UserProfile,
 } from "../lib/api";
-import { authStorage } from "../lib/authStorage";
+import {
+  authStorage,
+  type AuthKind,
+  type AuthSessionProfile,
+  type SessionRole,
+} from "../lib/authStorage";
 import type { EmployeeRole } from "../auth/permissions";
 
 interface AuthState {
   isAuthenticated: boolean;
-  userId: number | null;
-  userProfile: UserProfile | null;
+  authKind: AuthKind | null;
+  displayName: string | null;
   employeeId: number | null;
-  employeeRole: EmployeeRole | null;
+  partnerId: number | null;
+  employeeRole: SessionRole | null;
+  /** Permissions envelope for inferior_admin (same shape as legacy users/me employee.permissions). */
+  permissions: unknown;
   isLoading: boolean;
 }
 
 interface AuthContextValue extends AuthState {
+  /** @deprecated Use displayName — kept for layout compatibility */
+  userId: number | null;
+  /** Synthetic profile for PermissionContext / layouts */
+  userProfile: {
+    first_name?: string | null;
+    last_name?: string | null;
+    employee?: {
+      employee_id: number;
+      role: EmployeeRole;
+      permissions?: unknown;
+    } | null;
+  } | null;
   login: (
     phone: string,
-    otp: string
-  ) => Promise<EmployeeRole | null>;
+    otp: string,
+    authKind: AuthKind
+  ) => Promise<SessionRole | null>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  sendOtp: (phone: string) => Promise<{ session_id: number }>;
-  resendOtp: (phone: string) => Promise<{ session_id: number }>;
+  sendOtp: (phone: string) => Promise<{ session_id: number; authKind: AuthKind }>;
+  resendOtp: (
+    phone: string,
+    authKind: AuthKind
+  ) => Promise<{ session_id: number }>;
   error: string | null;
   clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function profileToState(profile: AuthSessionProfile): Pick<
+  AuthState,
+  "authKind" | "displayName" | "employeeId" | "partnerId" | "employeeRole" | "permissions"
+> {
+  return {
+    authKind: profile.authKind,
+    displayName: profile.name || null,
+    employeeId: profile.employeeId ?? null,
+    partnerId: profile.partnerId ?? null,
+    employeeRole: profile.role,
+    permissions: profile.permissions ?? null,
+  };
+}
+
+function buildUserProfile(
+  state: Pick<AuthState, "authKind" | "displayName" | "employeeId" | "employeeRole" | "permissions">
+): AuthContextValue["userProfile"] {
+  const name = state.displayName ?? "";
+  const parts = name.trim().split(/\s+/);
+  const first_name = parts[0] || null;
+  const last_name = parts.length > 1 ? parts.slice(1).join(" ") : null;
+  if (state.authKind !== "employee" || !state.employeeId) {
+    return { first_name, last_name, employee: null };
+  }
+  return {
+    first_name,
+    last_name,
+    employee: {
+      employee_id: state.employeeId,
+      role: state.employeeRole as EmployeeRole,
+      permissions: state.permissions,
+    },
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(() => {
     const hasAccessToken = authStorage.hasAccessToken();
+    const stored = authStorage.getProfile();
+    if (hasAccessToken && stored) {
+      return {
+        isAuthenticated: true,
+        ...profileToState(stored),
+        isLoading: true,
+      };
+    }
     return {
       isAuthenticated: hasAccessToken,
-      userId: null,
-      userProfile: null,
+      authKind: authStorage.getAuthKind(),
+      displayName: null,
       employeeId: null,
+      partnerId: null,
       employeeRole: null,
+      permissions: null,
       isLoading: hasAccessToken,
     };
   });
@@ -57,61 +126,127 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendOtp = useCallback(async (phone: string) => {
     setError(null);
-    const res = await authApi.sendOtp(phone);
-    return res.data.data;
+    return staffAuthApi.sendOtp(phone);
   }, []);
 
-  const resendOtp = useCallback(async (phone: string) => {
+  const resendOtp = useCallback(async (phone: string, authKind: AuthKind) => {
     setError(null);
-    const res = await authApi.resendOtp(phone);
-    return res.data.data;
+    return staffAuthApi.resendOtp(phone, authKind);
   }, []);
 
-  const login = useCallback(async (phone: string, otp: string) => {
+  const login = useCallback(async (phone: string, otp: string, authKind: AuthKind) => {
     setError(null);
-    const res = await authApi.verifyOtp(phone, otp);
-    const { user_id, tokens } = res.data.data;
+    const result = await staffAuthApi.verifyOtp(phone, otp, authKind);
+    const tokens = result.data.tokens;
     authStorage.setTokens(tokens.access_token, tokens.refresh_token);
-    const profileRes = await usersApi.me();
-    const profile = profileRes.data.data;
-    const employeeRole = profile.employee?.role ?? null;
+
+    let profile: AuthSessionProfile;
+    if (result.authKind === "employee") {
+      profile = {
+        authKind: "employee",
+        name: result.data.name,
+        role: result.data.role,
+        employeeId: result.data.employee_id,
+        partnerId: null,
+        permissions: result.data.permissions,
+      };
+    } else {
+      profile = {
+        authKind: "partner",
+        name: result.data.name,
+        role: result.data.role,
+        employeeId: null,
+        partnerId: result.data.partner_id,
+        permissions: null,
+      };
+    }
+    authStorage.setProfile(profile);
+
+    const next = profileToState(profile);
     setState({
       isAuthenticated: true,
-      userId: user_id,
-      userProfile: profile,
-      employeeId: profile.employee?.employee_id ?? null,
-      employeeRole,
+      ...next,
       isLoading: false,
     });
-    return employeeRole;
+    return profile.role;
   }, []);
 
   const logout = useCallback(async () => {
     const refresh = authStorage.getRefreshToken();
+    const kind = authStorage.getAuthKind();
     if (refresh) {
       try {
-        await authApi.logout(refresh);
+        await staffAuthApi.logout(refresh, kind);
       } catch {
         // ignore
       }
     }
     authStorage.clearTokens();
-    setState({ isAuthenticated: false, userId: null, userProfile: null, employeeId: null, employeeRole: null, isLoading: false });
+    setState({
+      isAuthenticated: false,
+      authKind: null,
+      displayName: null,
+      employeeId: null,
+      partnerId: null,
+      employeeRole: null,
+      permissions: null,
+      isLoading: false,
+    });
   }, []);
 
   const refreshProfile = useCallback(async () => {
     if (!authStorage.hasAccessToken()) return;
-    const profileRes = await usersApi.me();
-    const profile = profileRes.data.data;
-    setState((current) => ({
-      ...current,
-      isAuthenticated: true,
-      userId: profile.user_id,
-      userProfile: profile,
-      employeeId: profile.employee?.employee_id ?? null,
-      employeeRole: profile.employee?.role ?? null,
+    const kind = authStorage.getAuthKind() ?? authStorage.getProfile()?.authKind;
+    if (kind === "partner") {
+      const res = await partnersAuthApi.me();
+      const data = res.data.data;
+      const profile: AuthSessionProfile = {
+        authKind: "partner",
+        name: data.name,
+        role: data.role,
+        employeeId: null,
+        partnerId: data.partner_id,
+        permissions: null,
+      };
+      authStorage.setProfile(profile);
+      setState({
+        isAuthenticated: true,
+        ...profileToState(profile),
+        isLoading: false,
+      });
+      return;
+    }
+    if (kind === "employee") {
+      const res = await employeesAuthApi.me();
+      const data = res.data.data;
+      const profile: AuthSessionProfile = {
+        authKind: "employee",
+        name: data.name,
+        role: data.role,
+        employeeId: data.employee_id,
+        partnerId: null,
+        permissions: data.permissions,
+      };
+      authStorage.setProfile(profile);
+      setState({
+        isAuthenticated: true,
+        ...profileToState(profile),
+        isLoading: false,
+      });
+      return;
+    }
+    // Unknown auth kind — clear session
+    authStorage.clearTokens();
+    setState({
+      isAuthenticated: false,
+      authKind: null,
+      displayName: null,
+      employeeId: null,
+      partnerId: null,
+      employeeRole: null,
+      permissions: null,
       isLoading: false,
-    }));
+    });
   }, []);
 
   useEffect(() => {
@@ -125,15 +260,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await refreshProfile();
       } catch {
         authStorage.clearTokens();
-        setState((s) => ({
-          ...s,
+        setState({
           isAuthenticated: false,
-          userId: null,
-          userProfile: null,
+          authKind: null,
+          displayName: null,
           employeeId: null,
+          partnerId: null,
           employeeRole: null,
+          permissions: null,
           isLoading: false,
-        }));
+        });
       }
     };
 
@@ -155,6 +291,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     ...state,
+    userId: state.employeeId ?? state.partnerId,
+    userProfile: buildUserProfile(state),
     login,
     logout,
     refreshProfile,
@@ -178,4 +316,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-

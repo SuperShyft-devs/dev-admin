@@ -81,6 +81,7 @@ export type ConsoleQuestionnaireEmployeeRole =
   | "admin"
   | "inferior_admin"
   | "onboarding_assistant"
+  | "phlebo"
   | "organization_manager"
   | "expert"
   | null;
@@ -92,7 +93,10 @@ export type ConsoleQuestionnaireEmployeeRole =
 export function filterConsoleQuestionnaireCategories<
   T extends { category_key?: string | null },
 >(categories: T[], employeeRole?: ConsoleQuestionnaireEmployeeRole): T[] {
-  const isPhlebo = employeeRole === "onboarding_assistant" || employeeRole == null;
+  const isPhlebo =
+    employeeRole === "onboarding_assistant" ||
+    employeeRole === "phlebo" ||
+    employeeRole == null;
   if (!isPhlebo) return categories;
 
   return categories.filter((category) => {

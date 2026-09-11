@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getApiError } from "../lib/api";
-import { resolvePostLoginPath } from "../lib/authStorage";
+import { resolvePostLoginPath, type AuthKind } from "../lib/authStorage";
 import { Loader2 } from "lucide-react";
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -11,13 +11,14 @@ export function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [authKind, setAuthKind] = useState<AuthKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
   const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
-  const { login, sendOtp, resendOtp, isAuthenticated, isLoading, employeeRole } = useAuth();
+  const { login, sendOtp, resendOtp, isAuthenticated, isLoading, employeeRole, authKind: sessionAuthKind } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTarget = searchParams.get("redirect");
@@ -52,16 +53,27 @@ export function Login() {
   const resetOtpStep = () => {
     setStep("phone");
     setOtp("");
+    setAuthKind(null);
     setResendStatus(null);
     setResendAvailableAt(null);
     setResendSecondsLeft(0);
     setError(null);
   };
 
-  if (!isLoading && isAuthenticated) {
-    navigate(resolvePostLoginPath(employeeRole, redirectTarget), { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    navigate(resolvePostLoginPath(employeeRole, redirectTarget, sessionAuthKind), {
+      replace: true,
+    });
+  }, [
+    isAuthenticated,
+    isLoading,
+    employeeRole,
+    redirectTarget,
+    sessionAuthKind,
+    navigate,
+  ]);
+
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -73,8 +85,9 @@ export function Login() {
     }
     setLoading(true);
     try {
-      await sendOtp(normalizedPhone);
+      const result = await sendOtp(normalizedPhone);
       setPhone(normalizedPhone);
+      setAuthKind(result.authKind);
       setStep("otp");
       setOtp("");
       startResendCooldown();
@@ -86,12 +99,12 @@ export function Login() {
   };
 
   const handleResendOtp = async () => {
-    if (resendLoading || resendSecondsLeft > 0) return;
+    if (resendLoading || resendSecondsLeft > 0 || !authKind) return;
     setError(null);
     setResendStatus(null);
     setResendLoading(true);
     try {
-      await resendOtp(phone);
+      await resendOtp(phone, authKind);
       setOtp("");
       setResendStatus("A new verification code has been sent.");
       startResendCooldown();
@@ -110,10 +123,14 @@ export function Login() {
       setError("Please enter the OTP");
       return;
     }
+    if (!authKind) {
+      setError("Please request a new OTP");
+      return;
+    }
     setLoading(true);
     try {
-      const role = await login(phone.replace(/\D/g, ""), otp.trim());
-      navigate(resolvePostLoginPath(role, redirectTarget), { replace: true });
+      const role = await login(phone.replace(/\D/g, ""), otp.trim(), authKind);
+      navigate(resolvePostLoginPath(role, redirectTarget, authKind), { replace: true });
     } catch (err) {
       setError(getApiError(err, "auth"));
     } finally {
@@ -122,6 +139,10 @@ export function Login() {
   };
 
   const isOtpActionDisabled = loading || resendLoading;
+
+  if (!isLoading && isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4 sm:p-6">

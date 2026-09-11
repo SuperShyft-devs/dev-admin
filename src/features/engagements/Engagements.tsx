@@ -33,6 +33,7 @@ import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
   employeesApi,
+  partnersApi,
   onboardingAssistantsApi,
   engagementTypesApi,
   type ChecklistReadiness,
@@ -48,6 +49,7 @@ import {
   type AssessmentPackage,
   type EmployeeListItem,
   type OnboardingAssistant,
+  type PartnerListItem,
   engagementChecklistsApi,
   checklistTemplatesApi,
   checklistTasksApi,
@@ -56,7 +58,6 @@ import {
   type EngagementChecklist,
   type ChecklistTemplate,
   type ChecklistTask,
-  type UserListItem,
   getApiError,
 } from "../../lib/api";
 import { useLocation } from "react-router-dom";
@@ -109,34 +110,55 @@ function dueDateToInput(value?: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
-function getEmployeeUserName(
-  userId: number,
-  usersById: Record<number, UserListItem>
-): string {
-  const u = usersById[userId];
-  const name = [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim();
-  return name || `User ${userId}`;
+function getEmployeeDisplayName(emp: EmployeeListItem): string {
+  if (emp.name?.trim()) return emp.name.trim();
+  return `Employee ${emp.employee_id}`;
 }
 
-function getEmployeeDisplayName(
-  emp: EmployeeListItem,
-  usersById: Record<number, UserListItem>
-): string {
-  const fromEmployee = [emp.first_name, emp.last_name].filter(Boolean).join(" ").trim();
-  if (fromEmployee) return fromEmployee;
-  return getEmployeeUserName(emp.user_id, usersById);
+function getPartnerDisplayName(partner: PartnerListItem | OnboardingAssistant): string {
+  if (partner.name?.trim()) return partner.name.trim();
+  const id = "partner_id" in partner ? partner.partner_id : undefined;
+  return id ? `Partner ${id}` : "Partner";
 }
 
-function formatEmployeeAssignLabel(
-  emp: EmployeeListItem,
-  usersById: Record<number, UserListItem>
-): string {
-  const name = getEmployeeDisplayName(emp, usersById);
-  if (name !== `User ${emp.user_id}`) {
-    return emp.role?.trim() ? `${name} · ${emp.role}` : name;
+function getAssistantDisplayName(a: OnboardingAssistant): string {
+  if (a.name?.trim()) return a.name.trim();
+  if (a.kind === "employee" || (a.employee_id != null && a.partner_id == null)) {
+    return `Employee ${a.employee_id}`;
   }
-  if (emp.role?.trim()) return emp.role.trim();
-  return "Unknown";
+  if (a.partner_id != null) return `Partner ${a.partner_id}`;
+  return "Assignee";
+}
+
+function assistantRowKey(a: OnboardingAssistant): string {
+  if (a.kind === "employee" || (a.employee_id != null && !a.partner_id)) {
+    return `employee-${a.employee_id}`;
+  }
+  return `partner-${a.partner_id}`;
+}
+
+function isEmployeeAssignee(a: OnboardingAssistant): boolean {
+  return a.kind === "employee" || (a.employee_id != null && a.partner_id == null);
+}
+
+const ASSIGNABLE_EMPLOYEE_ROLES = new Set(["admin", "inferior_admin"]);
+
+type AddAssigneeMode = "phlebo" | "expert" | "employee";
+
+function formatStaffRoleLabel(role: string | null | undefined): string {
+  if (!role) return "";
+  if (role === "inferior_admin") return "Employee";
+  if (role === "admin") return "Admin";
+  if (role === "phlebo") return "Phlebo";
+  if (role === "expert") return "Expert";
+  if (role === "organization_manager") return "Organization Manager";
+  return role;
+}
+
+function formatEmployeeAssignLabel(emp: EmployeeListItem): string {
+  const name = getEmployeeDisplayName(emp);
+  const role = formatStaffRoleLabel(emp.role);
+  return role ? `${name} · ${role}` : name;
 }
 
 function EngagementChecklistModal({
@@ -162,7 +184,6 @@ function EngagementChecklistModal({
   const [removeLoading, setRemoveLoading] = useState(false);
   const [taskUpdating, setTaskUpdating] = useState<Set<number>>(new Set());
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
-  const [usersById, setUsersById] = useState<Record<number, UserListItem>>({});
   const [taskAssigning, setTaskAssigning] = useState<Set<number>>(new Set());
   const [taskEdit, setTaskEdit] = useState<{
     task_id: number;
@@ -189,7 +210,6 @@ function EngagementChecklistModal({
       setTemplates(tRes.data.data);
       const emps = [...empRes.data.data].sort((a, b) => a.employee_id - b.employee_id);
       setEmployees(emps);
-      setUsersById({});
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -459,7 +479,7 @@ function EngagementChecklistModal({
                                             <option value="">Unassigned</option>
                                             {employees.map((emp) => (
                                               <option key={emp.employee_id} value={emp.employee_id}>
-                                                {formatEmployeeAssignLabel(emp, usersById)}
+                                                {formatEmployeeAssignLabel(emp)}
                                               </option>
                                             ))}
                                           </select>
@@ -1046,12 +1066,15 @@ export function Engagements({
   const [assistants, setAssistants] = useState<OnboardingAssistant[]>([]);
   const [assistantsLoading, setAssistantsLoading] = useState(false);
   const [assistantsError, setAssistantsError] = useState<string | null>(null);
-  const [removingAssistantId, setRemovingAssistantId] = useState<number | null>(null);
+  const [removingAssistantKey, setRemovingAssistantKey] = useState<string | null>(null);
 
   // Add-assistants sub-panel state
   const [addAssistantsOpen, setAddAssistantsOpen] = useState(false);
-  const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([]);
-  const [allEmployeesLoading, setAllEmployeesLoading] = useState(false);
+  const [addAssigneeMode, setAddAssigneeMode] = useState<AddAssigneeMode>("phlebo");
+  const [addCandidatePartners, setAddCandidatePartners] = useState<PartnerListItem[]>([]);
+  const [addCandidateEmployees, setAddCandidateEmployees] = useState<EmployeeListItem[]>([]);
+  const [addCandidatesLoading, setAddCandidatesLoading] = useState(false);
+  const [selectedPartnerIds, setSelectedPartnerIds] = useState<Set<number>>(new Set());
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<number>>(new Set());
   const [assigningAssistants, setAssigningAssistants] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -1617,7 +1640,7 @@ export function Engagements({
     setAssistants([]);
     setAssistantsError(null);
     setAddAssistantsOpen(false);
-    setSelectedEmployeeIds(new Set());
+    setSelectedPartnerIds(new Set());
     setEmployeeSearch("");
     setAssistantsModalOpen(true);
     void fetchAssistants(row.engagement_id);
@@ -1652,37 +1675,69 @@ export function Engagements({
     setAssistantsModalOpen(false);
     setAssistantsEngagement(null);
     setAddAssistantsOpen(false);
+    setSelectedPartnerIds(new Set());
     setSelectedEmployeeIds(new Set());
     setEmployeeSearch("");
   };
 
-  const handleRemoveAssistant = async (employeeId: number) => {
+  const handleRemoveAssistant = async (a: OnboardingAssistant) => {
     if (!assistantsEngagement) return;
-    setRemovingAssistantId(employeeId);
+    const key = assistantRowKey(a);
+    setRemovingAssistantKey(key);
     setAssistantsError(null);
     try {
-      await onboardingAssistantsApi.remove(assistantsEngagement.engagement_id, employeeId);
+      if (isEmployeeAssignee(a) && a.employee_id != null) {
+        await onboardingAssistantsApi.removeEmployee(
+          assistantsEngagement.engagement_id,
+          a.employee_id
+        );
+      } else if (a.partner_id != null) {
+        await onboardingAssistantsApi.removePartner(
+          assistantsEngagement.engagement_id,
+          a.partner_id
+        );
+      }
       await fetchAssistants(assistantsEngagement.engagement_id);
     } catch (err) {
       setAssistantsError(getApiError(err));
     } finally {
-      setRemovingAssistantId(null);
+      setRemovingAssistantKey(null);
     }
   };
 
-  const openAddAssistants = async () => {
+  const openAddAssistants = async (mode: AddAssigneeMode) => {
+    setAddAssigneeMode(mode);
     setAddAssistantsOpen(true);
+    setSelectedPartnerIds(new Set());
     setSelectedEmployeeIds(new Set());
     setEmployeeSearch("");
-    setAllEmployeesLoading(true);
+    setAddCandidatePartners([]);
+    setAddCandidateEmployees([]);
+    setAddCandidatesLoading(true);
     try {
-      const res = await employeesApi.list({ status: "active", limit: 100 });
-      setAllEmployees(res.data.data);
+      if (mode === "employee") {
+        const res = await employeesApi.list({ status: "active", limit: 100 });
+        setAddCandidateEmployees(
+          res.data.data.filter((e) => ASSIGNABLE_EMPLOYEE_ROLES.has((e.role || "").toLowerCase()))
+        );
+      } else {
+        const res = await partnersApi.list({ status: "active", role: mode, limit: 100 });
+        setAddCandidatePartners(res.data.data);
+      }
     } catch (err) {
       setAssistantsError(getApiError(err));
     } finally {
-      setAllEmployeesLoading(false);
+      setAddCandidatesLoading(false);
     }
+  };
+
+  const togglePartnerSelection = (id: number) => {
+    setSelectedPartnerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleEmployeeSelection = (id: number) => {
@@ -1695,15 +1750,21 @@ export function Engagements({
   };
 
   const handleAssignAssistants = async () => {
-    if (!assistantsEngagement || selectedEmployeeIds.size === 0) return;
+    if (!assistantsEngagement) return;
+    const selectingEmployees = addAssigneeMode === "employee";
+    if (selectingEmployees && selectedEmployeeIds.size === 0) return;
+    if (!selectingEmployees && selectedPartnerIds.size === 0) return;
     setAssigningAssistants(true);
     setAssistantsError(null);
     try {
       await onboardingAssistantsApi.assign(
         assistantsEngagement.engagement_id,
-        Array.from(selectedEmployeeIds)
+        selectingEmployees
+          ? { employee_ids: Array.from(selectedEmployeeIds) }
+          : { partner_ids: Array.from(selectedPartnerIds) }
       );
       setAddAssistantsOpen(false);
+      setSelectedPartnerIds(new Set());
       setSelectedEmployeeIds(new Set());
       await fetchAssistants(assistantsEngagement.engagement_id);
     } catch (err) {
@@ -1713,23 +1774,50 @@ export function Engagements({
     }
   };
 
-  // Employees not yet assigned as assistants for this engagement
-  const assignedIds = new Set(assistants.map((a) => a.employee_id));
-  const assignableRoles = new Set(["admin", "onboarding_assistant", "organization_manager", "expert"]);
-  const availableEmployees = allEmployees.filter(
-    (e) => !assignedIds.has(e.employee_id) && assignableRoles.has((e.role ?? "").toLowerCase())
+  const assignedPartnerIds = new Set(
+    assistants.filter((a) => a.partner_id != null).map((a) => a.partner_id as number)
   );
-  const filteredEmployees = employeeSearch.trim()
+  const assignedEmployeeIds = new Set(
+    assistants.filter((a) => a.employee_id != null && !a.partner_id).map((a) => a.employee_id as number)
+  );
+
+  const availablePartners = addCandidatePartners.filter((p) => !assignedPartnerIds.has(p.partner_id));
+  const availableEmployees = addCandidateEmployees.filter(
+    (e) => !assignedEmployeeIds.has(e.employee_id)
+  );
+
+  const q = employeeSearch.trim().toLowerCase();
+  const filteredPartners = q
+    ? availablePartners.filter((p) => {
+        const name = getPartnerDisplayName(p).toLowerCase();
+        return (
+          String(p.partner_id).includes(q) ||
+          (p.role ?? "").toLowerCase().includes(q) ||
+          (p.phone ?? "").toLowerCase().includes(q) ||
+          name.includes(q)
+        );
+      })
+    : availablePartners;
+  const filteredEmployees = q
     ? availableEmployees.filter((e) => {
-      const q = employeeSearch.trim().toLowerCase();
-      const name = getEmployeeDisplayName(e, {}).toLowerCase();
-      return (
-        String(e.employee_id).includes(q) ||
-        (e.role ?? "").toLowerCase().includes(q) ||
-        name.includes(q)
-      );
-    })
+        const name = getEmployeeDisplayName(e).toLowerCase();
+        return (
+          String(e.employee_id).includes(q) ||
+          (e.role ?? "").toLowerCase().includes(q) ||
+          (e.phone ?? "").toLowerCase().includes(q) ||
+          name.includes(q)
+        );
+      })
     : availableEmployees;
+
+  const addModeLabel =
+    addAssigneeMode === "phlebo"
+      ? "phlebos"
+      : addAssigneeMode === "expert"
+        ? "experts"
+        : "employees";
+  const selectedCount =
+    addAssigneeMode === "employee" ? selectedEmployeeIds.size : selectedPartnerIds.size;
 
   const openParticipants = (row: EngagementListItem) => {
     setParticipantsSource({
@@ -2510,11 +2598,11 @@ export function Engagements({
           {/* Assigned assistants list */}
           {!addAssistantsOpen && (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-medium text-zinc-700">
                   Assigned ({assistants.length})
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setCreatePhleboModalOpen(true)}
@@ -2524,11 +2612,27 @@ export function Engagements({
                   </button>
                   <button
                     type="button"
-                    onClick={openAddAssistants}
+                    onClick={() => void openAddAssistants("phlebo")}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Add Assistants
+                    Add phlebo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openAddAssistants("expert")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add expert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void openAddAssistants("employee")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 text-white text-xs font-medium hover:bg-zinc-800"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add employee
                   </button>
                 </div>
               </div>
@@ -2543,48 +2647,52 @@ export function Engagements({
                 </div>
               ) : (
                 <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden">
-                  {assistants.map((a) => (
-                    <li
-                      key={a.employee_id}
-                      className="flex items-center justify-between gap-3 px-4 py-3 bg-white hover:bg-zinc-50"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
-                          <UserCog className="w-4 h-4 text-zinc-500" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeDisplayName(a, {})}
-                          </p>
-                          <p className="text-xs text-zinc-500 truncate">
-                            {a.role ? `Role: ${a.role}` : "No role"}{" "}
-                            <span
-                              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ml-1 ${a.status === "active"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-zinc-100 text-zinc-500"
-                                }`}
-                            >
-                              {a.status ?? "—"}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAssistant(a.employee_id)}
-                        disabled={removingAssistantId === a.employee_id}
-                        className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0"
-                        title="Remove assistant"
-                        aria-label="Remove assistant"
+                  {assistants.map((a) => {
+                    const key = assistantRowKey(a);
+                    return (
+                      <li
+                        key={key}
+                        className="flex items-center justify-between gap-3 px-4 py-3 bg-white hover:bg-zinc-50"
                       >
-                        {removingAssistantId === a.employee_id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    </li>
-                  ))}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
+                            <UserCog className="w-4 h-4 text-zinc-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-zinc-900 truncate">
+                              {getAssistantDisplayName(a)}
+                            </p>
+                            <p className="text-xs text-zinc-500 truncate">
+                              {a.role ? `Role: ${formatStaffRoleLabel(a.role)}` : "No role"}{" "}
+                              <span
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ml-1 ${
+                                  a.status === "active"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-zinc-100 text-zinc-500"
+                                }`}
+                              >
+                                {a.status ?? "—"}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleRemoveAssistant(a)}
+                          disabled={removingAssistantKey === key}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 shrink-0"
+                          title="Remove assignee"
+                          aria-label="Remove assignee"
+                        >
+                          {removingAssistantKey === key ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </>
@@ -2595,12 +2703,13 @@ export function Engagements({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-zinc-700">
-                  Select employees to assign
+                  Select {addModeLabel} to assign
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     setAddAssistantsOpen(false);
+                    setSelectedPartnerIds(new Set());
                     setSelectedEmployeeIds(new Set());
                     setEmployeeSearch("");
                   }}
@@ -2611,7 +2720,6 @@ export function Engagements({
                 </button>
               </div>
 
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <input
@@ -2623,41 +2731,80 @@ export function Engagements({
                 />
               </div>
 
-              {/* Employee list */}
-              {allEmployeesLoading ? (
+              {addCandidatesLoading ? (
                 <div className="py-8 flex justify-center">
                   <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
                 </div>
-              ) : filteredEmployees.length === 0 ? (
+              ) : addAssigneeMode === "employee" ? (
+                filteredEmployees.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-zinc-500">
+                    {availableEmployees.length === 0
+                      ? "All eligible employees are already assigned."
+                      : "No employees match your search."}
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                    {filteredEmployees.map((e) => {
+                      const checked = selectedEmployeeIds.has(e.employee_id);
+                      return (
+                        <li
+                          key={e.employee_id}
+                          className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
+                            checked ? "bg-zinc-50" : "bg-white"
+                          }`}
+                          onClick={() => toggleEmployeeSelection(e.employee_id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleEmployeeSelection(e.employee_id)}
+                            onClick={(ev) => ev.stopPropagation()}
+                            className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-zinc-900 truncate">
+                              {getEmployeeDisplayName(e)}
+                            </p>
+                            <p className="text-xs text-zinc-500 truncate">
+                              {e.phone || e.email || (e.role ? `Role: ${e.role}` : "Employee")}
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )
+              ) : filteredPartners.length === 0 ? (
                 <div className="py-6 text-center text-sm text-zinc-500">
-                  {availableEmployees.length === 0
-                    ? "All active employees are already assigned."
-                    : "No employees match your search."}
+                  {availablePartners.length === 0
+                    ? `All active ${addModeLabel} are already assigned.`
+                    : `No ${addModeLabel} match your search.`}
                 </div>
               ) : (
                 <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                  {filteredEmployees.map((e) => {
-                    const checked = selectedEmployeeIds.has(e.employee_id);
+                  {filteredPartners.map((p) => {
+                    const checked = selectedPartnerIds.has(p.partner_id);
                     return (
                       <li
-                        key={e.employee_id}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${checked ? "bg-zinc-50" : "bg-white"
-                          }`}
-                        onClick={() => toggleEmployeeSelection(e.employee_id)}
+                        key={p.partner_id}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
+                          checked ? "bg-zinc-50" : "bg-white"
+                        }`}
+                        onClick={() => togglePartnerSelection(p.partner_id)}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => toggleEmployeeSelection(e.employee_id)}
+                          onChange={() => togglePartnerSelection(p.partner_id)}
                           onClick={(ev) => ev.stopPropagation()}
                           className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 shrink-0"
                         />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-zinc-900 truncate">
-                            {getEmployeeDisplayName(e, {})}
+                            {getPartnerDisplayName(p)}
                           </p>
                           <p className="text-xs text-zinc-500 truncate">
-                            {e.role ? `Role: ${e.role}` : "No role"}
+                            {p.phone || p.email || (p.role ? `Role: ${p.role}` : addAssigneeMode)}
                           </p>
                         </div>
                       </li>
@@ -2666,22 +2813,22 @@ export function Engagements({
                 </ul>
               )}
 
-              {/* Assign button */}
               <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={handleAssignAssistants}
-                  disabled={selectedEmployeeIds.size === 0 || assigningAssistants}
+                  onClick={() => void handleAssignAssistants()}
+                  disabled={selectedCount === 0 || assigningAssistants}
                   className="w-full sm:w-auto px-4 py-2 rounded-lg bg-zinc-900 text-white text-sm font-medium hover:bg-zinc-800 disabled:opacity-50"
                 >
                   {assigningAssistants
                     ? "Assigning…"
-                    : `Assign${selectedEmployeeIds.size > 0 ? ` (${selectedEmployeeIds.size})` : ""}`}
+                    : `Assign${selectedCount > 0 ? ` (${selectedCount})` : ""}`}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setAddAssistantsOpen(false);
+                    setSelectedPartnerIds(new Set());
                     setSelectedEmployeeIds(new Set());
                     setEmployeeSearch("");
                   }}

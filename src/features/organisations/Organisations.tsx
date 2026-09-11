@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Search, Plus, Loader2, Users, X, FileBarChart, FileText, MapPin } from "lucide-react";
 import { DataTable, type Column } from "../../shared/ui/DataTable";
 import { PermissionGate, usePermissions } from "../../contexts/PermissionContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { Modal } from "../../shared/ui/Modal";
 import { ParticipantsModal } from "../../shared/ui/ParticipantsModal";
 import { OrganizationEngagementsModal } from "../../shared/ui/OrganizationEngagementsModal";
@@ -24,7 +25,7 @@ import {
   engagementsApi,
   uploadsApi,
   campReportsApi,
-  usersApi,
+  partnersApi,
   type EmployeeListItem,
   type UserListItem,
   type OrganizationListItem,
@@ -50,13 +51,20 @@ type TabKey = "organizations" | "camps";
 const TAB_KEYS: TabKey[] = ["organizations", "camps"];
 
 export function Organisations() {
+  const { employeeRole } = useAuth();
+  const isOrgManager = employeeRole === "organization_manager";
   const { canEditTask, canViewTask } = usePermissions();
   const mayEditOrganizations = canEditTask("organizations", "organizations");
   const mayViewReports = canViewTask("reports", "camp_reports");
   const mayEditReports = canEditTask("reports", "camp_reports");
   const navigate = useNavigate();
   const { tab: tabParam } = useParams<{ tab?: string }>();
-  const activeTab: TabKey = TAB_KEYS.includes(tabParam as TabKey) ? (tabParam as TabKey) : "organizations";
+  const activeTab: TabKey =
+    isOrgManager
+      ? "organizations"
+      : TAB_KEYS.includes(tabParam as TabKey)
+        ? (tabParam as TabKey)
+        : "organizations";
 
   const [data, setData] = useState<OrganizationListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -198,25 +206,48 @@ export function Organisations() {
     setLoading(true);
     setError(null);
     try {
-      const res = await organizationsApi.list({
-        page,
-        limit,
-        status: statusFilter || undefined,
-        search: search.trim() || undefined,
-        city: cityFilter || undefined,
-        country: countryFilter || undefined,
-        industry_key: industryFilter || undefined,
-        sort_by: sortKey,
-        sort_dir: sortDir,
-      });
-      setData(res.data.data);
-      setTotal(res.data.meta.total);
+      if (isOrgManager) {
+        const res = await organizationsApi.listMine({
+          page,
+          limit,
+          search: search.trim() || undefined,
+          sort_by: sortKey,
+          sort_dir: sortDir,
+        });
+        setData(res.data.data);
+        setTotal(res.data.meta.total);
+      } else {
+        const res = await organizationsApi.list({
+          page,
+          limit,
+          status: statusFilter || undefined,
+          search: search.trim() || undefined,
+          city: cityFilter || undefined,
+          country: countryFilter || undefined,
+          industry_key: industryFilter || undefined,
+          sort_by: sortKey,
+          sort_dir: sortDir,
+        });
+        setData(res.data.data);
+        setTotal(res.data.meta.total);
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, search, cityFilter, countryFilter, industryFilter, sortKey, sortDir]);
+  }, [
+    isOrgManager,
+    page,
+    limit,
+    statusFilter,
+    search,
+    cityFilter,
+    countryFilter,
+    industryFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   const fetchCamps = useCallback(async () => {
     setCampsLoading(true);
@@ -254,6 +285,11 @@ export function Organisations() {
   }, [campsPage, campsLimit, campsSearch, campsSortKey, campsSortDir]);
 
   const fetchEmployees = useCallback(async () => {
+    if (isOrgManager) {
+      setEmployees([]);
+      setEmployeeLoading(false);
+      return;
+    }
     setEmployeeLoading(true);
     setError(null);
     try {
@@ -276,7 +312,7 @@ export function Organisations() {
     } finally {
       setEmployeeLoading(false);
     }
-  }, []);
+  }, [isOrgManager]);
 
   useEffect(() => {
     if (activeTab === "organizations") {
@@ -285,10 +321,10 @@ export function Organisations() {
   }, [activeTab, fetchList]);
 
   useEffect(() => {
-    if (activeTab === "camps") {
+    if (activeTab === "camps" && !isOrgManager) {
       fetchCamps();
     }
-  }, [activeTab, fetchCamps]);
+  }, [activeTab, fetchCamps, isOrgManager]);
 
   useEffect(() => {
     setPage(1);
@@ -375,34 +411,35 @@ export function Organisations() {
   const formatUserLabel = (userId: number | null | undefined): string => {
     if (!userId) return "—";
     const user = usersById[userId];
-    if (!user) return `User #${userId}`;
+    if (!user) return `Partner #${userId}`;
     const first = (user.first_name ?? "").trim();
     const last = (user.last_name ?? "").trim();
     const name = [first, last].filter(Boolean).join(" ").trim();
-    return name ? `${name} (#${userId})` : `User #${userId}`;
+    return name ? `${name} (#${userId})` : `Partner #${userId}`;
   };
 
   const loadContactPersonUsers = async (value: ContactPersonUserIds | null | undefined) => {
-    const userIds = collectContactPersonUserIds(value);
+    const partnerIds = collectContactPersonUserIds(value);
     await Promise.all(
-      userIds.map(async (userId) => {
-        if (usersById[userId]) return;
+      partnerIds.map(async (partnerId) => {
+        if (usersById[partnerId]) return;
         try {
-          const res = await usersApi.get(userId);
-          const u = res.data.data;
+          const res = await partnersApi.get(partnerId);
+          const p = res.data.data;
+          const nameParts = (p.name ?? "").trim().split(/\s+/);
+          const first_name = nameParts[0] ?? "";
+          const last_name = nameParts.slice(1).join(" ") || null;
           setUsersById((prev) => ({
             ...prev,
-            [userId]: {
-              user_id: u.user_id,
-              first_name: u.first_name,
-              last_name: u.last_name,
-              phone: u.phone,
-              email: u.email,
-              status: u.status,
-            },
+            [partnerId]: {
+              user_id: partnerId,
+              first_name,
+              last_name,
+              phone: p.phone,
+            } as UserListItem,
           }));
         } catch {
-          // ignore lookup errors in view mode
+          // Label falls back to Partner #id
         }
       })
     );
@@ -559,7 +596,7 @@ export function Organisations() {
       sortable: true,
       render: (row) => {
         const isActive = (row.status ?? "").toLowerCase() === "active";
-        if (!mayEditOrganizations) {
+        if (!mayEditOrganizations || isOrgManager) {
           return (
             <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
               isActive ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
@@ -744,7 +781,7 @@ export function Organisations() {
     <div>
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-lg sm:text-xl font-semibold text-zinc-900">Organisations</h1>
-        {activeTab === "organizations" && (
+        {activeTab === "organizations" && !isOrgManager && (
           <div className="flex items-center gap-3">
             <PermissionGate category="organizations" taskKey="industries" action="edit">
             <button
@@ -779,6 +816,7 @@ export function Organisations() {
         )}
       </div>
 
+      {!isOrgManager && (
       <div className="flex gap-1 mb-5 border-b border-zinc-200">
         {TAB_KEYS.map((tab) => (
           <button
@@ -794,6 +832,7 @@ export function Organisations() {
           </button>
         ))}
       </div>
+      )}
 
       {activeTab === "organizations" && (
         <>
@@ -814,6 +853,7 @@ export function Organisations() {
             className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
           />
         </div>
+        {!isOrgManager && (
         <div className="flex flex-row gap-3 flex-wrap sm:flex-nowrap">
           <select
             value={cityFilter}
@@ -864,6 +904,7 @@ export function Organisations() {
             ))}
           </select>
         </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-zinc-200 overflow-hidden">
@@ -884,7 +925,7 @@ export function Organisations() {
             onParticipants={(r) =>
               setParticipantsOrg({ orgId: r.organization_id, orgName: r.name ?? undefined })
             }
-            onDelete={(r) => setDeleteConfirm(r)}
+            onDelete={isOrgManager ? undefined : (r) => setDeleteConfirm(r)}
             pagination={{
               page,
               limit,
@@ -1439,6 +1480,7 @@ export function Organisations() {
                 }
                 departments={departmentOptions}
                 engagementCities={engagementCities}
+                disabled={isOrgManager || modalMode === "view"}
               />
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-zinc-700 mb-1">BD Employee</label>
@@ -1460,7 +1502,16 @@ export function Organisations() {
                     const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
                     return (
                       <option key={employee.employee_id} value={employee.employee_id}>
-                        {name || `User ${employee.user_id}`} (#{employee.employee_id}){employee.role ? ` • ${employee.role}` : ""}
+                        {name || `User ${employee.user_id}`} (#{employee.employee_id})
+                        {employee.role
+                          ? ` • ${
+                              employee.role === "inferior_admin"
+                                ? "Employee"
+                                : employee.role === "admin"
+                                  ? "Admin"
+                                  : employee.role
+                            }`
+                          : ""}
                       </option>
                     );
                   })}

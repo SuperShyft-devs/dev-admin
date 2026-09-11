@@ -12,6 +12,7 @@ export const PERMISSION_CATEGORIES = [
   "checklists_tasks",
   "support",
   "employees",
+  "partners",
   "platform_settings",
   "system_monitoring",
 ] as const;
@@ -24,6 +25,8 @@ export type EmployeeRole =
   | "onboarding_assistant"
   | "organization_manager"
   | "expert";
+
+export type PartnerRole = "phlebo" | "expert" | "organization_manager";
 
 export interface CategoryPermission {
   category: PermissionCategory;
@@ -49,6 +52,7 @@ export const PERMISSION_METADATA: ReadonlyArray<{
   { key: "checklists_tasks", label: "Checklists & Tasks", description: "Checklist templates and task administration" },
   { key: "support", label: "Support", description: "Support tickets" },
   { key: "employees", label: "Employees", description: "Employee directory" },
+  { key: "partners", label: "Partners", description: "Phlebo, expert, and organization manager partners" },
   { key: "platform_settings", label: "Platform Settings", description: "Platform-level configuration" },
   { key: "system_monitoring", label: "System Monitoring", description: "Server health and monitoring" },
 ] as const;
@@ -184,6 +188,7 @@ export function categoryForPath(pathname: string): PermissionCategory | null {
   if (pathname.startsWith("/checklists")) return "checklists_tasks";
   if (pathname.startsWith("/support")) return "support";
   if (pathname.startsWith("/employees")) return "employees";
+  if (pathname.startsWith("/partners")) return "partners";
   if (pathname.startsWith("/settings")) return "platform_settings";
   if (pathname.startsWith("/server")) return "system_monitoring";
   return null;

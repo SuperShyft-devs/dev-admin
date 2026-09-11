@@ -6,7 +6,7 @@ import { usePermissions } from "../../contexts/PermissionContext";
 import {
   assessmentPackagesApi,
   diagnosticPackagesApi,
-  employeesApi,
+  partnersApi,
   engagementNotificationsApi,
   engagementTypesApi,
   notificationEventsApi,
@@ -16,7 +16,7 @@ import {
   type B2cOnboardingTypeDefaults,
   type DefaultOnboardingAssistantItem,
   type DiagnosticPackageListItem,
-  type EmployeeListItem,
+  type PartnerListItem,
   type EngagementTypeItem,
   type BloodCollectionType,
   type EngagementsSyncImportPageResult,
@@ -100,14 +100,16 @@ function labelDiagnostic(p: DiagnosticPackageListItem) {
   return `${name} (#${p.diagnostic_package_id})`;
 }
 
-function labelEmployee(emp: EmployeeListItem | DefaultOnboardingAssistantItem) {
-  const first = emp.first_name?.trim() ?? "";
-  const last = emp.last_name?.trim() ?? "";
+function labelPartner(p: PartnerListItem | DefaultOnboardingAssistantItem) {
+  if ("name" in p && typeof (p as { name?: string }).name === "string" && (p as { name?: string }).name?.trim()) {
+    return (p as { name: string }).name.trim();
+  }
+  const first = p.first_name?.trim() ?? "";
+  const last = p.last_name?.trim() ?? "";
   const full = `${first} ${last}`.trim();
-  return full || `Employee #${emp.employee_id}`;
+  const id = "partner_id" in p ? (p as PartnerListItem).partner_id : p.employee_id;
+  return full || `Partner #${id}`;
 }
-
-const ASSIGNABLE_ASSISTANT_ROLES = new Set(["admin", "onboarding_assistant", "organization_manager", "expert"]);
 
 const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: string }[] = [
   { value: "", label: "None" },
@@ -173,7 +175,7 @@ export function Settings() {
   const mayEditSettings = canEditTask("platform_settings", "settings");
   const mayViewAssessments = canViewTask("assessments", "packages");
   const mayViewDiagnostics = canViewTask("diagnostics", "packages");
-  const mayViewEmployees = canViewTask("employees", "directory");
+  const mayViewPartners = canViewTask("partners", "directory");
   const mayViewNotifications = canViewTask("notifications", "defaults");
   const mayEditNotifications = canEditTask("notifications", "defaults");
   const mayEditUsers = canEditTask("users", "profiles");
@@ -207,7 +209,7 @@ export function Settings() {
   const notifDraftsRef = useRef<Record<number, Record<number, NotificationServiceConfigItem[]>>>({});
   const notifOriginalsRef = useRef<Record<number, Record<number, NotificationServiceConfigItem[]>>>({});
 
-  const [defaultAssistantEmployees, setDefaultAssistantEmployees] = useState<EmployeeListItem[]>([]);
+  const [defaultAssistantPartners, setDefaultAssistantPartners] = useState<PartnerListItem[]>([]);
   const [selectedDefaultAssistantIds, setSelectedDefaultAssistantIds] = useState<Set<number>>(new Set());
   const [defaultAssistantSearch, setDefaultAssistantSearch] = useState("");
   const [savingDefaultAssistants, setSavingDefaultAssistants] = useState(false);
@@ -262,7 +264,7 @@ export function Settings() {
     setError(null);
     setSaveOk(null);
     try {
-      const [defaultsRes, typesRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, employeesRes] =
+      const [defaultsRes, typesRes, assistantDefaultsRes, supportQueryRes, notifServicesRes, aPkgs, dRes, partnersRes] =
         await Promise.all([
         platformSettingsApi.getB2cOnboarding(),
         engagementTypesApi.list({ is_active: true }),
@@ -275,8 +277,8 @@ export function Settings() {
             )
           : Promise.resolve([]),
         mayViewDiagnostics ? diagnosticPackagesApi.list() : Promise.resolve(null),
-        mayViewEmployees
-          ? employeesApi.list({ status: "active", limit: 100 })
+        mayViewPartners
+          ? partnersApi.list({ status: "active", role: "phlebo", limit: 100 })
           : Promise.resolve(null),
       ]);
 
@@ -301,10 +303,7 @@ export function Settings() {
       );
 
       setAssessmentPackages(aPkgs);
-      const assignableEmployees = (employeesRes?.data.data ?? []).filter((e) =>
-        ASSIGNABLE_ASSISTANT_ROLES.has((e.role ?? "").toLowerCase())
-      );
-      setDefaultAssistantEmployees(assignableEmployees);
+      setDefaultAssistantPartners(partnersRes?.data.data ?? []);
       const dPkgs = (dRes?.data.data ?? []).filter(
         (p) => (p.status ?? "active").toLowerCase() === "active"
       );
@@ -317,7 +316,7 @@ export function Settings() {
   }, [
     mayViewAssessments,
     mayViewDiagnostics,
-    mayViewEmployees,
+    mayViewPartners,
     mayViewNotifications,
   ]);
 
@@ -496,18 +495,19 @@ export function Settings() {
     });
   }
 
-  const filteredDefaultAssistantEmployees = useMemo(() => {
+  const filteredDefaultAssistantPartners = useMemo(() => {
     const q = defaultAssistantSearch.trim().toLowerCase();
-    if (!q) return defaultAssistantEmployees;
-    return defaultAssistantEmployees.filter((e) => {
-      const name = labelEmployee(e).toLowerCase();
+    if (!q) return defaultAssistantPartners;
+    return defaultAssistantPartners.filter((p) => {
+      const name = labelPartner(p).toLowerCase();
       return (
-        String(e.employee_id).includes(q) ||
-        (e.role ?? "").toLowerCase().includes(q) ||
+        String(p.partner_id).includes(q) ||
+        (p.role ?? "").toLowerCase().includes(q) ||
+        (p.phone ?? "").toLowerCase().includes(q) ||
         name.includes(q)
       );
     });
-  }, [defaultAssistantEmployees, defaultAssistantSearch]);
+  }, [defaultAssistantPartners, defaultAssistantSearch]);
 
   useEffect(() => {
     engagementTypesApi.list({ is_active: true }).then((res) => {
@@ -1095,49 +1095,47 @@ export function Settings() {
         >
           <h2 className="text-sm font-semibold text-zinc-900">Default onboarding assistants</h2>
           <p className="text-xs text-zinc-500 -mt-2">
-            Auto-assigned when new B2B or B2C engagements are created.{" "}
-            <code className="bg-zinc-100 px-1 rounded">organization_manager</code> employees only
-            apply to B2B engagements for organizations they manage.
+            Auto-assigned when new B2B or B2C engagements are created. Select active phlebo partners.
           </p>
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="search"
-              placeholder="Search by name, role, or ID…"
+              placeholder="Search by name, phone, or ID…"
               value={defaultAssistantSearch}
               onChange={(ev) => setDefaultAssistantSearch(ev.target.value)}
               className="w-full pl-9 pr-4 py-2 rounded-lg border border-zinc-300 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
             />
           </div>
 
-          {defaultAssistantEmployees.length === 0 ? (
-            <p className="text-sm text-zinc-500">No active assignable employees found.</p>
-          ) : filteredDefaultAssistantEmployees.length === 0 ? (
-            <p className="text-sm text-zinc-500">No employees match your search.</p>
+          {defaultAssistantPartners.length === 0 ? (
+            <p className="text-sm text-zinc-500">No active phlebo partners found.</p>
+          ) : filteredDefaultAssistantPartners.length === 0 ? (
+            <p className="text-sm text-zinc-500">No phlebos match your search.</p>
           ) : (
             <ul className="divide-y divide-zinc-100 border border-zinc-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-              {filteredDefaultAssistantEmployees.map((e) => {
-                const checked = selectedDefaultAssistantIds.has(e.employee_id);
+              {filteredDefaultAssistantPartners.map((p) => {
+                const checked = selectedDefaultAssistantIds.has(p.partner_id);
                 return (
                   <li
-                    key={e.employee_id}
+                    key={p.partner_id}
                     className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 ${
                       checked ? "bg-zinc-50" : "bg-white"
                     }`}
-                    onClick={() => toggleDefaultAssistantSelection(e.employee_id)}
+                    onClick={() => toggleDefaultAssistantSelection(p.partner_id)}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => toggleDefaultAssistantSelection(e.employee_id)}
+                      onChange={() => toggleDefaultAssistantSelection(p.partner_id)}
                       onClick={(ev) => ev.stopPropagation()}
                       className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 shrink-0"
                     />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-zinc-900 truncate">{labelEmployee(e)}</p>
+                      <p className="text-sm font-medium text-zinc-900 truncate">{labelPartner(p)}</p>
                       <p className="text-xs text-zinc-500 truncate">
-                        {e.role ? `Role: ${e.role}` : "No role"}
+                        {p.phone || p.email || "Phlebo"}
                       </p>
                     </div>
                   </li>

@@ -27,6 +27,7 @@ vi.mock("../contexts/AuthContext", () => ({
     isAuthenticated: false,
     isLoading: false,
     employeeRole: null,
+    authKind: null,
     logout: vi.fn(),
     refreshProfile: vi.fn(),
     error: null,
@@ -41,7 +42,7 @@ describe("Login", () => {
     mockSendOtp.mockReset();
     mockResendOtp.mockReset();
     mockLogin.mockReset();
-    mockSendOtp.mockResolvedValue({ session_id: 1 });
+    mockSendOtp.mockResolvedValue({ session_id: 1, authKind: "employee" });
     mockResendOtp.mockResolvedValue({ session_id: 2 });
     mockLogin.mockResolvedValue(null);
   });
@@ -87,7 +88,7 @@ describe("Login", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resend OTP" }));
 
     await waitFor(() => {
-      expect(mockResendOtp).toHaveBeenCalledWith("9876543210");
+      expect(mockResendOtp).toHaveBeenCalledWith("9876543210", "employee");
       expect(mockResendOtp).toHaveBeenCalledTimes(1);
     });
   });
@@ -125,7 +126,7 @@ describe("Login", () => {
         undefined,
         {
           status: 404,
-          data: { error_code: "USER_NOT_FOUND", message: "User does not exist" },
+          data: { error_code: "EMPLOYEE_NOT_FOUND", message: "Employee does not exist" },
         } as import("axios").AxiosResponse
       )
     );
@@ -140,7 +141,7 @@ describe("Login", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resend OTP" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent("User does not exist");
+      expect(screen.getByRole("alert")).toHaveTextContent("Employee does not exist");
       expect(screen.getByRole("button", { name: "Resend OTP" })).toBeInTheDocument();
       expect(screen.queryByText(/Resend OTP in \d+s/)).not.toBeInTheDocument();
     });
@@ -155,7 +156,7 @@ describe("Login", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify & Sign in" }));
 
     await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith("9876543210", "123456");
+      expect(mockLogin).toHaveBeenCalledWith("9876543210", "123456", "employee");
       expect(mockNavigate).toHaveBeenCalledWith("/", { replace: true });
     });
   });
