@@ -1,20 +1,62 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getApiError } from "../lib/api";
 import { resolvePostLoginPath } from "../lib/authStorage";
 import { Loader2 } from "lucide-react";
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export function Login() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login, sendOtp, isAuthenticated, isLoading, employeeRole } = useAuth();
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
+  const { login, sendOtp, resendOtp, isAuthenticated, isLoading, employeeRole } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTarget = searchParams.get("redirect");
+
+  useEffect(() => {
+    if (resendAvailableAt === null) {
+      setResendSecondsLeft(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const secondsLeft = Math.max(
+        0,
+        Math.ceil((resendAvailableAt - Date.now()) / 1000)
+      );
+      setResendSecondsLeft(secondsLeft);
+      if (secondsLeft === 0) {
+        setResendAvailableAt(null);
+      }
+    };
+
+    updateCountdown();
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [resendAvailableAt]);
+
+  const startResendCooldown = () => {
+    setResendAvailableAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+    setResendSecondsLeft(RESEND_COOLDOWN_SECONDS);
+  };
+
+  const resetOtpStep = () => {
+    setStep("phone");
+    setOtp("");
+    setResendStatus(null);
+    setResendAvailableAt(null);
+    setResendSecondsLeft(0);
+    setError(null);
+  };
 
   if (!isLoading && isAuthenticated) {
     navigate(resolvePostLoginPath(employeeRole, redirectTarget), { replace: true });
@@ -23,6 +65,7 @@ export function Login() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResendStatus(null);
     const normalizedPhone = phone.replace(/\D/g, "");
     if (!normalizedPhone) {
       setError("Please enter your phone number");
@@ -34,6 +77,7 @@ export function Login() {
       setPhone(normalizedPhone);
       setStep("otp");
       setOtp("");
+      startResendCooldown();
     } catch (err) {
       setError(getApiError(err, "auth"));
     } finally {
@@ -41,9 +85,27 @@ export function Login() {
     }
   };
 
+  const handleResendOtp = async () => {
+    if (resendLoading || resendSecondsLeft > 0) return;
+    setError(null);
+    setResendStatus(null);
+    setResendLoading(true);
+    try {
+      await resendOtp(phone);
+      setOtp("");
+      setResendStatus("A new verification code has been sent.");
+      startResendCooldown();
+    } catch (err) {
+      setError(getApiError(err, "auth"));
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResendStatus(null);
     if (!otp.trim()) {
       setError("Please enter the OTP");
       return;
@@ -58,6 +120,8 @@ export function Login() {
       setLoading(false);
     }
   };
+
+  const isOtpActionDisabled = loading || resendLoading;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4 sm:p-6">
@@ -77,7 +141,10 @@ export function Login() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm">
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm"
+          >
             {error}
           </div>
         )}
@@ -134,16 +201,37 @@ export function Login() {
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder="Enter 6-digit OTP"
                 className="w-full px-3 py-2 rounded-lg border border-zinc-300 text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent"
-                disabled={loading}
+                disabled={isOtpActionDisabled}
                 autoFocus
               />
               <p className="mt-1 text-xs text-zinc-500">
                 Code sent to {phone}
               </p>
+              {resendStatus && (
+                <p role="status" aria-live="polite" className="mt-1 text-xs text-green-700">
+                  {resendStatus}
+                </p>
+              )}
+              <div className="mt-2">
+                {resendSecondsLeft > 0 ? (
+                  <p className="text-xs text-zinc-500">
+                    Resend OTP in {resendSecondsLeft}s
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isOtpActionDisabled}
+                    className="text-xs font-medium text-zinc-700 hover:text-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {resendLoading ? "Resending..." : "Resend OTP"}
+                  </button>
+                )}
+              </div>
             </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={isOtpActionDisabled}
               className="w-full py-2.5 px-4 rounded-lg bg-zinc-900 text-white font-medium hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -157,11 +245,9 @@ export function Login() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setStep("phone");
-                setError(null);
-              }}
-              className="w-full text-sm text-zinc-500 hover:text-zinc-700"
+              onClick={resetOtpStep}
+              disabled={isOtpActionDisabled}
+              className="w-full text-sm text-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Change phone number
             </button>

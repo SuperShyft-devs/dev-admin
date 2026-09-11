@@ -416,6 +416,8 @@ export interface AuthTokens {
 export const authApi = {
   sendOtp: (phone: string) =>
     authHttp.post<{ data: { session_id: number } }>("/auth/send-otp", { phone }),
+  resendOtp: (phone: string) =>
+    authHttp.post<{ data: { session_id: number } }>("/auth/resend-otp", { phone }),
   verifyOtp: (phone: string, otp: string) =>
     authHttp.post<{ data: AuthTokens }>("/auth/verify-otp", { phone, otp }),
   refreshToken: (refreshToken: string) =>

@@ -32,6 +32,7 @@ interface AuthContextValue extends AuthState {
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   sendOtp: (phone: string) => Promise<{ session_id: number }>;
+  resendOtp: (phone: string) => Promise<{ session_id: number }>;
   error: string | null;
   clearError: () => void;
 }
@@ -57,6 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sendOtp = useCallback(async (phone: string) => {
     setError(null);
     const res = await authApi.sendOtp(phone);
+    return res.data.data;
+  }, []);
+
+  const resendOtp = useCallback(async (phone: string) => {
+    setError(null);
+    const res = await authApi.resendOtp(phone);
     return res.data.data;
   }, []);
 
@@ -152,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     refreshProfile,
     sendOtp,
+    resendOtp,
     error,
     clearError,
   };
