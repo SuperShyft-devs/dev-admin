@@ -1498,7 +1498,8 @@ export function Organisations() {
                 >
                   <option value="">Unassigned</option>
                   {employees.map((employee) => {
-                    const user = usersById[employee.user_id];
+                    const user =
+                      employee.user_id != null ? usersById[employee.user_id] : undefined;
                     const name = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
                     return (
                       <option key={employee.employee_id} value={employee.employee_id}>

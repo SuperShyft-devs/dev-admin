@@ -14,6 +14,7 @@ import {
   permissionForRole,
   type PermissionCategory,
   type PermissionLevel,
+  type EmployeeRole,
   type PermissionMap,
   type TaskPermissionMap,
 } from "../auth/permissions";
@@ -43,7 +44,8 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     [userProfile?.employee?.permissions]
   );
   const level = useCallback(
-    (category: PermissionCategory) => permissionForRole(employeeRole, permissions, category),
+    (category: PermissionCategory) =>
+      permissionForRole(employeeRole as EmployeeRole | null, permissions, category),
     [employeeRole, permissions]
   );
   const canView = useCallback(

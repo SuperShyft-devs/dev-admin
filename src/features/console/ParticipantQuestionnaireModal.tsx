@@ -13,6 +13,7 @@ import {
   filterConsoleQuestionnaireCategories,
   pickLatestMetsightsAssessment,
   sortCategories,
+  type ConsoleQuestionnaireEmployeeRole,
 } from "./consoleQuestionnaireUtils";
 import { QuestionnaireCategoryGrid } from "./QuestionnaireCategoryGrid";
 import { QuestionnaireQuestionWizard } from "./QuestionnaireQuestionWizard";
@@ -76,7 +77,10 @@ export function ParticipantQuestionnaireModal({
       );
       setCategories(
         sortCategories(
-          filterConsoleQuestionnaireCategories(statusRes.data.data ?? [], employeeRole)
+          filterConsoleQuestionnaireCategories(
+            statusRes.data.data ?? [],
+            employeeRole as ConsoleQuestionnaireEmployeeRole
+          )
         )
       );
     } catch (err) {

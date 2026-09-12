@@ -2864,7 +2864,7 @@ export type CreatePhleboResponse =
       phone?: string | null;
       email?: string | null;
       role?: string | null;
-      status?: string | null;
+      partner_status?: string | null;
     };
 
 // Occupied Slots

@@ -102,14 +102,14 @@ function labelDiagnostic(p: DiagnosticPackageListItem) {
 }
 
 function labelPartner(p: PartnerListItem | DefaultOnboardingAssistantItem) {
-  if ("name" in p && typeof (p as { name?: string }).name === "string" && (p as { name?: string }).name?.trim()) {
-    return (p as { name: string }).name.trim();
+  if ("partner_id" in p) {
+    const name = p.name?.trim();
+    return name || `Partner #${p.partner_id}`;
   }
   const first = p.first_name?.trim() ?? "";
   const last = p.last_name?.trim() ?? "";
   const full = `${first} ${last}`.trim();
-  const id = "partner_id" in p ? (p as PartnerListItem).partner_id : p.employee_id;
-  return full || `Partner #${id}`;
+  return full || `Partner #${p.employee_id}`;
 }
 
 const BLOOD_COLLECTION_TYPE_OPTIONS: { value: BloodCollectionType | ""; label: string }[] = [
