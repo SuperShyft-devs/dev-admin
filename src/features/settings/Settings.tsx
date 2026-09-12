@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, Pause, Play, RefreshCw, Save, ScrollText, Search, Users } from "lucide-react";
 import { DuplicatedUsersModal } from "./DuplicatedUsersModal";
+import { MetsightsBloodMappingSection } from "./MetsightsBloodMappingSection";
 import { IntegrationSyncLogsModal } from "../assessments/IntegrationSyncLogsModal";
 import { usePermissions } from "../../contexts/PermissionContext";
 import {
@@ -179,6 +180,7 @@ export function Settings() {
   const mayViewNotifications = canViewTask("notifications", "defaults");
   const mayEditNotifications = canEditTask("notifications", "defaults");
   const mayEditUsers = canEditTask("users", "profiles");
+  const mayViewIntegrations = canViewTask("assessments", "integrations");
   const mayViewSystemMonitoring = canViewTask("system_monitoring", "audit_logs");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1675,6 +1677,8 @@ export function Settings() {
           </div>
         ) : null}
       </section>
+
+      {mayViewIntegrations && <MetsightsBloodMappingSection />}
 
       {mayEditUsers && <section className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-zinc-900">User maintenance</h2>

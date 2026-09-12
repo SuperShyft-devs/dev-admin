@@ -405,6 +405,50 @@ export const platformSettingsApi = {
     ),
 };
 
+export interface MetsightsBloodMappingPayload {
+  flow: string[];
+  package_matrix: Array<{
+    package_code: string;
+    assessment_type_code: string;
+    blood_categories: string[];
+    all_metsights_categories: string[];
+    hormones_required: boolean;
+  }>;
+  key_aliases: Array<{
+    healthians_key: string;
+    metsights_key: string;
+    catalog_unit: string | null;
+    metsights_units: Array<{ code: string; label: string }>;
+  }>;
+  reverse_aliases: Record<string, string[]>;
+  unit_synonyms: Array<{
+    healthians: string;
+    maps_to: string;
+    metsights_code: string;
+  }>;
+  hormone_placeholders: Array<{
+    question_key: string;
+    value: number;
+    unit_code: string;
+    when: string;
+  }>;
+  internal_fallbacks: Array<{
+    question_key: string;
+    value: number;
+    unit_code: string;
+    when: string;
+  }>;
+  category_keys: { blood: string; advanced_blood: string };
+  counts: { blood_fields: number; advanced_fields: number; key_aliases: number };
+}
+
+export const integrationsApi = {
+  getMetsightsBloodMapping: () =>
+    api.get<{ data: MetsightsBloodMappingPayload; meta: Record<string, unknown> }>(
+      "/integrations/metsights-blood-mapping"
+    ),
+};
+
 // Auth (patient / legacy user OTP — not used by admin dashboard login)
 export interface AuthTokens {
   user_id: number;
