@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import axios from "axios";
 import { Loader2 } from "lucide-react";
 import { usePageHeader } from "../../layouts/PageHeaderActions";
 import { Modal } from "../../shared/ui/Modal";
@@ -219,7 +220,16 @@ export function DiagnosticTestGroupFormPage({ mode }: { mode: FormPageMode }) {
       await diagnosticTestGroupsApi.update(groupId, payload);
       navigate(`/diagnostics/test-groups/${groupId}`);
     } catch (err) {
-      setFormError(getApiError(err));
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const data = err.response.data as { message?: string; packages?: Array<{ package_name: string }> };
+        let message = data.message ?? getApiError(err);
+        if (data.packages?.length) {
+          message = `${message} (${data.packages.map((p) => p.package_name).join(", ")})`;
+        }
+        setFormError(message);
+      } else {
+        setFormError(getApiError(err));
+      }
     } finally {
       setSubmitting(false);
     }

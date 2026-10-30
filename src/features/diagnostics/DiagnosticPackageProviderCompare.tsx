@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { ChevronDown, ChevronRight, Link, Loader2, RefreshCw, Search } from "lucide-react";
-import { diagnosticPackagesApi, getApiError, type ProviderTestDiffResponse } from "../../lib/api";
+import { diagnosticPackagesApi, diagnosticTestGroupsApi, getApiError, type ProviderTestDiffResponse } from "../../lib/api";
 
 interface DiagnosticPackageProviderCompareProps {
-  packageId: number;
+  packageId?: number;
+  testGroupId?: number;
   externalPackageCode: string | null | undefined;
   editPackagePath?: string;
-  onMapTest: (testId: number, testName: string) => void;
+  onMapTest?: (testId: number, testName: string) => void;
   /** When set, diff is loaded by the parent (no duplicate fetch). */
   diff?: ProviderTestDiffResponse | null;
   diffLoading?: boolean;
@@ -16,6 +17,7 @@ interface DiagnosticPackageProviderCompareProps {
   /** Self-fetch mode when parent does not pass onRefresh. */
   active?: boolean;
   refreshToken?: number;
+  onlyInEntityLabel?: string;
 }
 
 function matchesSearch(haystack: string, query: string): boolean {
@@ -76,6 +78,7 @@ function GroupList({ names }: { names: string[] }) {
 
 export function DiagnosticPackageProviderCompare({
   packageId,
+  testGroupId,
   externalPackageCode,
   editPackagePath,
   onMapTest,
@@ -85,8 +88,10 @@ export function DiagnosticPackageProviderCompare({
   onRefresh,
   active = true,
   refreshToken = 0,
+  onlyInEntityLabel = "only in package",
 }: DiagnosticPackageProviderCompareProps) {
   const controlled = onRefresh != null;
+  const entityId = testGroupId ?? packageId ?? 0;
 
   const [internalLoading, setInternalLoading] = useState(false);
   const [internalError, setInternalError] = useState<string | null>(null);
@@ -98,7 +103,9 @@ export function DiagnosticPackageProviderCompare({
     setInternalLoading(true);
     setInternalError(null);
     try {
-      const res = await diagnosticPackagesApi.getProviderTestDiff(packageId);
+      const res = testGroupId
+        ? await diagnosticTestGroupsApi.getProviderTestDiff(testGroupId)
+        : await diagnosticPackagesApi.getProviderTestDiff(packageId!);
       setInternalData(res.data.data);
     } catch (err) {
       setInternalError(getApiError(err));
@@ -106,12 +113,12 @@ export function DiagnosticPackageProviderCompare({
     } finally {
       setInternalLoading(false);
     }
-  }, [packageId]);
+  }, [packageId, testGroupId]);
 
   useEffect(() => {
-    if (controlled || !active || !packageId) return;
+    if (controlled || !active || !entityId) return;
     void load();
-  }, [controlled, active, packageId, refreshToken, load]);
+  }, [controlled, active, entityId, refreshToken, load]);
 
   const data = controlled ? controlledDiff ?? null : internalData;
   const loading = controlled ? (controlledLoading ?? false) : internalLoading;
@@ -131,7 +138,9 @@ export function DiagnosticPackageProviderCompare({
   if (!code) {
     return (
       <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-        Add a Healthians package code before comparing tests.{" "}
+        {testGroupId
+          ? "Add a Healthians test group code before comparing tests."
+          : "Add a Healthians package code before comparing tests."}{" "}
         {editPackagePath ? (
           <RouterLink to={editPackagePath} className="font-medium text-zinc-900 underline underline-offset-2">
             Edit package
@@ -170,7 +179,7 @@ export function DiagnosticPackageProviderCompare({
           {filtered && (
             <span className="text-xs text-zinc-500">
               {filtered.counts.matched} matched · {filtered.counts.only_at_provider} only at Healthians ·{" "}
-              {filtered.counts.only_in_package} only in package · {filtered.counts.not_linked} not linked
+              {filtered.counts.only_in_package} {onlyInEntityLabel} · {filtered.counts.not_linked} not linked
             </span>
           )}
         </div>
@@ -282,14 +291,16 @@ export function DiagnosticPackageProviderCompare({
                   <p className="text-sm text-zinc-900">{row.test_name}</p>
                   <GroupList names={row.group_names} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onMapTest(row.test_id, row.test_name)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-medium shrink-0"
-                >
-                  <Link className="w-3.5 h-3.5" />
-                  Map
-                </button>
+                {onMapTest ? (
+                  <button
+                    type="button"
+                    onClick={() => onMapTest(row.test_id, row.test_name)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 text-xs font-medium shrink-0"
+                  >
+                    <Link className="w-3.5 h-3.5" />
+                    Map
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>

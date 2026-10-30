@@ -45,6 +45,8 @@ interface HealthiansMapModalProps {
   currentHealthiansParameterId?: string | null;
   diagnosticProvider: string | null | undefined;
   externalPackageCode: string | null | undefined;
+  /** Healthians product deal type when loading constituents (default package). */
+  healthiansDealType?: "package" | "profile";
   allTests: MapModalTest[];
   onMapped: () => void | Promise<void>;
   onSwitchTest: (test: MapModalTest) => void;
@@ -58,6 +60,7 @@ export function HealthiansMapModal({
   currentHealthiansParameterId,
   diagnosticProvider,
   externalPackageCode,
+  healthiansDealType = "package",
   allTests,
   onMapped,
   onSwitchTest,
@@ -113,7 +116,7 @@ export function HealthiansMapModal({
       try {
         const res = orangeHealthProvider
           ? await orangeHealthApi.getConstituents()
-          : await healthiansApi.getConstituents(externalPackageCode!.trim());
+          : await healthiansApi.getConstituents(externalPackageCode!.trim(), healthiansDealType);
         if (cancelled) return;
         const data = res.data.data;
         setConstituents(data.constituents ?? []);
@@ -128,7 +131,7 @@ export function HealthiansMapModal({
     return () => {
       cancelled = true;
     };
-  }, [open, canLoadConstituents, orangeHealthProvider, externalPackageCode, dataLoaded]);
+  }, [open, canLoadConstituents, orangeHealthProvider, externalPackageCode, healthiansDealType, dataLoaded]);
 
   const nextUnmappedTest = useMemo(
     () => findNextUnmappedTest(localTests, testId, diagnosticProvider),

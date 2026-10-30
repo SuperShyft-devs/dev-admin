@@ -5098,6 +5098,21 @@ export const diagnosticTestGroupsApi = {
     api.delete<{ data: { filter_chip_id: number; deleted: boolean } }>(
       `/diagnostic-test-groups/${groupId}/filter-chips/${filterChipId}`
     ),
+  listPackages: (groupId: number) =>
+    api.get<{
+      data: Array<{
+        diagnostic_package_id: number;
+        package_name: string;
+        diagnostic_provider?: string | null;
+        status?: string | null;
+      }>;
+    }>(`/diagnostic-test-groups/${groupId}/packages`),
+  getProviderTestDiff: (groupId: number, previewExternalTestGroupCode?: string) =>
+    api.get<{ data: ProviderTestDiffResponse }>(`/diagnostic-test-groups/${groupId}/provider-test-diff`, {
+      params: previewExternalTestGroupCode
+        ? { preview_external_test_group_code: previewExternalTestGroupCode }
+        : undefined,
+    }),
 };
 
 // Healthians integration
@@ -5112,11 +5127,16 @@ export interface HealthiansConstituentsResponse {
 }
 
 export const healthiansApi = {
-  getConstituents: (external_package_code: string) =>
-    api.post<{ data: HealthiansConstituentsResponse }>(
-      "/diagnostics/healthians/constituents",
-      { external_package_code }
-    ),
+  searchProfiles: (search?: string) =>
+    api.get<{ data: { profiles: HealthiansConstituent[] } }>("/diagnostics/healthians/profiles", {
+      params: search ? { search } : undefined,
+    }),
+  getConstituents: (externalCode: string, dealType: "package" | "profile" = "package") =>
+    api.post<{ data: HealthiansConstituentsResponse }>("/diagnostics/healthians/constituents", {
+      external_code: externalCode,
+      external_package_code: externalCode,
+      deal_type: dealType,
+    }),
 };
 
 export const orangeHealthApi = {

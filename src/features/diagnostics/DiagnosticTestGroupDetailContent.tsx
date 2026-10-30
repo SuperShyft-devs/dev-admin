@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { GripVertical, Loader2, Search, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Search, Trash2, AlertTriangle, Link as LinkIcon } from "lucide-react";
 import { SortableItem } from "../../components/SortableItem";
 import { Modal } from "../../shared/ui/Modal";
 import { PermissionGate } from "../../contexts/PermissionContext";
@@ -21,7 +21,10 @@ import {
   type DiagnosticTestGroupStandalone,
   type DiagnosticTestStandalone,
 } from "../../lib/api";
-import { diagnosticProviderDisplayLabel } from "./providerParameterKeys";
+import { diagnosticProviderDisplayLabel, isHealthiansProvider } from "./providerParameterKeys";
+import { TestGroupProviderMapModal } from "./TestGroupProviderMapModal";
+import { DiagnosticPackageProviderCompare } from "./DiagnosticPackageProviderCompare";
+import { HealthiansMapModal, type MapModalTest } from "./HealthiansMapModal";
 
 interface DiagnosticTestGroupDetailContentProps {
   groupId: number;
@@ -48,6 +51,20 @@ export function DiagnosticTestGroupDetailContent({ groupId, onUpdated }: Diagnos
   const [selectedTestIds, setSelectedTestIds] = useState<number[]>([]);
   const [assignNote, setAssignNote] = useState<string | null>(null);
   const [reorderingTests, setReorderingTests] = useState(false);
+
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [paramMapOpen, setParamMapOpen] = useState(false);
+  const [paramMapTest, setParamMapTest] = useState<MapModalTest | null>(null);
+  const [compareRefresh, setCompareRefresh] = useState(0);
+
+  const needsProviderMapping = useMemo(() => {
+    if (!detail) return false;
+    if (!detail.diagnostic_provider) return true;
+    if (isHealthiansProvider(detail.diagnostic_provider)) {
+      return !(detail.external_test_group_code ?? "").trim();
+    }
+    return false;
+  }, [detail]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -258,8 +275,43 @@ export function DiagnosticTestGroupDetailContent({ groupId, onUpdated }: Diagnos
         <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{groupTestsError}</div>
       )}
 
+      {needsProviderMapping ? (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+          <div className="flex-1 min-w-0">
+            <p>
+              This test group is missing a lab provider or Healthians profile code. Map it to a lab catalog profile
+              before using it on packages.
+            </p>
+            <PermissionGate category="diagnostics" action="edit" taskKey="tests_groups">
+              <button
+                type="button"
+                onClick={() => setMapModalOpen(true)}
+                className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-950 text-xs font-medium hover:bg-amber-200"
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                Map
+              </button>
+            </PermissionGate>
+          </div>
+        </div>
+      ) : null}
+
       <div className="bg-white border border-zinc-200 rounded-xl p-4">
-        <h3 className="text-sm font-medium text-zinc-900 mb-3">Overview</h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-medium text-zinc-900">Overview</h3>
+          {!needsProviderMapping ? (
+            <PermissionGate category="diagnostics" action="edit" taskKey="tests_groups">
+              <button
+                type="button"
+                onClick={() => setMapModalOpen(true)}
+                className="text-xs font-medium text-zinc-600 hover:text-zinc-900 underline underline-offset-2"
+              >
+                Remap
+              </button>
+            </PermissionGate>
+          ) : null}
+        </div>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           {detail.test_group_image ? (
             <div className="sm:col-span-2">
@@ -425,6 +477,66 @@ export function DiagnosticTestGroupDetailContent({ groupId, onUpdated }: Diagnos
           </DndContext>
         )}
       </div>
+
+      {isHealthiansProvider(detail.diagnostic_provider) &&
+      (detail.external_test_group_code ?? "").trim() ? (
+        <div className="bg-white border border-zinc-200 rounded-xl p-4">
+          <h3 className="text-sm font-medium text-zinc-900 mb-3">Healthians compare</h3>
+          <DiagnosticPackageProviderCompare
+            testGroupId={groupId}
+            externalPackageCode={detail.external_test_group_code}
+            onlyInEntityLabel="only in this group"
+            refreshToken={compareRefresh}
+            onMapTest={(testId, testName) => {
+              const row = groupTests.find((t) => t.test_id === testId);
+              setParamMapTest(
+                row ?? {
+                  test_id: testId,
+                  test_name: testName,
+                }
+              );
+              setParamMapOpen(true);
+            }}
+          />
+        </div>
+      ) : null}
+
+      <TestGroupProviderMapModal
+        open={mapModalOpen}
+        onClose={() => setMapModalOpen(false)}
+        groupId={groupId}
+        groupName={detail.group_name}
+        currentProvider={detail.diagnostic_provider}
+        currentExternalCode={detail.external_test_group_code}
+        onComplete={async () => {
+          await loadDetail();
+          await loadTests();
+          setCompareRefresh((n) => n + 1);
+          onUpdated?.();
+        }}
+      />
+
+      {paramMapTest && detail ? (
+        <HealthiansMapModal
+          open={paramMapOpen}
+          onClose={() => {
+            setParamMapOpen(false);
+            setParamMapTest(null);
+          }}
+          testId={paramMapTest.test_id}
+          testName={paramMapTest.test_name}
+          currentHealthiansParameterId={paramMapTest.healthians_parameter_key}
+          diagnosticProvider={detail.diagnostic_provider}
+          externalPackageCode={detail.external_test_group_code}
+          healthiansDealType="profile"
+          allTests={groupTests}
+          onMapped={async () => {
+            await loadTests();
+            setCompareRefresh((n) => n + 1);
+          }}
+          onSwitchTest={(test) => setParamMapTest(test)}
+        />
+      ) : null}
 
       <Modal open={assignModalOpen} onClose={() => setAssignModalOpen(false)} title="Assign Tests to Group" maxWidthClassName="max-w-2xl">
         <div className="space-y-4">
