@@ -10,6 +10,7 @@ import {
   type ProviderTestDiffResponse,
 } from "../../lib/api";
 import { Modal } from "../../shared/ui/Modal";
+import { ProviderSyncPreviewPanel } from "./ProviderSyncPreviewPanel";
 
 type ProviderChoice = "Healthians" | "orange_health";
 
@@ -57,6 +58,7 @@ export function TestGroupProviderMapModal({
   const [error, setError] = useState<string | null>(null);
   const [mismatchPackages, setMismatchPackages] = useState<AssignedPackage[]>([]);
   const [removingPackageId, setRemovingPackageId] = useState<number | null>(null);
+  const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
   const incomingKey = useMemo(
     () => (providerChoice === "Healthians" ? "healthians" : "orange_health"),
@@ -73,6 +75,7 @@ export function TestGroupProviderMapModal({
     setDiff(null);
     setError(null);
     setMismatchPackages([]);
+    setSyncDetailsOpen(false);
   }, [currentProvider]);
 
   useEffect(() => {
@@ -201,7 +204,12 @@ export function TestGroupProviderMapModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={`Map lab provider · ${groupName}`} maxWidthClassName="max-w-xl">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Map lab provider · ${groupName}`}
+      maxWidthClassName={syncDetailsOpen ? "max-w-2xl" : "max-w-xl"}
+    >
       <div className="space-y-4 text-sm">
         {error ? (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>
@@ -290,16 +298,17 @@ export function TestGroupProviderMapModal({
               <p className="text-zinc-700">Set provider to Orange Health (no external profile code).</p>
             )}
 
-            {diff ? (
-              <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-zinc-800">
-                <p className="font-medium mb-1">Test sync preview</p>
-                <ul className="list-disc list-inside space-y-0.5 text-zinc-700">
-                  <li>{diff.counts.matched} parameters correctly mapped</li>
-                  <li>{diff.counts.only_at_provider} extra in Healthians</li>
-                  <li>{diff.counts.only_in_package} extra in this test group</li>
-                  <li>{diff.counts.not_linked} of our tests not linked yet</li>
-                </ul>
+            {diffLoading ? (
+              <div className="flex items-center gap-2 text-zinc-500 py-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading sync preview…
               </div>
+            ) : diff ? (
+              <ProviderSyncPreviewPanel
+                diff={diff}
+                detailsOpen={syncDetailsOpen}
+                onDetailsOpenChange={setSyncDetailsOpen}
+              />
             ) : null}
 
             {mismatchPackages.length > 0 ? (
