@@ -7,11 +7,13 @@ import {
   getApiError,
   publicDiagnosticsApi,
   publicGeocodeApi,
+  redcliffePublicApi,
   type GeocodeSuggestion,
   type PublicServiceabilityProviderResult,
+  type RedcliffeAreaSearchResult,
 } from "../../lib/api";
 
-type Mode = "address" | "pincode";
+type Mode = "address" | "pincode" | "redcliffe";
 
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-zinc-300 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent";
@@ -19,7 +21,15 @@ const inputClass =
 function providerLabel(provider: string): string {
   if (provider === "healthians") return "Healthians";
   if (provider === "orange_health") return "Orange Health";
+  if (provider === "redcliffe") return "Redcliffe";
   return provider;
+}
+
+function placeDisplayName(place: RedcliffeAreaSearchResult): string {
+  const name = (place.placeName ?? "").trim();
+  const addr = (place.placeAddress ?? "").trim();
+  if (name && addr) return `${name} — ${addr}`;
+  return name || addr || place.eloc || "Unknown place";
 }
 
 function ProviderResultCard({ item }: { item: PublicServiceabilityProviderResult }) {
@@ -66,6 +76,9 @@ export function PublicServiceabilityPage() {
 
   const [pincodeOnly, setPincodeOnly] = useState("");
 
+  const [redcliffeQuery, setRedcliffeQuery] = useState("");
+  const [redcliffePlaces, setRedcliffePlaces] = useState<RedcliffeAreaSearchResult[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<PublicServiceabilityProviderResult[] | null>(null);
@@ -77,6 +90,34 @@ export function PublicServiceabilityPage() {
     setPincode(suggestion.pincode || "");
     setLatitude(suggestion.latitude ?? null);
     setLongitude(suggestion.longitude ?? null);
+  };
+
+  const resetModeState = () => {
+    setError(null);
+    setResults(null);
+    setRedcliffePlaces([]);
+  };
+
+  const runRedcliffePlaceCheck = async (place: RedcliffeAreaSearchResult) => {
+    const eloc = (place.eloc ?? "").trim();
+    if (eloc.length !== 6) {
+      setError("Selected place has an invalid eloc");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    try {
+      const coordRes = await redcliffePublicApi.getCoordinates(eloc);
+      const lat = Number(coordRes.data.data.latitude);
+      const lng = Number(coordRes.data.data.longitude);
+      const svcRes = await redcliffePublicApi.checkServiceability(lat, lng);
+      setResults([svcRes.data.data]);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCheck = async (e: React.FormEvent) => {
@@ -93,6 +134,18 @@ export function PublicServiceabilityPage() {
         }
         const res = await publicDiagnosticsApi.checkPincodeServiceability({ pincode: normalized });
         setResults(res.data.data.providers ?? []);
+      } else if (mode === "redcliffe") {
+        const query = redcliffeQuery.trim();
+        if (query.length < 3) {
+          setError("Enter at least 3 characters to search an area");
+          return;
+        }
+        const searchRes = await redcliffePublicApi.searchArea(query);
+        const places = searchRes.data.data.results ?? [];
+        setRedcliffePlaces(places);
+        if (places.length === 0) {
+          setError("No places found for this area");
+        }
       } else {
         const line = addressLine.trim();
         const cityVal = city.trim();
@@ -152,8 +205,7 @@ export function PublicServiceabilityPage() {
             type="button"
             onClick={() => {
               setMode("address");
-              setError(null);
-              setResults(null);
+              resetModeState();
             }}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === "address"
@@ -167,8 +219,7 @@ export function PublicServiceabilityPage() {
             type="button"
             onClick={() => {
               setMode("pincode");
-              setError(null);
-              setResults(null);
+              resetModeState();
             }}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === "pincode"
@@ -177,6 +228,20 @@ export function PublicServiceabilityPage() {
             }`}
           >
             Pincode only
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("redcliffe");
+              resetModeState();
+            }}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              mode === "redcliffe"
+                ? "bg-zinc-900 text-white"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            Redcliffe area
           </button>
         </div>
 
@@ -245,6 +310,25 @@ export function PublicServiceabilityPage() {
                 </div>
               </div>
             </>
+          ) : mode === "redcliffe" ? (
+            <div>
+              <label htmlFor="svc-redcliffe-area" className="block text-sm font-medium text-zinc-700 mb-1">
+                Search area (Redcliffe)
+              </label>
+              <input
+                id="svc-redcliffe-area"
+                type="text"
+                value={redcliffeQuery}
+                onChange={(e) => setRedcliffeQuery(e.target.value)}
+                placeholder="e.g. Sector 62 Noida"
+                className={inputClass}
+                disabled={loading}
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Search uses Redcliffe&apos;s location index. Pick a result to check coverage.
+              </p>
+            </div>
           ) : (
             <div>
               <label htmlFor="svc-pincode-only" className="block text-sm font-medium text-zinc-700 mb-1">
@@ -261,6 +345,7 @@ export function PublicServiceabilityPage() {
                 disabled={loading}
                 autoFocus
               />
+              <p className="mt-1 text-xs text-zinc-500">Healthians and Orange Health only.</p>
             </div>
           )}
 
@@ -274,11 +359,39 @@ export function PublicServiceabilityPage() {
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Checking…
               </>
+            ) : mode === "redcliffe" ? (
+              "Search area"
             ) : (
               "Check serviceability"
             )}
           </button>
         </form>
+
+        {mode === "redcliffe" && redcliffePlaces.length > 0 ? (
+          <div className="mt-4 space-y-2">
+            <h2 className="text-sm font-semibold text-zinc-900">Select a place</h2>
+            <ul className="space-y-2">
+              {redcliffePlaces.map((place) => {
+                const key = `${place.eloc ?? ""}-${placeDisplayName(place)}`;
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => runRedcliffePlaceCheck(place)}
+                      className="w-full text-left rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:border-zinc-400 hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      <span className="font-medium text-zinc-900 block">{placeDisplayName(place)}</span>
+                      {place.eloc ? (
+                        <span className="text-xs text-zinc-500 mt-0.5 block">eloc: {place.eloc}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
 
         {results && results.length > 0 ? (
           <div className="mt-6 space-y-2">

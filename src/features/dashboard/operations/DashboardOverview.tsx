@@ -703,7 +703,7 @@ export function DashboardOverview({
         </div>
         <div className="flex-1 flex flex-col justify-center">
           <p className="text-sm text-zinc-600 leading-relaxed">
-            Public page to check Healthians and Orange Health coverage by address or pincode.
+            Public page to check Healthians, Orange Health, and Redcliffe coverage by address, pincode, or Redcliffe area search.
           </p>
           <button
             type="button"

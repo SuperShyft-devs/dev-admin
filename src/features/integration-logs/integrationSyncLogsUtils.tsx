@@ -10,6 +10,7 @@ export const PROVIDER_OPTIONS = [
   { value: "metsights", label: "Metsights" },
   { value: "healthians", label: "Healthians" },
   { value: "orange_health", label: "Orange Health" },
+  { value: "redcliffe", label: "Redcliffe" },
   { value: "n8n", label: "n8n" },
   { value: "nutrition_api", label: "Nutrition API" },
   { value: "aurae", label: "Aurae" },
@@ -71,6 +72,7 @@ export function ProviderBadge({ provider }: { provider: string }) {
   if (provider === "metsights") return <span className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>metsights</span>;
   if (provider === "healthians") return <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`}>healthians</span>;
   if (provider === "orange_health") return <span className={`${base} bg-orange-50 text-orange-800 border-orange-300`}>orange_health</span>;
+  if (provider === "redcliffe") return <span className={`${base} bg-rose-50 text-rose-800 border-rose-200`}>redcliffe</span>;
   if (provider === "n8n") return <span className={`${base} bg-violet-50 text-violet-700 border-violet-200`}>n8n</span>;
   if (provider === "nutrition_api") return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>nutrition_api</span>;
   if (provider === "aurae") return <span className={`${base} bg-cyan-50 text-cyan-700 border-cyan-200`}>aurae</span>;

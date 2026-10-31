@@ -2743,6 +2743,32 @@ export const publicDiagnosticsApi = {
     ),
 };
 
+export type RedcliffeAreaSearchResult = {
+  eloc?: string;
+  placeName?: string;
+  placeAddress?: string;
+  type?: string;
+  address?: Record<string, string | undefined>;
+};
+
+export const redcliffePublicApi = {
+  searchArea: (place_query: string) =>
+    publicHttp.get<{ data: { results?: RedcliffeAreaSearchResult[] } }>(
+      "/diagnostics/public/redcliffe/search-area",
+      { params: { place_query } }
+    ),
+  getCoordinates: (eloc: string) =>
+    publicHttp.get<{ data: { latitude: number; longitude: number } }>(
+      "/diagnostics/public/redcliffe/coordinates",
+      { params: { eloc } }
+    ),
+  checkServiceability: (latitude: number, longitude: number) =>
+    publicHttp.get<{ data: PublicServiceabilityProviderResult }>(
+      "/diagnostics/public/redcliffe/serviceability",
+      { params: { latitude, longitude } }
+    ),
+};
+
 
 export const engagementsApi = {
   list: (params?: {
